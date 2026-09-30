@@ -110,7 +110,7 @@ select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-01-v1.3-voice";
+const APP_VERSION = "2026-10-01-v1.4";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -143,6 +143,7 @@ function load() {
   s.pastCur = s.pastCur || null;   // 解いている途中の過去問（答案用紙）
   s.pastLog = s.pastLog || [];     // 過去問の採点結果
   s.lastBackup = s.lastBackup || null;
+  s.newPerDay = s.newPerDay || 0; // 1日の新しい問題数（0＝おまかせ）
   s.tts = Object.assign({ auto: true, rate: 1.2, think: 4 }, s.tts || {}); // 読み上げの設定
   s.cur = s.cur || null;     // 受験中の模試
   return s;
@@ -158,7 +159,7 @@ const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") 
 
 // ---------- 問題 ----------
 let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [];
-const DATA_FILES = ["A", "B", "C", "D", "E", "X1", "X2", "X3", "X4"];
+const DATA_FILES = ["A", "B", "C", "D", "E", "X1", "X2", "X3", "X4", ...Array.from({ length: 11 }, (_, i) => "Y" + String(i + 1).padStart(2, "0"))];
 async function loadQuestions() {
   const get = f => fetch(f, { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   const [chaps, past, nums, ...parts] = await Promise.all([get("sections.json"), get("data/past.json"), get("data/numbers.json"), ...DATA_FILES.map(f => get(`data/${f}.json`))]);
@@ -176,13 +177,38 @@ const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { c
 const card = id => S.cards[id];
 
 // 今日の分：期限が来た復習＋新しい問題（残り日数から逆算）
-function newQuota() {
+function autoQuota() {
   const unseen = Q.filter(q => !card(q.id)).length;
   // 教科書期は10/25までに一周（教科書と同じペース）、そのあとは試験1週間前まで
   const toRead = Math.round((new Date(READ_END + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000) + 1;
   const d = Math.max(1, toRead >= 1 ? toRead : daysLeft() - LAST_WEEK);
   return daysLeft() <= LAST_WEEK ? 0 : Math.min(unseen, Math.max(15, Math.ceil(unseen / d)));
 }
+function newQuota() {
+  const unseen = Q.filter(q => !card(q.id)).length;
+  return S.newPerDay ? Math.min(unseen, S.newPerDay) : autoQuota();
+}
+function setPerDay(n) {
+  S.newPerDay = n;
+  // 今日すでに解いた新しい問題は残し、残りを選び直す
+  if (S.plan && S.plan.date === today()) {
+    const done = S.plan.newIds.filter(id => card(id));
+    S.plan = null; todayPlan(); // 未挑戦から選び直し（解いた分は含まれない）
+    S.plan.newIds = [...done, ...S.plan.newIds.slice(0, Math.max(0, newQuota() - done.length))];
+  }
+  save(); render();
+}
+// おかわり：今日の分が終わったら、次の新しい問題を追加
+function moreToday(n = 50) {
+  todayPlan();
+  const have = new Set(S.plan.newIds);
+  const rank = q => (S.read[q.sec] ? 0 : 1000) + (SECM[q.sec]?.order ?? 999);
+  const add = Q.filter(q => !card(q.id) && !have.has(q.id)).sort((a, b) => rank(a) - rank(b)).slice(0, n).map(q => q.id);
+  if (!add.length) { alertBox("新しい問題はもうありません。全問に挑戦済みです！ 間違えた問題や苦手Sectionを繰り返しましょう。"); return; }
+  S.plan.newIds.push(...add); save();
+  startSession(add, `おかわり${add.length}問`);
+}
+const PerDaySeg = () => `<div class="seg">${[[0, `おまかせ（約${autoQuota()}問）`], [50, "50問"], [100, "100問"], [200, "200問"]].map(([n, l]) => `<button class="${S.newPerDay === n ? "on" : ""}" onclick="setPerDay(${n})">${l}</button>`).join("")}</div>`;
 function todayPlan() {
   const t = today();
   if (!S.plan || S.plan.date !== t) {
@@ -272,7 +298,10 @@ function Home() {
     <h2>今日の分（一問一答）</h2>
     ${todo ? `<div class="row small"><span class="grow">復習 <b class="num">${p.due.length}</b>問 ＋ 新しい問題 <b class="num">${p.newLeft.length}</b>問</span><span>今日 ${L.n}問解いた</span></div>
       <div class="mt"><button class="btn" onclick="startToday()">▶ 今日の分をはじめる（${todo}問）</button></div>`
-      : `<div class="res ok"><b class="t">今日の分は完了です 🎉</b><br>今日 ${L.n}問・正答率 ${L.n ? Math.round(L.c / L.n * 100) : 0}%。余裕があれば苦手な分野をもう少し。</div>`}
+      : `<div class="res ok"><b class="t">今日の分は完了です 🎉</b><br>今日 ${L.n}問・正答率 ${L.n ? Math.round(L.c / L.n * 100) : 0}%。</div>
+        <div class="btns mt"><button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button></div>`}
+    <details class="mt"><summary class="small">1日の新しい問題数：${S.newPerDay ? S.newPerDay + "問" : `おまかせ（約${autoQuota()}問）`}</summary><div class="mt">${PerDaySeg()}</div>
+      <div class="small mt">おまかせ＝10/25までに全問を一周できる数。増やすほど復習の数も増えます（間違えた問題は翌日、正解は3日後にまた出ます）。</div></details>
   </div>
   <div class="card">
     <h2>分野ごとの仕上がり</h2>
@@ -500,7 +529,8 @@ function Study() {
     return `<div class="card center"><h2>おつかれさまでした</h2>
       <div class="hero" style="justify-content:center"><b class="num">${rate}</b><span>%</span></div>
       <div class="small">${sess.label}：${sess.done}問中 ${sess.ok}問正解</div>
-      <div class="btns mt"><button class="btn" onclick="go('home')">ホームへ</button><button class="btn ghost" onclick="sess=null;render()">ほかの問題を解く</button></div></div>`;
+      <div class="btns mt">${todayPlan().due.length + todayPlan().newLeft.length ? `<button class="btn" onclick="startToday()">▶ 今日の分の続き</button>` : `<button class="btn" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}
+        <button class="btn ghost" onclick="go('home')">ホームへ</button><button class="btn ghost" onclick="sess=null;render()">ほかの問題を解く</button></div></div>`;
   }
   const q = QM[sess.ids[sess.i]], c = card(q.id), A = AREAS[q.area];
   const answered = sess.ans !== null, ok = answered && sess.ans === q.a;
@@ -552,7 +582,8 @@ function StudyMenu() {
   return `
   ${WeakCard(3)}
   <div class="card"><h2>今日の分</h2><div class="small">復習${p.due.length}問＋新しい問題${p.newLeft.length}問</div>
-    <div class="mt"><button class="btn" onclick="startToday()" ${p.due.length + p.newLeft.length ? "" : "disabled"}>▶ はじめる</button></div></div>
+    <div class="btns mt">${p.due.length + p.newLeft.length ? `<button class="btn" onclick="startToday()">▶ はじめる</button>` : `<button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}</div>
+    <div class="small mt">1日の新しい問題数</div><div class="mt">${PerDaySeg()}</div></div>
   <div class="card"><h2>分野を選んで解く（30問ずつ）</h2>
     ${Object.entries(AREAS).map(([a, A]) => { const s = areaStats(a);
       return `<div style="border-top:1px solid var(--line);padding:10px 0">
