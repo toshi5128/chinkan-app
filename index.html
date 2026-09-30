@@ -117,7 +117,7 @@ select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-01-v1.5";
+const APP_VERSION = "2026-10-01-v1.6-lecture";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -151,7 +151,7 @@ function load() {
   s.pastLog = s.pastLog || [];     // 過去問の採点結果
   s.lastBackup = s.lastBackup || null;
   s.newPerDay = s.newPerDay || 0; // 1日の新しい問題数（0＝おまかせ）
-  s.tts = Object.assign({ auto: true, rate: 1.2, think: 4 }, s.tts || {}); // 読み上げの設定
+  s.tts = Object.assign({ auto: true, rate: 1.2, think: 4, lecQuiz: true }, s.tts || {}); // 読み上げの設定
   s.cur = s.cur || null;     // 受験中の模試
   return s;
 }
@@ -165,12 +165,15 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000));
 
 // ---------- 問題 ----------
-let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [];
+let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], LEC = {};
+const LEC_FILES = ["lec_1a", "lec_1b", "lec_2", "lec_3", "lec_4", "lec_5"];
 const DATA_FILES = ["A", "B", "C", "D", "E", "X1", "X2", "X3", "X4", ...Array.from({ length: 11 }, (_, i) => "Y" + String(i + 1).padStart(2, "0"))];
 async function loadQuestions() {
   const get = f => fetch(f, { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   const [chaps, past, nums, ...parts] = await Promise.all([get("sections.json"), get("data/past.json"), get("data/numbers.json"), ...DATA_FILES.map(f => get(`data/${f}.json`))]);
   PAST = past && past.years ? past : null;
+  const lecs = await Promise.all(LEC_FILES.map(f => fetch(`data/${f}.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}))));
+  LEC = Object.assign({}, ...lecs);
   NUMS = Array.isArray(nums) ? nums : [];
   CHAPS = chaps;
   SECS = chaps.flatMap(c => c.secs.map(([id, title, page]) => ({ id, title, page, ch: c.ch })));
@@ -260,14 +263,14 @@ const TABS = [
   ["mock", "模試", '<path d="M9 4h6l1 2h3v15H5V6h3z"/><path d="M9 12l2 2 4-4"/>'],
   ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
 ];
-const PARENT = { past: "mock", numbers: "book", listen: "study" };
+const PARENT = { past: "mock", numbers: "book", listen: "study", lecture: "book" };
 function renderTabs() {
   document.getElementById("tabs").innerHTML = TABS.map(([k, l, d]) =>
     `<button class="${(PARENT[view] || view) === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
   document.getElementById("hdrDays").textContent = `本番まで ${daysLeft()}日`;
 }
 function go(v) {
-  if (v !== view) { TTS.stop(); if (view === "listen") stopListen(); }
+  if (v !== view) { TTS.stop(); if (view === "listen") stopListen(); if (view === "lecture") stopLecture(); }
   if (view === "study" && sess && v !== "study") sess = null;
   view = v; render(); window.scrollTo(0, 0);
 }
@@ -275,7 +278,7 @@ function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "past" ? Past() : view === "listen" ? Listen() : view === "study" ? Study() : view === "mock" ? Mock() : Stats();
+  el.innerHTML = view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : Stats();
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -436,13 +439,88 @@ function ListenCard() {
   const p = todayPlan();
   const wrongIds = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).map(q => q.id);
   const readIds = Q.filter(q => S.read[q.sec]).map(q => q.id);
-  return `<div class="card"><h2>🎧 聞き流し（運転中・移動中に）</h2>
+  const rp = SECS.length ? readPlan().ids.filter(id => LEC[id]) : [];
+  return `${rp.length ? `<div class="card"><h2>🎧 音声講義（教科書の代わり）</h2><div class="small">今日読む所の要点を先生が話すように読み上げます。聞き終わったらそのまま問題へ。</div>
+    <div class="btns mt"><button class="btn sec" onclick="startLecture(${JSON.stringify(rp).replace(/"/g, "'")})">今日の範囲の講義を聞く（${rp.join("・")}）</button>
+    <button class="btn ghost" onclick="go('book')">Sectionを選んで聞く（教科書タブの🎧）</button></div></div>` : ""}
+  <div class="card"><h2>🎧 聞き流し（運転中・移動中に）</h2>
     <div class="small">問題を読む → 考える時間 → 答えと解説、を自動で続けます。画面を見なくてOK。</div>
     <div class="btns mt">
       <button class="btn sec" onclick="startListen([...todayPlan().due, ...todayPlan().newLeft], '今日の分')" ${p.due.length + p.newLeft.length ? "" : "disabled"}>今日の分を聞く（${p.due.length + p.newLeft.length}問）</button>
       <button class="btn ghost" onclick="startListen(shuffle(Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; })).map(q => q.id), '間違えた問題')" ${wrongIds.length ? "" : "disabled"}>間違えた問題を聞く（${wrongIds.length}問）</button>
       <button class="btn ghost" onclick="startListen(shuffle(Q.filter(q => S.read[q.sec])).slice(0, 60).map(q => q.id), '読んだSection')" ${readIds.length ? "" : "disabled"}>教科書で読んだ所から（${Math.min(60, readIds.length)}問）</button>
     </div></div>`;
+}
+
+// ---------- 音声講義（教科書がない時の代わり） ----------
+let LV = null;
+// 講義を「かたまり」に分ける：はじめに → ポイント1..n → まとめ
+function lecBlocks(id) {
+  const L = LEC[id]; if (!L) return [];
+  return [{ h: "はじめに", t: L.intro }, ...L.points.map((p, i) => ({ h: `ポイント${i + 1}　${p.h}`, t: p.t, say: `ポイント${i + 1}。${p.h}。${p.t}` })), { h: "まとめ", t: L.summary }];
+}
+function startLecture(ids) {
+  ids = ids.filter(id => LEC[id]);
+  if (!ids.length) { alertBox("このSectionの講義はまだありません。"); return; }
+  if (!TTS.ok) { alertBox("このスマホ（ブラウザ）は読み上げに対応していません。文章は画面で読めます。"); }
+  LV = { ids, si: 0, bi: 0, playing: TTS.ok, done: false };
+  sess = null; view = "lecture"; render(); window.scrollTo(0, 0);
+  if (TTS.ok) { keepAwake(true); lecPlay(true); }
+}
+function lecPlay(announce) {
+  if (!LV || !LV.playing) return;
+  const id = LV.ids[LV.si], bl = lecBlocks(id), b = bl[LV.bi];
+  render(); lecScroll();
+  const head = announce && LV.bi === 0 ? `Section ${id.replace("-", "の")}、${SECM[id]?.title || ""}。` : "";
+  TTS.speak(head + (b.say || b.t), () => {
+    if (!LV || !LV.playing) return;
+    if (LV.bi < bl.length - 1) { LV.bi++; lecPlay(false); return; }
+    // Sectionを聞き終えた
+    if (LV.si < LV.ids.length - 1) { LV.si++; LV.bi = 0; lecPlay(true); return; }
+    LV.playing = false; LV.done = true; keepAwake(false); render();
+    if (S.tts.lecQuiz && LV.ids.length === 1 && secQs(id).length) TTS.speak("講義はここまでです。続けて、問題を解きましょう。", () => { if (LV && LV.done) lecQuiz(id); });
+    else TTS.speak("講義はここまでです。おつかれさまでした。");
+  });
+}
+function lecScroll() { setTimeout(() => document.getElementById("lecCur")?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }
+function lecToggle() { if (!LV) return; if (LV.done) { LV.si = 0; LV.bi = 0; LV.done = false; } LV.playing = !LV.playing; if (LV.playing) { keepAwake(true); lecPlay(LV.bi === 0); } else { TTS.stop(); render(); } }
+function lecJump(bi) { if (!LV) return; TTS.stop(); LV.bi = bi; LV.done = false; LV.playing = TTS.ok; if (LV.playing) { keepAwake(true); lecPlay(false); } else render(); }
+function lecMove(d) {
+  if (!LV) return; const bl = lecBlocks(LV.ids[LV.si]);
+  let bi = LV.bi + d, si = LV.si;
+  if (bi < 0) { if (si > 0) { si--; bi = lecBlocks(LV.ids[si]).length - 1; } else bi = 0; }
+  if (bi >= bl.length) { if (si < LV.ids.length - 1) { si++; bi = 0; } else bi = bl.length - 1; }
+  LV.si = si; lecJump(bi);
+}
+function lecGoSec(i) { if (!LV) return; LV.si = i; lecJump(0); }
+function stopLecture() { TTS.stop(); keepAwake(false); LV = null; }
+// 講義のあとの確認問題：苦手→未挑戦→その他の順に10問
+function lecQuiz(id, n = 10) {
+  const qs = secQs(id), rank = q => { const c = card(q.id); return !c ? 1 : (c.box <= 2 || c.w > c.c) ? 0 : 2; };
+  const ids = shuffle(qs).sort((a, b) => rank(a) - rank(b)).slice(0, n).map(q => q.id);
+  stopLecture(); startSession(ids, `講義のあと ${id}`);
+}
+function Lecture() {
+  if (!LV) { view = "book"; return Book(); }
+  const id = LV.ids[LV.si], x = SECM[id], L = LEC[id], bl = lecBlocks(id), n = secQs(id).length;
+  return `<div class="qhead"><span>🎧 講義 ${LV.ids.length > 1 ? `${LV.si + 1}/${LV.ids.length}` : ""}</span><span>${LV.playing ? "再生中" : LV.done ? "おわり" : "一時停止"}</span></div>
+  ${LV.ids.length > 1 ? `<div class="seg" style="margin-bottom:10px">${LV.ids.map((s2, i) => `<button class="${i === LV.si ? "on" : ""}" onclick="lecGoSec(${i})">${s2}</button>`).join("")}</div>` : ""}
+  <div class="card"><div class="small">教科書 p.${x?.page || ""}〜</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
+    ${bl.map((b, i) => `<div ${i === LV.bi ? 'id="lecCur"' : ""} onclick="lecJump(${i})" style="cursor:pointer;border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${i === LV.bi ? "background:var(--brandbg)" : ""}">
+      <div style="font-weight:700;font-size:14px;color:${i === LV.bi ? "var(--brand)" : "var(--ink)"}">${esc(b.h)}</div>
+      <div style="font-size:15px;line-height:1.85;margin-top:3px">${esc(b.t)}</div></div>`).join("")}
+    <div class="small mt">文章をタップすると、そこから読み上げます。</div></div>
+  <div class="player">
+    <button onclick="lecMove(-1)" aria-label="前へ">⏮</button>
+    <button class="main" onclick="lecToggle()" aria-label="再生・一時停止">${LV.done ? "↺" : LV.playing ? "⏸" : "▶"}</button>
+    <button onclick="lecMove(1)" aria-label="次へ">⏭</button>
+  </div>
+  <div class="card mt">
+    ${n ? `<button class="btn" onclick="lecQuiz('${id}')">✏️ このSectionの問題を解く（10問・苦手優先）</button>
+      <div class="row mt"><span class="grow small">聞き終わったら自動で問題へ</span><button class="spk ${S.tts.lecQuiz ? "on" : ""}" onclick="S.tts.lecQuiz=!S.tts.lecQuiz;save();render()">${S.tts.lecQuiz ? "ON" : "OFF"}</button></div>` : ""}
+    <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
+    <div class="small mt">講義は、教科書の範囲に沿ってこのアプリ用に書いた要点です（教科書の文章そのものではありません）。細かい所は教科書で確かめてください。</div></div>
+  <div class="center"><button class="linkbtn" onclick="go('book')">講義をやめる</button></div>`;
 }
 
 // ---------- 教科書 ----------
@@ -474,6 +552,7 @@ function ReadToday() {
     <div class="small">教科書 p.${secs[0].page}〜${last.page + last.pages - 1}（${pages}ページ）</div>
     ${secs.map(SecRow).join("")}
     ${done === secs.length && next ? `<div class="res ok">今日の分は読み終わりました。余裕があれば次の <b>Section ${next.id}</b> へ（教科書タブ）。</div>` : ""}
+    ${secs.some(x => LEC[x.id]) ? `<div class="mt"><button class="btn sec" onclick="startLecture(${JSON.stringify(secs.map(x => x.id)).replace(/"/g, "'")})">🎧 今日の範囲を講義で聞く（教科書がない時に）</button></div>` : ""}
     <div class="small mt">10/25までに1周するペースで割り振っています。遅れても、残りの日数で自動で組み直します。</div></div>`;
 }
 function SecRow(x) {
@@ -484,6 +563,7 @@ function SecRow(x) {
       <button onclick="toggleRead('${x.id}')" aria-label="読んだ" style="border:2px solid ${r ? "var(--ok)" : "var(--sub)"};background:${r ? "var(--ok)" : "transparent"};color:#fff;border-radius:7px;width:26px;height:26px;flex:none;font-size:15px;line-height:1;padding:0">${r ? "✓" : ""}</button>
       <div class="grow"><div style="font-size:14.5px;line-height:1.5"><b class="num">${x.id}</b> ${esc(x.title)}</div>
         <div class="small">p.${x.page}〜（${x.pages}ページ）${n ? `・問題 ${seen}/${n}` : ""}</div></div>
+      ${LEC[x.id] ? `<button class="btn ghost" style="width:auto;padding:7px 10px;font-size:13px;flex:none" onclick="startLecture(['${x.id}'])" aria-label="講義を聞く">🎧</button>` : ""}
       ${n ? `<button class="btn ${r ? "" : "sec"}" style="width:auto;padding:7px 12px;font-size:13px;flex:none" onclick="startSec('${x.id}')">解く</button>` : ""}
     </div></div>`;
 }
@@ -828,7 +908,9 @@ function WeakCard(n) {
   return `<div class="card"><h2>苦手なSection</h2><div class="small">正答率の低い順（4回以上解いたSectionのみ）。教科書のページを読み直してから解き直すのが一番効きます。</div>
     ${weak.map(x => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:8px">
       <div class="grow"><div style="font-size:14px"><b class="num">${x.id}</b> ${esc(x.title)}</div><div class="small">教科書 p.${x.page}〜・正答率 <b style="color:var(--ng)">${Math.round(x.acc * 100)}%</b></div></div>
-      <button class="btn sec" style="width:auto;padding:7px 12px;font-size:13px" onclick="startSec('${x.id}')">解き直す</button></div>`).join("")}</div>`;
+      ${LEC[x.id] ? `<button class="btn ghost" style="width:auto;padding:7px 10px;font-size:13px" onclick="startLecture(['${x.id}'])">🎧講義</button>` : ""}
+      <button class="btn sec" style="width:auto;padding:7px 12px;font-size:13px" onclick="startSec('${x.id}')">解き直す</button></div>`).join("")}
+    <div class="small mt">🎧講義＝そのSectionの要点を音声で聞いてから、続けて問題を解けます。</div></div>`;
 }
 
 // ---------- 過去問（公式の本試験を紙で解いて、答えの番号だけ入れる） ----------
