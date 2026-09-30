@@ -102,7 +102,7 @@ select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);
 
 <script>
 "use strict";
-const APP_VERSION = "2026-09-30-v1.0";
+const APP_VERSION = "2026-10-01-v1.1-book";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -114,6 +114,10 @@ const AREAS = {
 };
 const INTERVAL = [0, 1, 3, 7, 14, 30]; // 箱の番号 → 次に出すまでの日数
 const LAST_WEEK = 7; // 最後の1週間は新しい問題を入れず、復習と模試に回す
+const READ_END = "2026-10-25"; // 教科書1周目の締切（そのあと過去問期）
+const PAST_URL = "https://www.chintaikanrishi.jp/exam/past";
+const BOOK = "みんなが欲しかった！賃貸不動産経営管理士の教科書";
+const BOOK_END = 455; // 最終Sectionの終わり（さくいんの手前）
 
 // ---------- 保存 ----------
 const KEY = "chinkan.v1";
@@ -126,6 +130,8 @@ function load() {
   s.log = s.log || {};       // 日付 → {n,c}
   s.mocks = s.mocks || [];   // 模試の結果
   s.plan = s.plan || null;   // 今日の新規（その日の間は固定）
+  s.read = s.read || {};     // 教科書のSection → 読んだ日
+  s.readPlan = s.readPlan || null; // 今日読む所（その日の間は固定）
   s.cur = s.cur || null;     // 受験中の模試
   return s;
 }
@@ -139,10 +145,15 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000));
 
 // ---------- 問題 ----------
-let Q = [], QM = {};
+let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [];
+const DATA_FILES = ["A", "B", "C", "D", "E", "X1", "X2", "X3", "X4"];
 async function loadQuestions() {
-  const parts = await Promise.all(Object.keys(AREAS).map(a =>
-    fetch(`data/${a}.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => [])));
+  const get = f => fetch(f, { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
+  const [chaps, ...parts] = await Promise.all([get("sections.json"), ...DATA_FILES.map(f => get(`data/${f}.json`))]);
+  CHAPS = chaps;
+  SECS = chaps.flatMap(c => c.secs.map(([id, title, page]) => ({ id, title, page, ch: c.ch })));
+  SECS.forEach((x, i) => { x.pages = (SECS[i + 1]?.page || BOOK_END) - x.page; x.order = i; });
+  SECM = Object.fromEntries(SECS.map(x => [x.id, x]));
   Q = parts.flat().filter(q => q && q.id && typeof q.a === "boolean");
   QM = Object.fromEntries(Q.map(q => [q.id, q]));
 }
@@ -153,17 +164,18 @@ const card = id => S.cards[id];
 // 今日の分：期限が来た復習＋新しい問題（残り日数から逆算）
 function newQuota() {
   const unseen = Q.filter(q => !card(q.id)).length;
-  const d = Math.max(1, daysLeft() - LAST_WEEK);
+  // 教科書期は10/25までに一周（教科書と同じペース）、そのあとは試験1週間前まで
+  const toRead = Math.round((new Date(READ_END + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000) + 1;
+  const d = Math.max(1, toRead >= 1 ? toRead : daysLeft() - LAST_WEEK);
   return daysLeft() <= LAST_WEEK ? 0 : Math.min(unseen, Math.max(15, Math.ceil(unseen / d)));
 }
 function todayPlan() {
   const t = today();
   if (!S.plan || S.plan.date !== t) {
     const quota = newQuota();
-    // 分野が偏らないように、各分野から順番に1問ずつ
-    const by = Object.keys(AREAS).map(a => Q.filter(q => q.area === a && !card(q.id)));
-    const ids = [];
-    for (let i = 0; ids.length < quota && by.some(x => x.length); i++) { const b = by[i % by.length]; if (b.length) ids.push(b.shift().id); }
+    // 教科書で読み終えたSectionの問題から、次に教科書の順（今日読む所が続く）
+    const rank = q => (S.read[q.sec] ? 0 : 1000) + (SECM[q.sec]?.order ?? 999);
+    const ids = Q.filter(q => !card(q.id)).sort((a, b) => rank(a) - rank(b)).slice(0, quota).map(q => q.id);
     S.plan = { date: t, newIds: ids };
     save();
   }
@@ -196,6 +208,7 @@ function areaStats(a) {
 let view = "home", sess = null, mock = null;
 const TABS = [
   ["home", "ホーム", '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>'],
+  ["book", "教科書", '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/><path d="M9 7h6"/>'],
   ["study", "一問一答", '<circle cx="8" cy="12" r="4"/><path d="M15 8l6 8M21 8l-6 8"/>'],
   ["mock", "模試", '<path d="M9 4h6l1 2h3v15H5V6h3z"/><path d="M9 12l2 2 4-4"/>'],
   ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
@@ -213,7 +226,7 @@ function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = view === "home" ? Home() : view === "study" ? Study() : view === "mock" ? Mock() : Stats();
+  el.innerHTML = view === "home" ? Home() : view === "book" ? Book() : view === "study" ? Study() : view === "mock" ? Mock() : Stats();
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -224,17 +237,18 @@ function Home() {
   const seen = Object.keys(S.cards).filter(id => QM[id]).length;
   const lastMock = S.mocks[S.mocks.length - 1];
   const dl = daysLeft();
-  const phase = dl <= LAST_WEEK ? "仕上げ期：新しい問題はおしまい。復習と模試で本番に慣れる時期です。"
-    : dl <= 21 ? "後半戦：今日の分に加えて、週1回は模試で時間配分を練習しましょう。"
-    : "前半戦：まずは全範囲を一周。毎日の「今日の分」だけやれば試験1週間前に一周が終わります。";
+  const phase = dl <= LAST_WEEK ? "仕上げ期：新しいことはしない。模試と、間違えた問題・★マークの総ざらいだけ。"
+    : today() > READ_END ? `過去問期：<a href="${PAST_URL}" target="_blank" rel="noopener">公式の過去問</a>を時間を計って1年分ずつ。間違えた所は教科書に戻って読み直し。今日の分も続けます。`
+    : "教科書期（〜10/25）：教科書を読む → 読んだSectionの問題を解く、の繰り返し。1周目は覚えなくてOK。";
   return `
   <div class="card">
     <div class="small">令和8年11月15日（日）13:00 本番まで</div>
     <div class="hero"><b class="num">${dl}</b><span>日</span></div>
     <div class="small mt">${phase}</div>
   </div>
+  ${ReadToday()}
   <div class="card">
-    <h2>今日の分</h2>
+    <h2>今日の分（一問一答）</h2>
     ${todo ? `<div class="row small"><span class="grow">復習 <b class="num">${p.due.length}</b>問 ＋ 新しい問題 <b class="num">${p.newLeft.length}</b>問</span><span>今日 ${L.n}問解いた</span></div>
       <div class="mt"><button class="btn" onclick="startToday()">▶ 今日の分をはじめる（${todo}問）</button></div>`
       : `<div class="res ok"><b class="t">今日の分は完了です 🎉</b><br>今日 ${L.n}問・正答率 ${L.n ? Math.round(L.c / L.n * 100) : 0}%。余裕があれば苦手な分野をもう少し。</div>`}
@@ -252,6 +266,71 @@ function Home() {
       : `<div class="small">本番と同じ4択50問・120分。まだ受けていません。一周の半分くらいまで進んだら一度受けてみましょう。</div>`}
     <div class="mt"><button class="btn sec" onclick="go('mock')">模試へ</button></div>
   </div>`;
+}
+
+// ---------- 教科書 ----------
+const secQs = id => Q.filter(q => q.sec === id);
+function readPlan() {
+  const t = today();
+  if (!S.readPlan || S.readPlan.date !== t) {
+    const left = SECS.filter(x => !S.read[x.id]);
+    const days = Math.max(1, Math.round((new Date(READ_END + "T00:00:00") - new Date(t + "T00:00:00")) / 86400000) + 1);
+    const leftPages = left.reduce((s, x) => s + x.pages, 0);
+    const target = t > READ_END ? Infinity : Math.ceil(leftPages / days);
+    const ids = []; let pg = 0;
+    // 1日分のページ数に届くまでSectionを順に。半分以上はみ出すSectionは翌日へ
+    for (const x of left) { if (ids.length && (t > READ_END || pg + x.pages / 2 > target)) break; ids.push(x.id); pg += x.pages; }
+    S.readPlan = { date: t, ids, target: isFinite(target) ? target : 0 };
+    save();
+  }
+  return S.readPlan;
+}
+function ReadToday() {
+  if (!SECS.length) return "";
+  if (SECS.every(x => S.read[x.id])) return `<div class="card"><h2>教科書</h2><div class="res ok"><b class="t">1周目 読了 🎉</b><br>ここからは<a href="${PAST_URL}" target="_blank" rel="noopener">公式の過去問</a>で本番の問題に慣れましょう。</div></div>`;
+  const p = readPlan(), secs = p.ids.map(id => SECM[id]).filter(Boolean);
+  if (!secs.length) return "";
+  const done = secs.filter(x => S.read[x.id]).length;
+  const pages = secs.reduce((s, x) => s + x.pages, 0), last = secs[secs.length - 1];
+  const next = SECS.find(x => !S.read[x.id]);
+  return `<div class="card"><h2>今日読む所</h2>
+    <div class="small">教科書 p.${secs[0].page}〜${last.page + last.pages - 1}（${pages}ページ）</div>
+    ${secs.map(SecRow).join("")}
+    ${done === secs.length && next ? `<div class="res ok">今日の分は読み終わりました。余裕があれば次の <b>Section ${next.id}</b> へ（教科書タブ）。</div>` : ""}
+    <div class="small mt">10/25までに1周するペースで割り振っています。遅れても、残りの日数で自動で組み直します。</div></div>`;
+}
+function SecRow(x) {
+  const qs = secQs(x.id), n = qs.length, r = S.read[x.id];
+  const seen = qs.filter(q => card(q.id)).length;
+  return `<div style="border-top:1px solid var(--line);padding:9px 0">
+    <div class="row" style="align-items:flex-start">
+      <button onclick="toggleRead('${x.id}')" aria-label="読んだ" style="border:2px solid ${r ? "var(--ok)" : "var(--sub)"};background:${r ? "var(--ok)" : "transparent"};color:#fff;border-radius:7px;width:26px;height:26px;flex:none;font-size:15px;line-height:1;padding:0">${r ? "✓" : ""}</button>
+      <div class="grow"><div style="font-size:14.5px;line-height:1.5"><b class="num">${x.id}</b> ${esc(x.title)}</div>
+        <div class="small">p.${x.page}〜（${x.pages}ページ）${n ? `・問題 ${seen}/${n}` : ""}</div></div>
+      ${n ? `<button class="btn ${r ? "" : "sec"}" style="width:auto;padding:7px 12px;font-size:13px;flex:none" onclick="startSec('${x.id}')">解く</button>` : ""}
+    </div></div>`;
+}
+function toggleRead(id) {
+  if (S.read[id]) delete S.read[id]; else S.read[id] = today();
+  save(); render();
+  if (S.read[id] && secQs(id).length) alertBox(`Section ${id} 読了！ 忘れないうちに「解く」で${secQs(id).length}問やっておきましょう。`);
+}
+function startSec(id) { startSession(shuffle(secQs(id)).map(q => q.id), `Section ${id}`); }
+let openCh = null;
+function Book() {
+  const readN = SECS.filter(x => S.read[x.id]).length;
+  const readPg = SECS.filter(x => S.read[x.id]).reduce((s, x) => s + x.pages, 0), allPg = SECS.reduce((s, x) => s + x.pages, 0);
+  const cur = openCh ?? (SECS.find(x => !S.read[x.id])?.ch || 1);
+  return `
+  <div class="card"><h2>${esc(BOOK)}</h2>
+    <div class="row small"><span class="grow">読んだ Section ${readN}/${SECS.length}</span><span class="num">${readPg}/${allPg}ページ</span></div>
+    <div class="bar mt"><i style="width:${allPg ? readPg / allPg * 100 : 0}%;background:var(--brand)"></i></div>
+    <div class="small mt">読み終えたら□にチェック。「解く」でそのSectionの問題だけを出します。チェックしたSectionの問題は、翌日からの「今日の分」にも優先して入ります。</div></div>
+  ${CHAPS.map(c => { const secs = SECS.filter(x => x.ch === c.ch), r = secs.filter(x => S.read[x.id]).length, open = cur === c.ch;
+    return `<div class="card"><button onclick="openCh=${open ? -1 : c.ch};render()" style="border:0;background:none;padding:0;width:100%;text-align:left">
+      <div class="row"><span class="chip">CHAPTER ${c.ch}</span><span class="grow"></span><span class="small num">${r}/${secs.length} ${open ? "▲" : "▼"}</span></div>
+      <div style="font-weight:700;margin-top:6px">${esc(c.title)}</div></button>
+      ${open ? secs.map(SecRow).join("") : ""}</div>`; }).join("")}`;
 }
 
 // ---------- 一問一答 ----------
