@@ -117,7 +117,7 @@ select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-01-v1.6-lecture";
+const APP_VERSION = "2026-10-01-v1.7-bundle";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -151,7 +151,8 @@ function load() {
   s.pastLog = s.pastLog || [];     // 過去問の採点結果
   s.lastBackup = s.lastBackup || null;
   s.newPerDay = s.newPerDay || 0; // 1日の新しい問題数（0＝おまかせ）
-  s.tts = Object.assign({ auto: true, rate: 1.2, think: 4, lecQuiz: true }, s.tts || {}); // 読み上げの設定
+  s.tts = Object.assign({ auto: true, rate: 1.2, think: 4, lecQuiz: true, lecMix: true }, s.tts || {});
+  s.lecPos = s.lecPos || null; // まとめて聞くの続き（どの一覧の、どこまで） // 読み上げの設定
   s.cur = s.cur || null;     // 受験中の模試
   return s;
 }
@@ -440,7 +441,7 @@ function ListenCard() {
   const wrongIds = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).map(q => q.id);
   const readIds = Q.filter(q => S.read[q.sec]).map(q => q.id);
   const rp = SECS.length ? readPlan().ids.filter(id => LEC[id]) : [];
-  return `${rp.length ? `<div class="card"><h2>🎧 音声講義（教科書の代わり）</h2><div class="small">今日読む所の要点を先生が話すように読み上げます。聞き終わったらそのまま問題へ。</div>
+  return `${BundleCard()}${rp.length ? `<div class="card"><h2>🎧 音声講義（教科書の代わり）</h2><div class="small">今日読む所の要点を先生が話すように読み上げます。聞き終わったらそのまま問題へ。</div>
     <div class="btns mt"><button class="btn sec" onclick="startLecture(${JSON.stringify(rp).replace(/"/g, "'")})">今日の範囲の講義を聞く（${rp.join("・")}）</button>
     <button class="btn ghost" onclick="go('book')">Sectionを選んで聞く（教科書タブの🎧）</button></div></div>` : ""}
   <div class="card"><h2>🎧 聞き流し（運転中・移動中に）</h2>
@@ -459,41 +460,81 @@ function lecBlocks(id) {
   const L = LEC[id]; if (!L) return [];
   return [{ h: "はじめに", t: L.intro }, ...L.points.map((p, i) => ({ h: `ポイント${i + 1}　${p.h}`, t: p.t, say: `ポイント${i + 1}。${p.h}。${p.t}` })), { h: "まとめ", t: L.summary }];
 }
-function startLecture(ids) {
+function startLecture(ids, opt = {}) {
   ids = ids.filter(id => LEC[id]);
   if (!ids.length) { alertBox("このSectionの講義はまだありません。"); return; }
   if (!TTS.ok) { alertBox("このスマホ（ブラウザ）は読み上げに対応していません。文章は画面で読めます。"); }
-  LV = { ids, si: 0, bi: 0, playing: TTS.ok, done: false };
+  // 複数Sectionを通しで聞くときだけ「まとめて聞く」（続きの保存・問題はさみ）
+  const bundle = ids.length > 1;
+  LV = { ids, si: opt.si || 0, bi: opt.bi || 0, playing: TTS.ok, done: false, label: opt.label || "", bundle, mix: bundle && (opt.mix ?? S.tts.lecMix), q: null };
   sess = null; view = "lecture"; render(); window.scrollTo(0, 0);
   if (TTS.ok) { keepAwake(true); lecPlay(true); }
 }
+function lecSavePos() {
+  if (!LV || !LV.bundle) return;
+  S.lecPos = { ids: LV.ids, si: LV.si, bi: LV.bi, label: LV.label, mix: LV.mix, at: today() }; save();
+}
 function lecPlay(announce) {
   if (!LV || !LV.playing) return;
+  if (LV.q) { lecQStep(); return; }
   const id = LV.ids[LV.si], bl = lecBlocks(id), b = bl[LV.bi];
-  render(); lecScroll();
+  lecSavePos(); render(); lecScroll();
   const head = announce && LV.bi === 0 ? `Section ${id.replace("-", "の")}、${SECM[id]?.title || ""}。` : "";
   TTS.speak(head + (b.say || b.t), () => {
     if (!LV || !LV.playing) return;
     if (LV.bi < bl.length - 1) { LV.bi++; lecPlay(false); return; }
-    // Sectionを聞き終えた
-    if (LV.si < LV.ids.length - 1) { LV.si++; LV.bi = 0; lecPlay(true); return; }
-    LV.playing = false; LV.done = true; keepAwake(false); render();
-    if (S.tts.lecQuiz && LV.ids.length === 1 && secQs(id).length) TTS.speak("講義はここまでです。続けて、問題を解きましょう。", () => { if (LV && LV.done) lecQuiz(id); });
-    else TTS.speak("講義はここまでです。おつかれさまでした。");
+    // Sectionを聞き終えた：まとめて聞く＋問題はさみなら、確認問題を5問（聞き流し形式）
+    if (LV.mix && secQs(id).length) { lecStartQ(id); return; }
+    lecNextSec();
   });
 }
+function lecNextSec() {
+  if (!LV) return;
+  const id = LV.ids[LV.si];
+  if (LV.si < LV.ids.length - 1) { LV.si++; LV.bi = 0; LV.q = null; lecPlay(true); return; }
+  LV.playing = false; LV.done = true; LV.q = null; keepAwake(false); if (LV.bundle) { S.lecPos = null; save(); } render();
+  {
+    if (S.tts.lecQuiz && LV.ids.length === 1 && secQs(id).length) TTS.speak("講義はここまでです。続けて、問題を解きましょう。", () => { if (LV && LV.done) lecQuiz(id); });
+    else TTS.speak(LV.bundle ? `${LV.label ? LV.label + "の" : ""}講義は、ここまでです。おつかれさまでした。` : "講義はここまでです。おつかれさまでした。");
+  }
+}
+// 確認問題（聞き流し形式：問題 → 考える時間 → 答えと解説）。記録には入れない
+let lecTimer = null;
+function lecPickQ(id, n) {
+  const rank = q => { const c = card(q.id); return !c ? 1 : (c.box <= 2 || c.w > c.c) ? 0 : 2; };
+  return shuffle(secQs(id)).sort((a, b) => rank(a) - rank(b)).slice(0, n).map(q => q.id);
+}
+function lecStartQ(id) {
+  LV.q = { ids: lecPickQ(id, 5), i: 0, phase: "intro" };
+  lecQStep();
+}
+function lecQStep() {
+  clearTimeout(lecTimer);
+  if (!LV || !LV.playing || !LV.q) return;
+  const Qs = LV.q; render(); lecScroll();
+  if (Qs.phase === "intro") { TTS.speak(`ここで確認問題です。マルかバツか、考えてください。`, () => { if (!LV?.playing || LV.q !== Qs) return; Qs.phase = "q"; lecQStep(); }); return; }
+  if (Qs.i >= Qs.ids.length) { LV.q = null; lecNextSec(); return; }
+  const q = QM[Qs.ids[Qs.i]];
+  if (Qs.phase === "q") {
+    TTS.speak(`${Qs.i + 1}問目。${q.q}`, () => { if (!LV?.playing || LV.q !== Qs) return; lecTimer = setTimeout(() => { if (!LV?.playing || LV.q !== Qs) return; Qs.phase = "a"; lecQStep(); }, S.tts.think * 1000); });
+  } else {
+    TTS.speak(aSpeech(q, null), () => { if (!LV?.playing || LV.q !== Qs) return; lecTimer = setTimeout(() => { if (!LV?.playing || LV.q !== Qs) return; Qs.i++; Qs.phase = "q"; lecQStep(); }, 1000); });
+  }
+}
 function lecScroll() { setTimeout(() => document.getElementById("lecCur")?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }
-function lecToggle() { if (!LV) return; if (LV.done) { LV.si = 0; LV.bi = 0; LV.done = false; } LV.playing = !LV.playing; if (LV.playing) { keepAwake(true); lecPlay(LV.bi === 0); } else { TTS.stop(); render(); } }
-function lecJump(bi) { if (!LV) return; TTS.stop(); LV.bi = bi; LV.done = false; LV.playing = TTS.ok; if (LV.playing) { keepAwake(true); lecPlay(false); } else render(); }
+function lecToggle() { if (!LV) return; if (LV.done) { LV.si = 0; LV.bi = 0; LV.done = false; LV.q = null; } LV.playing = !LV.playing; if (LV.playing) { keepAwake(true); lecPlay(LV.bi === 0); } else { clearTimeout(lecTimer); TTS.stop(); render(); } }
+function lecJump(bi) { if (!LV) return; clearTimeout(lecTimer); LV.q = null; TTS.stop(); LV.bi = bi; LV.done = false; LV.playing = TTS.ok; if (LV.playing) { keepAwake(true); lecPlay(false); } else render(); }
 function lecMove(d) {
-  if (!LV) return; const bl = lecBlocks(LV.ids[LV.si]);
+  if (!LV) return;
+  if (LV.q) { clearTimeout(lecTimer); TTS.stop(); if (d > 0) { LV.q = null; LV.playing = true; lecNextSec(); } else { LV.q = null; LV.playing = true; lecPlay(false); } return; }
+  const bl = lecBlocks(LV.ids[LV.si]);
   let bi = LV.bi + d, si = LV.si;
   if (bi < 0) { if (si > 0) { si--; bi = lecBlocks(LV.ids[si]).length - 1; } else bi = 0; }
   if (bi >= bl.length) { if (si < LV.ids.length - 1) { si++; bi = 0; } else bi = bl.length - 1; }
   LV.si = si; lecJump(bi);
 }
 function lecGoSec(i) { if (!LV) return; LV.si = i; lecJump(0); }
-function stopLecture() { TTS.stop(); keepAwake(false); LV = null; }
+function stopLecture() { clearTimeout(lecTimer); TTS.stop(); keepAwake(false); LV = null; }
 // 講義のあとの確認問題：苦手→未挑戦→その他の順に10問
 function lecQuiz(id, n = 10) {
   const qs = secQs(id), rank = q => { const c = card(q.id); return !c ? 1 : (c.box <= 2 || c.w > c.c) ? 0 : 2; };
@@ -503,10 +544,15 @@ function lecQuiz(id, n = 10) {
 function Lecture() {
   if (!LV) { view = "book"; return Book(); }
   const id = LV.ids[LV.si], x = SECM[id], L = LEC[id], bl = lecBlocks(id), n = secQs(id).length;
-  return `<div class="qhead"><span>🎧 講義 ${LV.ids.length > 1 ? `${LV.si + 1}/${LV.ids.length}` : ""}</span><span>${LV.playing ? "再生中" : LV.done ? "おわり" : "一時停止"}</span></div>
+  const Qs = LV.q, qq = Qs && Qs.ids[Qs.i] ? QM[Qs.ids[Qs.i]] : null;
+  const leftMin = LV.bundle ? Math.round(LV.ids.slice(LV.si).reduce((s2, k) => s2 + lecMin(k, LV.mix), 0)) : 0;
+  return `<div class="qhead"><span>🎧 ${LV.bundle ? esc(LV.label || "まとめて聞く") : "講義"} ${LV.ids.length > 1 ? `${LV.si + 1}/${LV.ids.length}` : ""}</span><span>${LV.playing ? "再生中" : LV.done ? "おわり" : "一時停止"}${LV.bundle && !LV.done ? `・残り約${leftMin}分` : ""}</span></div>
+  ${Qs ? `<div class="card" id="lecCur" style="border-color:var(--brand)"><div class="small">${esc(id)} 確認問題 ${Math.min(Qs.i + 1, Qs.ids.length)}/${Qs.ids.length}（聞き流し・記録には入りません）</div>
+    ${qq ? `<div class="qtext">${esc(qq.q)}</div>${Qs.phase === "a" ? `<div class="res ${qq.a ? "ok" : "ng"}">答えは <b>${qq.a ? "○（正しい）" : "×（誤り）"}</b><br>${esc(qq.exp)}</div>` : `<div class="small">考える時間のあと、答えを読み上げます。</div>`}` : `<div class="qtext">ここで確認問題です。</div>`}
+    <div class="mt"><button class="btn ghost" onclick="lecMove(1)">問題をとばして次のSectionへ ⏭</button></div></div>` : ""}
   ${LV.ids.length > 1 ? `<div class="seg" style="margin-bottom:10px">${LV.ids.map((s2, i) => `<button class="${i === LV.si ? "on" : ""}" onclick="lecGoSec(${i})">${s2}</button>`).join("")}</div>` : ""}
   <div class="card"><div class="small">教科書 p.${x?.page || ""}〜</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
-    ${bl.map((b, i) => `<div ${i === LV.bi ? 'id="lecCur"' : ""} onclick="lecJump(${i})" style="cursor:pointer;border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${i === LV.bi ? "background:var(--brandbg)" : ""}">
+    ${bl.map((b, i) => `<div ${i === LV.bi && !Qs ? 'id="lecCur"' : ""} onclick="lecJump(${i})" style="cursor:pointer;border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${i === LV.bi ? "background:var(--brandbg)" : ""}">
       <div style="font-weight:700;font-size:14px;color:${i === LV.bi ? "var(--brand)" : "var(--ink)"}">${esc(b.h)}</div>
       <div style="font-size:15px;line-height:1.85;margin-top:3px">${esc(b.t)}</div></div>`).join("")}
     <div class="small mt">文章をタップすると、そこから読み上げます。</div></div>
@@ -521,6 +567,39 @@ function Lecture() {
     <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
     <div class="small mt">講義は、教科書の範囲に沿ってこのアプリ用に書いた要点です（教科書の文章そのものではありません）。細かい所は教科書で確かめてください。</div></div>
   <div class="center"><button class="linkbtn" onclick="go('book')">講義をやめる</button></div>`;
+}
+
+// ---------- まとめて聞く ----------
+// 1Sectionの目安の分数（日本語の読み上げは1倍速でおよそ1分360字）。問題5問は1問約35秒
+function lecMin(id, mix) {
+  const L = LEC[id]; if (!L) return 0;
+  const ch = L.intro.length + L.summary.length + L.points.reduce((s2, p) => s2 + p.h.length + p.t.length, 0);
+  return ch / (360 * S.tts.rate) + (mix && secQs(id).length ? 5 * (35 + S.tts.think) / 60 : 0);
+}
+const fmtMin = m => m >= 60 ? `約${Math.floor(m / 60)}時間${Math.round(m % 60) ? Math.round(m % 60) + "分" : ""}` : `約${Math.max(1, Math.round(m))}分`;
+function bundleIds(kind) {
+  const all = SECS.map(x => x.id).filter(id => LEC[id]);
+  if (kind === "all") return all;
+  if (kind === "weak") return secStats().filter(x => x.c + x.w >= 4 && x.acc < 0.8).sort((a, b) => a.acc - b.acc).map(x => x.id).filter(id => LEC[id]);
+  if (kind === "unread") return all.filter(id => !S.read[id]);
+  if (kind === "read") return all.filter(id => S.read[id]);
+  return all.filter(id => SECM[id]?.ch === +kind);
+}
+const BUNDLE_LABEL = k => k === "all" ? "全範囲" : k === "weak" ? "苦手Section" : k === "unread" ? "まだ読んでいない所" : k === "read" ? "読んだ所の復習" : `CHAPTER${k}`;
+function startBundle(kind) { const ids = bundleIds(kind); if (!ids.length) { alertBox("該当するSectionがありません。"); return; } startLecture(ids, { label: BUNDLE_LABEL(kind), mix: S.tts.lecMix }); }
+function resumeBundle() { const P = S.lecPos; if (!P) return; startLecture(P.ids, { si: P.si, bi: P.bi, label: P.label, mix: P.mix }); }
+function BundleCard() {
+  if (!Object.keys(LEC).length) return "";
+  const P = S.lecPos, mix = S.tts.lecMix;
+  const row = (k, sub) => { const ids = bundleIds(k); if (!ids.length) return ""; const m = ids.reduce((s2, id) => s2 + lecMin(id, mix), 0);
+    return `<button class="btn ghost" style="text-align:left;display:flex;align-items:center;gap:8px;padding:11px 12px" onclick="startBundle('${k}')">
+      <span class="grow"><b>${BUNDLE_LABEL(k)}</b>${sub ? `<span class="small">　${esc(sub)}</span>` : ""}</span><span class="small num">${ids.length}本・${fmtMin(m)}</span></button>`; };
+  return `<div class="card"><h2>🎧 まとめて聞く（作業中・移動中に）</h2>
+    <div class="small">選んだ範囲の講義を、Section順に通しで流します。ラジオのように聞き流せます。</div>
+    ${P ? `<div class="mt"><button class="btn" onclick="resumeBundle()">▶ 続きから聞く（${esc(P.label || "")}・${esc(P.ids[P.si] || "")}から）</button></div>` : ""}
+    <div class="btns mt">${CHAPS.map(c => row(String(c.ch), c.title)).join("")}${row("weak", "正答率の低い順")}${row("unread", "")}${row("read", "")}${row("all", "")}</div>
+    <div class="row mt"><span class="grow small">Sectionごとに確認問題を5問はさむ（問題→考える時間→答え）</span><button class="spk ${mix ? "on" : ""}" onclick="S.tts.lecMix=!S.tts.lecMix;save();render()">${mix ? "ON" : "OFF"}</button></div>
+    <div class="small mt">聞いている間は画面が消えないようにしています。画面を消したり別のアプリに切り替えると止まる機種があります。</div></div>`;
 }
 
 // ---------- 教科書 ----------
@@ -584,6 +663,7 @@ function Book() {
     <div class="bar mt"><i style="width:${allPg ? readPg / allPg * 100 : 0}%;background:var(--brand)"></i></div>
     <div class="small mt">読み終えたら□にチェック。「解く」でそのSectionの問題だけを出します。チェックしたSectionの問題は、翌日からの「今日の分」にも優先して入ります。</div>
     ${NUMS.length ? `<div class="mt"><button class="btn sec" onclick="go('numbers')">🔢 数字まとめ（${NUMS.length}項目）</button></div>` : ""}</div>
+  ${BundleCard()}
   ${CHAPS.map(c => { const secs = SECS.filter(x => x.ch === c.ch), r = secs.filter(x => S.read[x.id]).length, open = cur === c.ch;
     return `<div class="card"><button onclick="openCh=${open ? -1 : c.ch};render()" style="border:0;background:none;padding:0;width:100%;text-align:left">
       <div class="row"><span class="chip">CHAPTER ${c.ch}</span><span class="grow"></span><span class="small num">${r}/${secs.length} ${open ? "▲" : "▼"}</span></div>
