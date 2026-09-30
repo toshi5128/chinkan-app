@@ -92,6 +92,14 @@ textarea{width:100%;min-height:90px;font:12px ui-monospace,monospace;border:1px 
 select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
 .ver{text-align:center;font-size:11px;color:var(--sub);margin-top:14px}
 .center{text-align:center}
+.spk{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:5px 11px;font-size:13px;color:var(--brand);font-weight:700}
+.spk.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:6px 12px;font-size:13px}
+.seg button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.player{display:flex;justify-content:center;gap:14px;margin-top:12px}
+.player button{width:58px;height:58px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:22px}
+.player button.main{width:72px;height:72px;background:var(--brand);color:#fff;border:0;font-size:28px}
 .mt{margin-top:10px}
 </style>
 </head>
@@ -102,7 +110,7 @@ select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-01-v1.2";
+const APP_VERSION = "2026-10-01-v1.3-voice";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -135,6 +143,7 @@ function load() {
   s.pastCur = s.pastCur || null;   // 解いている途中の過去問（答案用紙）
   s.pastLog = s.pastLog || [];     // 過去問の採点結果
   s.lastBackup = s.lastBackup || null;
+  s.tts = Object.assign({ auto: true, rate: 1.2, think: 4 }, s.tts || {}); // 読み上げの設定
   s.cur = s.cur || null;     // 受験中の模試
   return s;
 }
@@ -218,13 +227,14 @@ const TABS = [
   ["mock", "模試", '<path d="M9 4h6l1 2h3v15H5V6h3z"/><path d="M9 12l2 2 4-4"/>'],
   ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
 ];
-const PARENT = { past: "mock", numbers: "book" };
+const PARENT = { past: "mock", numbers: "book", listen: "study" };
 function renderTabs() {
   document.getElementById("tabs").innerHTML = TABS.map(([k, l, d]) =>
     `<button class="${(PARENT[view] || view) === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
   document.getElementById("hdrDays").textContent = `本番まで ${daysLeft()}日`;
 }
 function go(v) {
+  if (v !== view) { TTS.stop(); if (view === "listen") stopListen(); }
   if (view === "study" && sess && v !== "study") sess = null;
   view = v; render(); window.scrollTo(0, 0);
 }
@@ -232,7 +242,7 @@ function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "past" ? Past() : view === "study" ? Study() : view === "mock" ? Mock() : Stats();
+  el.innerHTML = view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "past" ? Past() : view === "listen" ? Listen() : view === "study" ? Study() : view === "mock" ? Mock() : Stats();
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -279,6 +289,124 @@ function Home() {
       : `<div class="small">本番と同じ4択50問・120分。まだ受けていません。一周の半分くらいまで進んだら一度受けてみましょう。</div>`}
     <div class="mt"><button class="btn sec" onclick="go('mock')">模試・過去問へ</button></div>
   </div>`;
+}
+
+// ---------- 読み上げ ----------
+const TTS = {
+  ok: typeof speechSynthesis !== "undefined",
+  voice: null, token: 0,
+  pickVoice() {
+    if (!this.ok) return;
+    const vs = speechSynthesis.getVoices().filter(v => /^ja/i.test(v.lang));
+    // 聞き取りやすい順（iPhone=Kyoko/O-ren、Android=Google、Windows=Nanami/Haruka）
+    const pref = ["O-ren", "Kyoko", "Google", "Nanami", "Otoya", "Haruka", "Hattori"];
+    this.voice = pref.map(n => vs.find(v => v.name.includes(n))).find(Boolean) || vs[0] || null;
+  },
+  // 記号や略記を、耳で分かる言い方に
+  clean(t) {
+    return String(t || "")
+      .replace(/○/g, "マル").replace(/×/g, "バツ")
+      .replace(/(\d+)\s*\/\s*(\d+)/g, "$2分の$1")
+      .replace(/㎡|m²|m2(?![0-9])/g, "平方メートル").replace(/％|%/g, "パーセント")
+      .replace(/〜|～/g, "から").replace(/p\.(\d+)/g, "$1ページ")
+      .replace(/[（(]/g, "、").replace(/[）)]/g, "、").replace(/[「」『』【】]/g, "")
+      .replace(/→/g, "、つまり、").replace(/・/g, "、");
+  },
+  // 長文は途中で切れる端末があるので、文ごとに区切って順番に読む
+  speak(text, onend) {
+    if (!this.ok) { onend && onend(); return; }
+    this.stop();
+    if (!this.voice) this.pickVoice();
+    const my = ++this.token;
+    const parts = (this.clean(text).match(/[^。！？!?]+[。！？!?]*/g) || []).map(x => x.trim()).filter(Boolean);
+    const next = i => {
+      if (my !== this.token) return;
+      if (i >= parts.length) { onend && onend(); return; }
+      const u = new SpeechSynthesisUtterance(parts[i]);
+      u.lang = "ja-JP"; u.rate = S.tts.rate; if (this.voice) u.voice = this.voice;
+      u.onend = () => next(i + 1);
+      u.onerror = e => { if (e.error !== "interrupted" && e.error !== "canceled") next(i + 1); };
+      speechSynthesis.speak(u);
+    };
+    next(0);
+  },
+  stop() { this.token++; if (this.ok) speechSynthesis.cancel(); },
+};
+if (TTS.ok) { TTS.pickVoice(); speechSynthesis.onvoiceschanged = () => TTS.pickVoice(); }
+const qSpeech = q => q.q;
+const aSpeech = (q, ok) => `${ok == null ? "" : ok ? "正解。" : "不正解。"}答えは、${q.a ? "マル" : "バツ"}。${q.exp}`;
+function sayQ() { const q = QM[sess.ids[sess.i]]; TTS.speak(sess.ans === null ? qSpeech(q) : aSpeech(q, sess.ans === q.a)); }
+function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else TTS.stop(); render(); }
+function setRate(r) { S.tts.rate = r; save(); render(); }
+const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
+
+// ---------- 聞き流し（画面に触らずに、問題→考える時間→答えと解説→次へ） ----------
+let LS = null, wakeLock = null, thinkTimer = null;
+function startListen(ids, label) {
+  if (!TTS.ok) { alertBox("このスマホ（ブラウザ）は読み上げに対応していません。"); return; }
+  if (!ids.length) { alertBox("該当する問題がありません。"); return; }
+  LS = { ids, i: 0, label, phase: "q", playing: true };
+  sess = null; view = "listen"; render(); window.scrollTo(0, 0);
+  keepAwake(true); playStep();
+}
+function playStep() {
+  clearTimeout(thinkTimer);
+  if (!LS || !LS.playing) return;
+  if (LS.i >= LS.ids.length) { LS.playing = false; keepAwake(false); TTS.speak("おつかれさまでした。聞き流しを終わります。"); render(); return; }
+  const q = QM[LS.ids[LS.i]];
+  render();
+  if (LS.phase === "q") {
+    TTS.speak(`第${LS.i + 1}問。${qSpeech(q)}`, () => { if (!LS?.playing) return; thinkTimer = setTimeout(() => { if (!LS?.playing) return; LS.phase = "a"; playStep(); }, S.tts.think * 1000); });
+  } else {
+    TTS.speak(aSpeech(q, null), () => { if (!LS?.playing) return; thinkTimer = setTimeout(() => { if (!LS?.playing) return; LS.i++; LS.phase = "q"; playStep(); }, 1200); });
+  }
+}
+function listenToggle() { if (!LS) return; LS.playing = !LS.playing; if (LS.playing) { keepAwake(true); playStep(); } else { clearTimeout(thinkTimer); TTS.stop(); render(); } }
+function listenMove(d) { if (!LS) return; clearTimeout(thinkTimer); TTS.stop(); LS.i = Math.max(0, Math.min(LS.ids.length - 1, LS.i + d)); LS.phase = "q"; LS.playing = true; keepAwake(true); playStep(); }
+function listenReveal() { if (!LS) return; clearTimeout(thinkTimer); TTS.stop(); LS.phase = "a"; LS.playing = true; playStep(); }
+function stopListen() { clearTimeout(thinkTimer); TTS.stop(); keepAwake(false); LS = null; }
+function setThink(t) { S.tts.think = t; save(); render(); }
+async function keepAwake(on) {
+  try {
+    if (on && "wakeLock" in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener?.("release", () => { wakeLock = null; }); }
+    if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && LS?.playing) keepAwake(true); });
+function Listen() {
+  if (!LS) { view = "study"; return Study(); }
+  const done = LS.i >= LS.ids.length, q = !done && QM[LS.ids[LS.i]];
+  return `<div class="prog"><i style="width:${Math.min(1, LS.i / LS.ids.length) * 100}%"></i></div>
+  <div class="qhead"><span>🎧 ${esc(LS.label)} ${Math.min(LS.i + 1, LS.ids.length)}/${LS.ids.length}</span><span>${LS.playing ? "再生中" : "一時停止"}</span></div>
+  ${done ? `<div class="card center"><h2>聞き流し おわり</h2><div class="small">${LS.ids.length}問を聞きました。耳で覚えたら、一問一答で本当に解けるか確かめましょう。</div></div>` : `
+  <div class="card">
+    <div class="small">${esc(SECM[q.sec]?.id || "")} ${esc(SECM[q.sec]?.title || "")}</div>
+    <div class="qtext">${esc(q.q)}</div>
+    ${LS.phase === "a" ? `<div class="res ${q.a ? "ok" : "ng"}">答えは <b>${q.a ? "○（正しい）" : "×（誤り）"}</b><br>${esc(q.exp)}</div>` : `<button class="btn ghost" onclick="listenReveal()">答えを先に聞く</button>`}
+  </div>`}
+  <div class="player">
+    <button onclick="listenMove(-1)" aria-label="前の問題">⏮</button>
+    <button class="main" onclick="${done ? "listenMove(-LS.ids.length)" : "listenToggle()"}" aria-label="再生・一時停止">${done ? "↺" : LS.playing ? "⏸" : "▶"}</button>
+    <button onclick="listenMove(1)" aria-label="次の問題">⏭</button>
+  </div>
+  <div class="card mt"><div class="small">考える時間（問題のあと、答えを読むまで）</div>
+    <div class="seg mt">${[2, 4, 7, 10].map(t => `<button class="${S.tts.think === t ? "on" : ""}" onclick="setThink(${t})">${t}秒</button>`).join("")}</div>
+    <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
+    <div class="small mt">聞いている間は画面が消えないようにしています。画面を消したり別のアプリに切り替えると、読み上げが止まる機種があります。聞き流しは記録（正解・不正解）には入りません。</div></div>
+  <div class="center"><button class="linkbtn" onclick="go('study')">聞き流しをやめる</button></div>`;
+}
+function ListenCard() {
+  if (!TTS.ok) return "";
+  const p = todayPlan();
+  const wrongIds = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).map(q => q.id);
+  const readIds = Q.filter(q => S.read[q.sec]).map(q => q.id);
+  return `<div class="card"><h2>🎧 聞き流し（運転中・移動中に）</h2>
+    <div class="small">問題を読む → 考える時間 → 答えと解説、を自動で続けます。画面を見なくてOK。</div>
+    <div class="btns mt">
+      <button class="btn sec" onclick="startListen([...todayPlan().due, ...todayPlan().newLeft], '今日の分')" ${p.due.length + p.newLeft.length ? "" : "disabled"}>今日の分を聞く（${p.due.length + p.newLeft.length}問）</button>
+      <button class="btn ghost" onclick="startListen(shuffle(Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; })).map(q => q.id), '間違えた問題')" ${wrongIds.length ? "" : "disabled"}>間違えた問題を聞く（${wrongIds.length}問）</button>
+      <button class="btn ghost" onclick="startListen(shuffle(Q.filter(q => S.read[q.sec])).slice(0, 60).map(q => q.id), '読んだSection')" ${readIds.length ? "" : "disabled"}>教科書で読んだ所から（${Math.min(60, readIds.length)}問）</button>
+    </div></div>`;
 }
 
 // ---------- 教科書 ----------
@@ -352,6 +480,7 @@ function startSession(ids, label) {
   if (!ids.length) { alertBox("該当する問題がありません。"); return; }
   sess = { ids, i: 0, label, ans: null, ok: 0, done: 0, requeued: {} };
   view = "study"; render(); window.scrollTo(0, 0);
+  if (S.tts.auto) sayQ();
 }
 function startToday() { const p = todayPlan(); startSession([...p.due, ...p.newLeft], "今日の分"); }
 function startArea(a, mode) {
@@ -380,6 +509,7 @@ function Study() {
   <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}</span>
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
+    ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
     <div class="qtext">${esc(q.q)}</div>
     <div class="ox">
       <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
@@ -403,6 +533,7 @@ function answer(v) {
   // 間違えた問題は、5問あとにもう一度（1セッション1回まで）
   if (!ok && !sess.requeued[q.id]) { sess.requeued[q.id] = 1; sess.ids.splice(Math.min(sess.ids.length, sess.i + 6), 0, q.id); }
   render();
+  if (S.tts.auto) TTS.speak(aSpeech(q, ok)); else TTS.stop();
 }
 function luck() {
   const q = QM[sess.ids[sess.i]], c = S.cards[q.id];
@@ -413,7 +544,7 @@ function luck() {
   nextQ();
 }
 function toggleStar(id) { const c = S.cards[id]; if (!c) return; c.star = !c.star; save(); render(); }
-function nextQ() { sess.i++; sess.ans = null; render(); window.scrollTo(0, 0); }
+function nextQ() { sess.i++; sess.ans = null; render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
 function StudyMenu() {
   const p = todayPlan();
   const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
@@ -432,7 +563,11 @@ function StudyMenu() {
   </div>
   <div class="card"><h2>見直し</h2><div class="btns">
     <button class="btn ghost" onclick="startSpecial('wrong')" ${wrong ? "" : "disabled"}>間違えた問題（${wrong}問）</button>
-    <button class="btn ghost" onclick="startSpecial('star')" ${star ? "" : "disabled"}>★マークした問題（${star}問）</button></div></div>`;
+    <button class="btn ghost" onclick="startSpecial('star')" ${star ? "" : "disabled"}>★マークした問題（${star}問）</button></div></div>
+  ${ListenCard()}
+  ${TTS.ok ? `<div class="card"><h2>🔊 読み上げの設定</h2><div class="row"><span class="grow small">問題が出たら自動で読む・答えたら解説を読む</span><button class="spk ${S.tts.auto ? "on" : ""}" onclick="S.tts.auto=!S.tts.auto;save();render()">${S.tts.auto ? "ON" : "OFF"}</button></div>
+    <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
+    <div class="mt"><button class="btn ghost" onclick="TTS.speak('この速さで読み上げます。管理戸数が二百戸以上の賃貸住宅管理業者は、登録が必要です。')">🔊 試しに聞く</button></div></div>` : ""}`;
 }
 
 // ---------- 模試（○×の文を4つ組み合わせて本番形式の4択を作る） ----------
@@ -514,6 +649,7 @@ function Mock() {
   return `
   <div class="qhead"><span>問${m.i + 1} / ${m.items.length}　<span class="chip" style="color:${AREAS[it.area].color}">${AREAS[it.area].short}</span></span><span class="timer num" id="timer" data-start="${m.start}" data-limit="${m.limit || 7200}" data-kind="mock"></span></div>
   <div class="card">
+    ${TTS.ok ? `<div class="row" style="justify-content:flex-end;margin-bottom:4px"><button class="spk" onclick="sayMock()">🔊 読む</button></div>` : ""}
     <div class="qtext" style="font-weight:700">【問${m.i + 1}】${STEM[it.type]}</div>
     ${body}
     <div class="row mt" style="gap:8px">
@@ -527,8 +663,14 @@ function Mock() {
     <div class="btns mt"><button class="btn" onclick="finishMock()">採点する</button>
     <button class="linkbtn" onclick="quitMock()">この模試をやめる（記録しない）</button></div></div>`;
 }
+function sayMock() {
+  const m = S.cur, it = m.items[m.i], st = it.ids.map(id => QM[id]);
+  const body = it.opts ? st.map((q, k) => `${KANA[k]}。${q.q}`).join("") + it.opts.map((o, k) => `選択肢${k + 1}、${o}。`).join("")
+    : st.map((q, k) => `${k + 1}番。${q.q}`).join("");
+  TTS.speak(`問${m.i + 1}。${STEM[it.type]}${body}`);
+}
 function pickOpt(k) { S.cur.pick[S.cur.i] = S.cur.pick[S.cur.i] === k ? null : k; save(); render(); }
-function moveMock(d) { S.cur.i = Math.max(0, Math.min(S.cur.items.length - 1, S.cur.i + d)); save(); render(); window.scrollTo(0, 0); }
+function moveMock(d) { TTS.stop(); S.cur.i = Math.max(0, Math.min(S.cur.items.length - 1, S.cur.i + d)); save(); render(); window.scrollTo(0, 0); }
 function quitMock() { if (!confirm("この模試をやめますか？（結果は残りません）")) return; S.cur = null; save(); render(); }
 function finishMock(timeUp) {
   const m = S.cur;
@@ -724,12 +866,17 @@ function PastResult(cur, y) {
 
 // ---------- 数字まとめ ----------
 let numCh = 1, numHide = false, numOpen = {};
+function sayNums() {
+  const list = NUMS.filter(x => SECM[x.sec]?.ch === numCh);
+  TTS.speak(list.map(x => `${x.item}。${x.num}。`).join(""));
+}
 function Numbers() {
   if (!NUMS.length) return `<div class="card">数字まとめは準備中です。</div>`;
   const list = NUMS.filter(x => SECM[x.sec]?.ch === numCh);
   return `<div class="card"><h2>🔢 数字まとめ</h2><div class="small">本番は数字のひっかけが多い試験です。「答えを隠す」にすると、タップするまで数字が見えないので暗記テストになります。</div>
     <div class="row mt" style="gap:6px;flex-wrap:wrap">${CHAPS.map(c => `<button class="chip" style="border:0;padding:6px 12px;font-size:13px;${numCh === c.ch ? "background:var(--brand);color:#fff" : ""}" onclick="numCh=${c.ch};numOpen={};render()">CH${c.ch}</button>`).join("")}
-      <span class="grow"></span><button class="linkbtn" onclick="numHide=!numHide;numOpen={};render()">${numHide ? "答えを表示" : "答えを隠す"}</button></div></div>
+      <span class="grow"></span><button class="linkbtn" onclick="numHide=!numHide;numOpen={};render()">${numHide ? "答えを表示" : "答えを隠す"}</button></div>
+    ${TTS.ok ? `<div class="mt"><button class="btn sec" onclick="sayNums()">🎧 CH${numCh}の数字を通しで聞く</button></div>` : ""}</div>
   <div class="card">${list.map((x, i) => { const shown = !numHide || numOpen[i];
     return `<div style="border-top:${i ? "1px solid var(--line)" : "0"};padding:9px 0" ${numHide ? `onclick="numOpen[${i}]=!numOpen[${i}];render()"` : ""}>
       <div class="small"><b class="num">${esc(x.sec)}</b> ${esc(SECM[x.sec]?.title || "")}</div>
