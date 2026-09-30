@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>賃管特訓</title>
+<meta name="theme-color" content="#156552">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="賃管特訓">
+<style>
+:root{
+  --bg:#f5f6f3;--card:#fff;--ink:#1c1f1d;--sub:#5d655f;--line:#e3e6e1;--brand:#156552;--brandbg:#e3f1ec;
+  --ok:#1b8a5a;--okbg:#e6f4ec;--ng:#c8372d;--ngbg:#fdecea;--warn:#a86400;--warnbg:#fff3df;--track:#eceee9;
+  --a:#2a78d6;--b:#8a4fd1;--c:#d9822b;--d:#1b8a5a;--e:#c2417a;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141615;--card:#1d201e;--ink:#eef1ee;--sub:#a3aca5;--line:#2e332f;--brand:#4cc3a0;--brandbg:#15302a;
+  --ok:#4cc38a;--okbg:#12291e;--ng:#f07167;--ngbg:#2e1513;--warn:#f0b04a;--warnbg:#2b2210;--track:#2a2e2b;
+  --a:#6aa8f0;--b:#b48ae8;--c:#f0a45c;--d:#4cc38a;--e:#ea7fae;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif;-webkit-text-size-adjust:100%}
+body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit;cursor:pointer}
+main{max-width:640px;margin:0 auto;padding:12px 16px 24px}
+header.top{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 16px 6px;max-width:640px;margin:0 auto}
+header.top img{width:30px;height:30px;border-radius:8px}
+header.top h1{font-size:17px;margin:0;flex:1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 12px}
+.card h2{font-size:15px;margin:0 0 8px}
+.small{font-size:12.5px;color:var(--sub);line-height:1.6}
+.num{font-variant-numeric:tabular-nums}
+.hero{display:flex;align-items:baseline;gap:6px}
+.hero b{font-size:44px;line-height:1;color:var(--brand)}
+.row{display:flex;gap:8px;align-items:center}
+.grow{flex:1}
+.btn{display:block;width:100%;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700;background:var(--brand);color:#fff;text-align:center}
+.btn.sec{background:var(--brandbg);color:var(--brand)}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:600}
+.btn:disabled{opacity:.5}
+.btns{display:grid;gap:8px}
+.bar{height:8px;background:var(--track);border-radius:4px;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:4px}
+.area{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;margin:8px 0}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav.tabs button{flex:1;border:0;background:none;padding:8px 0 7px;font-size:11px;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav.tabs button.on{color:var(--brand);font-weight:700}
+nav.tabs svg{width:22px;height:22px}
+/* 一問一答 */
+.qhead{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--sub);margin-bottom:8px}
+.chip{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:99px;background:var(--track);color:var(--sub)}
+.qtext{font-size:17px;line-height:1.75;margin:4px 0 14px;white-space:pre-wrap}
+.ox{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ox button{border:2px solid var(--line);background:var(--card);border-radius:16px;padding:14px 0;font-size:40px;font-weight:800;line-height:1}
+.ox .o{color:var(--ok)}.ox .x{color:var(--ng)}
+.ox button.pick{border-color:currentColor}
+.res{border-radius:12px;padding:12px;margin-top:12px;line-height:1.7;font-size:15px}
+.res.ok{background:var(--okbg)}.res.ng{background:var(--ngbg)}
+.res b.t{font-size:17px}
+.ref{font-size:12px;color:var(--sub);margin-top:6px}
+.prog{height:5px;background:var(--track);border-radius:3px;overflow:hidden;margin-bottom:10px}
+.prog i{display:block;height:100%;background:var(--brand)}
+.linkbtn{border:0;background:none;color:var(--brand);padding:6px 0;font-size:14px;text-decoration:underline}
+/* 模試 */
+.opts{display:grid;gap:8px}
+.opts button{text-align:left;border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:11px 12px;font-size:15px;line-height:1.6;display:flex;gap:10px}
+.opts button .n{font-weight:800;color:var(--brand);min-width:1.2em}
+.opts button.pick{border-color:var(--brand);background:var(--brandbg)}
+.stmts{margin:4px 0 12px;display:grid;gap:8px}
+.stmts div{font-size:15px;line-height:1.7;display:flex;gap:8px}
+.stmts div>b{min-width:1.3em}
+.grid{display:grid;grid-template-columns:repeat(10,1fr);gap:4px}
+.grid button{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:5px 0;font-size:12px}
+.grid button.ans{background:var(--brandbg);border-color:var(--brand)}
+.grid button.flag{outline:2px solid var(--warn)}
+.grid button.cur{background:var(--brand);color:#fff}
+.grid button.okk{background:var(--okbg);border-color:var(--ok)}
+.grid button.ngg{background:var(--ngbg);border-color:var(--ng)}
+.timer{font-weight:700}
+.tag{font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px}
+.tag.ok{background:var(--okbg);color:var(--ok)}.tag.ng{background:var(--ngbg);color:var(--ng)}
+details.st{border-top:1px solid var(--line);padding:8px 0}
+details.st summary{cursor:pointer;font-size:14px;line-height:1.6}
+.days{display:flex;align-items:flex-end;gap:3px;height:70px;margin-top:6px}
+.days div{flex:1;background:var(--brand);border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
+.dlab{display:flex;gap:3px;font-size:10px;color:var(--sub)}.dlab span{flex:1;text-align:center}
+textarea{width:100%;min-height:90px;font:12px ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);padding:8px}
+select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.ver{text-align:center;font-size:11px;color:var(--sub);margin-top:14px}
+.center{text-align:center}
+.mt{margin-top:10px}
+</style>
+</head>
+<body>
+<header class="top"><img src="icon-192.png" alt=""><h1>賃管特訓</h1><span class="small" id="hdrDays"></span></header>
+<main id="app"><div class="card small">問題を読み込み中…</div></main>
+<nav class="tabs" id="tabs"></nav>
+
+<script>
+"use strict";
+const APP_VERSION = "2026-09-30-v1.0";
+const EXAM = new Date("2026-11-15T13:00:00+09:00");
+const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
+const AREAS = {
+  A: { name: "管理業法・受託契約", short: "管理業", color: "var(--a)", mock: 14 },
+  B: { name: "サブリース規制",     short: "サブリース", color: "var(--b)", mock: 7 },
+  C: { name: "維持保全（建物・設備）", short: "建物", color: "var(--c)", mock: 10 },
+  D: { name: "賃貸借（民法・借地借家）", short: "賃貸借", color: "var(--d)", mock: 11 },
+  E: { name: "金銭管理・実務", short: "実務", color: "var(--e)", mock: 8 },
+};
+const INTERVAL = [0, 1, 3, 7, 14, 30]; // 箱の番号 → 次に出すまでの日数
+const LAST_WEEK = 7; // 最後の1週間は新しい問題を入れず、復習と模試に回す
+
+// ---------- 保存 ----------
+const KEY = "chinkan.v1";
+let S = load();
+function load() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+  s = s || {};
+  s.cards = s.cards || {};   // id → {box,due,c,w,last,star}
+  s.log = s.log || {};       // 日付 → {n,c}
+  s.mocks = s.mocks || [];   // 模試の結果
+  s.plan = s.plan || null;   // 今日の新規（その日の間は固定）
+  s.cur = s.cur || null;     // 受験中の模試
+  return s;
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { alertBox("保存できませんでした。記録タブからバックアップを取ってください。"); } }
+
+// ---------- 日付 ----------
+const pad = n => String(n).padStart(2, "0");
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = () => ymd(new Date());
+const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return ymd(d); };
+const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000));
+
+// ---------- 問題 ----------
+let Q = [], QM = {};
+async function loadQuestions() {
+  const parts = await Promise.all(Object.keys(AREAS).map(a =>
+    fetch(`data/${a}.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => [])));
+  Q = parts.flat().filter(q => q && q.id && typeof q.a === "boolean");
+  QM = Object.fromEntries(Q.map(q => [q.id, q]));
+}
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const card = id => S.cards[id];
+
+// 今日の分：期限が来た復習＋新しい問題（残り日数から逆算）
+function newQuota() {
+  const unseen = Q.filter(q => !card(q.id)).length;
+  const d = Math.max(1, daysLeft() - LAST_WEEK);
+  return daysLeft() <= LAST_WEEK ? 0 : Math.min(unseen, Math.max(15, Math.ceil(unseen / d)));
+}
+function todayPlan() {
+  const t = today();
+  if (!S.plan || S.plan.date !== t) {
+    const quota = newQuota();
+    // 分野が偏らないように、各分野から順番に1問ずつ
+    const by = Object.keys(AREAS).map(a => Q.filter(q => q.area === a && !card(q.id)));
+    const ids = [];
+    for (let i = 0; ids.length < quota && by.some(x => x.length); i++) { const b = by[i % by.length]; if (b.length) ids.push(b.shift().id); }
+    S.plan = { date: t, newIds: ids };
+    save();
+  }
+  const newLeft = S.plan.newIds.filter(id => QM[id] && !card(id));
+  const due = Q.filter(q => { const c = card(q.id); return c && c.due <= t; }).sort((a, b) => card(a.id).due.localeCompare(card(b.id).due)).map(q => q.id);
+  return { newLeft, due, newTotal: S.plan.newIds.length };
+}
+
+function record(id, ok) {
+  const t = today();
+  const c = S.cards[id] || { box: 0, c: 0, w: 0 };
+  if (ok) { c.box = Math.min(5, Math.max(c.box, 1) + 1); c.c++; }
+  else { c.box = 1; c.w++; }
+  c.due = addDays(t, INTERVAL[c.box]);
+  c.last = t;
+  S.cards[id] = c;
+  const L = S.log[t] || { n: 0, c: 0 }; L.n++; if (ok) L.c++; S.log[t] = L;
+  save();
+}
+
+// 分野ごとの成績
+function areaStats(a) {
+  const qs = Q.filter(q => q.area === a);
+  let seen = 0, mastered = 0, c = 0, w = 0;
+  for (const q of qs) { const k = card(q.id); if (!k) continue; seen++; if (k.box >= 3) mastered++; c += k.c; w += k.w; }
+  return { total: qs.length, seen, mastered, acc: c + w ? c / (c + w) : null };
+}
+
+// ---------- 画面の切り替え ----------
+let view = "home", sess = null, mock = null;
+const TABS = [
+  ["home", "ホーム", '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>'],
+  ["study", "一問一答", '<circle cx="8" cy="12" r="4"/><path d="M15 8l6 8M21 8l-6 8"/>'],
+  ["mock", "模試", '<path d="M9 4h6l1 2h3v15H5V6h3z"/><path d="M9 12l2 2 4-4"/>'],
+  ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
+];
+function renderTabs() {
+  document.getElementById("tabs").innerHTML = TABS.map(([k, l, d]) =>
+    `<button class="${view === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
+  document.getElementById("hdrDays").textContent = `本番まで ${daysLeft()}日`;
+}
+function go(v) {
+  if (view === "study" && sess && v !== "study") sess = null;
+  view = v; render(); window.scrollTo(0, 0);
+}
+function render() {
+  renderTabs();
+  const el = document.getElementById("app");
+  if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
+  el.innerHTML = view === "home" ? Home() : view === "study" ? Study() : view === "mock" ? Mock() : Stats();
+}
+function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
+
+// ---------- ホーム ----------
+function Home() {
+  const p = todayPlan(), L = S.log[today()] || { n: 0, c: 0 };
+  const todo = p.due.length + p.newLeft.length;
+  const seen = Object.keys(S.cards).filter(id => QM[id]).length;
+  const lastMock = S.mocks[S.mocks.length - 1];
+  const dl = daysLeft();
+  const phase = dl <= LAST_WEEK ? "仕上げ期：新しい問題はおしまい。復習と模試で本番に慣れる時期です。"
+    : dl <= 21 ? "後半戦：今日の分に加えて、週1回は模試で時間配分を練習しましょう。"
+    : "前半戦：まずは全範囲を一周。毎日の「今日の分」だけやれば試験1週間前に一周が終わります。";
+  return `
+  <div class="card">
+    <div class="small">令和8年11月15日（日）13:00 本番まで</div>
+    <div class="hero"><b class="num">${dl}</b><span>日</span></div>
+    <div class="small mt">${phase}</div>
+  </div>
+  <div class="card">
+    <h2>今日の分</h2>
+    ${todo ? `<div class="row small"><span class="grow">復習 <b class="num">${p.due.length}</b>問 ＋ 新しい問題 <b class="num">${p.newLeft.length}</b>問</span><span>今日 ${L.n}問解いた</span></div>
+      <div class="mt"><button class="btn" onclick="startToday()">▶ 今日の分をはじめる（${todo}問）</button></div>`
+      : `<div class="res ok"><b class="t">今日の分は完了です 🎉</b><br>今日 ${L.n}問・正答率 ${L.n ? Math.round(L.c / L.n * 100) : 0}%。余裕があれば苦手な分野をもう少し。</div>`}
+  </div>
+  <div class="card">
+    <h2>分野ごとの仕上がり</h2>
+    <div class="small">「覚えた」＝3回以上続けて正解した問題の割合。全${Q.length}問中 ${seen}問に挑戦済み。</div>
+    ${Object.entries(AREAS).map(([a, A]) => { const s = areaStats(a); const pct = s.total ? Math.round(s.mastered / s.total * 100) : 0;
+      return `<div class="area"><div><span class="dot" style="background:${A.color}"></span>${A.name}<span class="small">（本番約${A.mock}問）</span></div><div class="num small">${pct}%</div>
+        <div class="bar" style="grid-column:1/-1"><i style="width:${pct}%;background:${A.color}"></i></div></div>`; }).join("")}
+  </div>
+  <div class="card">
+    <h2>模試</h2>
+    ${lastMock ? `<div class="row"><span class="grow">前回 ${lastMock.date.slice(5).replace("-", "/")}</span><b class="num" style="font-size:22px;color:${lastMock.score >= PASS_LINE ? "var(--ok)" : "var(--ng)"}">${lastMock.score}点</b><span class="small">/50（目標${PASS_LINE}点）</span></div>`
+      : `<div class="small">本番と同じ4択50問・120分。まだ受けていません。一周の半分くらいまで進んだら一度受けてみましょう。</div>`}
+    <div class="mt"><button class="btn sec" onclick="go('mock')">模試へ</button></div>
+  </div>`;
+}
+
+// ---------- 一問一答 ----------
+function startSession(ids, label) {
+  if (!ids.length) { alertBox("該当する問題がありません。"); return; }
+  sess = { ids, i: 0, label, ans: null, ok: 0, done: 0, requeued: {} };
+  view = "study"; render(); window.scrollTo(0, 0);
+}
+function startToday() { const p = todayPlan(); startSession([...p.due, ...p.newLeft], "今日の分"); }
+function startArea(a, mode) {
+  let qs = Q.filter(q => q.area === a);
+  if (mode === "weak") qs = qs.filter(q => { const c = card(q.id); return c && (c.box <= 2 || c.w > 0); });
+  if (mode === "new") qs = qs.filter(q => !card(q.id));
+  startSession(shuffle(qs).slice(0, 30).map(q => q.id), AREAS[a].short + (mode === "weak" ? "・苦手" : mode === "new" ? "・未挑戦" : ""));
+}
+function startSpecial(kind) {
+  let qs = kind === "star" ? Q.filter(q => card(q.id)?.star) : Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; });
+  startSession(shuffle(qs).slice(0, 40).map(q => q.id), kind === "star" ? "★マーク" : "間違えた問題");
+}
+function Study() {
+  if (!sess) return StudyMenu();
+  if (sess.i >= sess.ids.length) {
+    const rate = sess.done ? Math.round(sess.ok / sess.done * 100) : 0;
+    return `<div class="card center"><h2>おつかれさまでした</h2>
+      <div class="hero" style="justify-content:center"><b class="num">${rate}</b><span>%</span></div>
+      <div class="small">${sess.label}：${sess.done}問中 ${sess.ok}問正解</div>
+      <div class="btns mt"><button class="btn" onclick="go('home')">ホームへ</button><button class="btn ghost" onclick="sess=null;render()">ほかの問題を解く</button></div></div>`;
+  }
+  const q = QM[sess.ids[sess.i]], c = card(q.id), A = AREAS[q.area];
+  const answered = sess.ans !== null, ok = answered && sess.ans === q.a;
+  return `
+  <div class="prog"><i style="width:${sess.i / sess.ids.length * 100}%"></i></div>
+  <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}</span>
+    <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
+  <div class="card">
+    <div class="qtext">${esc(q.q)}</div>
+    <div class="ox">
+      <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
+      <button class="x ${answered && sess.ans === false ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(false)" aria-label="誤り">×</button>
+    </div>
+    ${answered ? `<div class="res ${ok ? "ok" : "ng"}"><b class="t">${ok ? "正解" : "不正解"}</b>　答えは <b>${q.a ? "○（正しい）" : "×（誤り）"}</b><br>${esc(q.exp)}
+      ${q.ref ? `<div class="ref">根拠：${esc(q.ref)}</div>` : ""}</div>
+      <div class="row mt">
+        ${ok ? `<button class="linkbtn" onclick="luck()">まぐれだった</button>` : ""}
+        <span class="grow"></span>
+        <button class="linkbtn" onclick="toggleStar('${q.id}')">${card(q.id)?.star ? "★マーク済み" : "☆ マークする"}</button>
+      </div>
+      <button class="btn mt" onclick="nextQ()">次へ ▶</button>` : ""}
+  </div>
+  <div class="center"><button class="linkbtn" onclick="sess.ids=sess.ids.slice(0,sess.i);render()">ここでやめる</button></div>`;
+}
+function answer(v) {
+  const q = QM[sess.ids[sess.i]]; const ok = v === q.a;
+  sess.ans = v; sess.done++; if (ok) sess.ok++;
+  record(q.id, ok);
+  // 間違えた問題は、5問あとにもう一度（1セッション1回まで）
+  if (!ok && !sess.requeued[q.id]) { sess.requeued[q.id] = 1; sess.ids.splice(Math.min(sess.ids.length, sess.i + 6), 0, q.id); }
+  render();
+}
+function luck() {
+  const q = QM[sess.ids[sess.i]], c = S.cards[q.id];
+  c.box = 1; c.due = addDays(today(), 1); c.c--; c.w++;
+  const L = S.log[today()]; if (L) L.c--; sess.ok--;
+  save();
+  if (!sess.requeued[q.id]) { sess.requeued[q.id] = 1; sess.ids.splice(Math.min(sess.ids.length, sess.i + 6), 0, q.id); }
+  nextQ();
+}
+function toggleStar(id) { const c = S.cards[id]; if (!c) return; c.star = !c.star; save(); render(); }
+function nextQ() { sess.i++; sess.ans = null; render(); window.scrollTo(0, 0); }
+function StudyMenu() {
+  const p = todayPlan();
+  const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
+  const star = Q.filter(q => card(q.id)?.star).length;
+  return `
+  <div class="card"><h2>今日の分</h2><div class="small">復習${p.due.length}問＋新しい問題${p.newLeft.length}問</div>
+    <div class="mt"><button class="btn" onclick="startToday()" ${p.due.length + p.newLeft.length ? "" : "disabled"}>▶ はじめる</button></div></div>
+  <div class="card"><h2>分野を選んで解く（30問ずつ）</h2>
+    ${Object.entries(AREAS).map(([a, A]) => { const s = areaStats(a);
+      return `<div style="border-top:1px solid var(--line);padding:10px 0">
+        <div class="row"><span class="grow"><span class="dot" style="background:${A.color}"></span>${A.name}</span><span class="small num">${s.seen}/${s.total}問${s.acc != null ? `・正答${Math.round(s.acc * 100)}%` : ""}</span></div>
+        <div class="row mt" style="gap:6px"><button class="btn sec" style="padding:9px" onclick="startArea('${a}')">ランダム</button>
+          <button class="btn ghost" style="padding:9px" onclick="startArea('${a}','new')">未挑戦</button>
+          <button class="btn ghost" style="padding:9px" onclick="startArea('${a}','weak')">苦手</button></div></div>`; }).join("")}
+  </div>
+  <div class="card"><h2>見直し</h2><div class="btns">
+    <button class="btn ghost" onclick="startSpecial('wrong')" ${wrong ? "" : "disabled"}>間違えた問題（${wrong}問）</button>
+    <button class="btn ghost" onclick="startSpecial('star')" ${star ? "" : "disabled"}>★マークした問題（${star}問）</button></div></div>`;
+}
+
+// ---------- 模試（○×の文を4つ組み合わせて本番形式の4択を作る） ----------
+const KANA = ["ア", "イ", "ウ", "エ"];
+function pickStmts(pool, nTrue, nFalse) {
+  // 同じ小分類から集められればそれを優先（本番も1問1テーマ）
+  const subs = shuffle([...new Set(pool.map(q => q.sub))]);
+  for (const s of subs) {
+    const p = pool.filter(q => q.sub === s), T = shuffle(p.filter(q => q.a)), F = shuffle(p.filter(q => !q.a));
+    if (T.length >= nTrue && F.length >= nFalse) return shuffle([...T.slice(0, nTrue), ...F.slice(0, nFalse)]);
+  }
+  const T = shuffle(pool.filter(q => q.a)), F = shuffle(pool.filter(q => !q.a));
+  if (T.length >= nTrue && F.length >= nFalse) return shuffle([...T.slice(0, nTrue), ...F.slice(0, nFalse)]);
+  return null;
+}
+function makeItem(area, type, used) {
+  const pool = Q.filter(q => q.area === area && !used.has(q.id));
+  let st, ans, opts;
+  if (type === "right") { st = pickStmts(pool, 1, 3); if (!st) return null; ans = st.findIndex(q => q.a); }
+  else if (type === "wrong") { st = pickStmts(pool, 3, 1); if (!st) return null; ans = st.findIndex(q => !q.a); }
+  else if (type === "count") {
+    const k = 1 + Math.floor(Math.random() * 4); st = pickStmts(pool, k, 4 - k); if (!st) return null;
+    ans = k - 1; opts = ["1つ", "2つ", "3つ", "4つ"];
+  } else { // 組合せ：正しいもの2つ
+    st = pickStmts(pool, 2, 2); if (!st) return null;
+    const pairs = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+    const good = pairs.find(([x, y]) => st[x].a && st[y].a);
+    const others = shuffle(pairs.filter(p => p !== good)).slice(0, 3);
+    const four = [good, ...others].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+    ans = four.indexOf(good); opts = four.map(([x, y]) => `${KANA[x]}、${KANA[y]}`);
+  }
+  st.forEach(q => used.add(q.id));
+  return { area, type, ids: st.map(q => q.id), ans, opts: opts || null };
+}
+const STEM = {
+  right: "次の記述のうち、正しいものはどれか。",
+  wrong: "次の記述のうち、誤っているものはどれか。",
+  count: "次の記述ア〜エのうち、正しいものはいくつあるか。",
+  combo: "次の記述ア〜エのうち、正しいものの組合せはどれか。",
+};
+function buildMock() {
+  const used = new Set(), items = [];
+  for (const [a, A] of Object.entries(AREAS)) {
+    const n = A.mock;
+    // 本番の比率に近づける：個数・組合せを各分野に少し混ぜる
+    const types = [];
+    for (let i = 0; i < n; i++) types.push(i % 6 === 2 ? "count" : i % 9 === 5 ? "combo" : i % 2 ? "wrong" : "right");
+    for (const t of shuffle(types)) { const it = makeItem(a, t, used) || makeItem(a, "right", used) || makeItem(a, "wrong", used); if (it) items.push(it); }
+  }
+  return items;
+}
+function startMock() {
+  const items = buildMock();
+  if (items.length < 20) { alertBox("問題がまだ少ないため模試を作れません。"); return; }
+  S.cur = { items, pick: items.map(() => null), flag: items.map(() => false), i: 0, start: Date.now(), done: false };
+  save(); render(); window.scrollTo(0, 0);
+}
+let timerId = null;
+function tick() {
+  const el = document.getElementById("timer"); if (!el || !S.cur || S.cur.done) { clearInterval(timerId); timerId = null; return; }
+  const left = Math.max(0, 120 * 60 - Math.floor((Date.now() - S.cur.start) / 1000));
+  el.textContent = `残り ${Math.floor(left / 60)}:${pad(left % 60)}`;
+  if (left === 0) finishMock(true);
+}
+function Mock() {
+  const m = S.cur;
+  if (!m) return MockMenu();
+  if (m.done) return MockResult(m);
+  if (!timerId) timerId = setInterval(tick, 1000);
+  setTimeout(tick, 0);
+  const it = m.items[m.i], stmts = it.ids.map(id => QM[id]);
+  const answeredN = m.pick.filter(x => x !== null).length;
+  const body = it.opts
+    ? `<div class="stmts">${stmts.map((q, k) => `<div><b>${KANA[k]}</b><span>${esc(q.q)}</span></div>`).join("")}</div>
+       <div class="opts">${it.opts.map((o, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${o}</span></button>`).join("")}</div>`
+    : `<div class="opts">${stmts.map((q, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${esc(q.q)}</span></button>`).join("")}</div>`;
+  return `
+  <div class="qhead"><span>問${m.i + 1} / ${m.items.length}　<span class="chip" style="color:${AREAS[it.area].color}">${AREAS[it.area].short}</span></span><span class="timer num" id="timer"></span></div>
+  <div class="card">
+    <div class="qtext" style="font-weight:700">【問${m.i + 1}】${STEM[it.type]}</div>
+    ${body}
+    <div class="row mt" style="gap:8px">
+      <button class="btn ghost" style="padding:10px" onclick="moveMock(-1)" ${m.i ? "" : "disabled"}>◀ 前へ</button>
+      <button class="btn ghost" style="padding:10px;${m.flag[m.i] ? "color:var(--warn)" : ""}" onclick="S.cur.flag[S.cur.i]=!S.cur.flag[S.cur.i];save();render()">${m.flag[m.i] ? "🚩 見直す" : "🏳 あとで見直す"}</button>
+      <button class="btn" style="padding:10px" onclick="moveMock(1)" ${m.i < m.items.length - 1 ? "" : "disabled"}>次へ ▶</button>
+    </div>
+  </div>
+  <div class="card"><div class="row small"><span class="grow">解答 ${answeredN}/${m.items.length}</span><span>🚩＝見直し</span></div>
+    <div class="grid mt">${m.items.map((_, k) => `<button class="${k === m.i ? "cur" : m.pick[k] !== null ? "ans" : ""} ${m.flag[k] ? "flag" : ""}" onclick="S.cur.i=${k};save();render();scrollTo(0,0)">${k + 1}</button>`).join("")}</div>
+    <div class="btns mt"><button class="btn" onclick="finishMock()">採点する</button>
+    <button class="linkbtn" onclick="quitMock()">この模試をやめる（記録しない）</button></div></div>`;
+}
+function pickOpt(k) { S.cur.pick[S.cur.i] = S.cur.pick[S.cur.i] === k ? null : k; save(); render(); }
+function moveMock(d) { S.cur.i = Math.max(0, Math.min(S.cur.items.length - 1, S.cur.i + d)); save(); render(); window.scrollTo(0, 0); }
+function quitMock() { if (!confirm("この模試をやめますか？（結果は残りません）")) return; S.cur = null; save(); render(); }
+function finishMock(timeUp) {
+  const m = S.cur;
+  const blank = m.pick.filter(x => x === null).length;
+  if (!timeUp && blank && !confirm(`まだ${blank}問が未解答です。採点しますか？`)) return;
+  m.done = true; m.end = Date.now(); m.review = null;
+  const byArea = {};
+  let score = 0;
+  m.items.forEach((it, k) => { const ok = m.pick[k] === it.ans; if (ok) score++; const b = byArea[it.area] || (byArea[it.area] = { n: 0, c: 0 }); b.n++; if (ok) b.c++;
+    // 間違えた問題の4つの文は、明日の復習に回す（未挑戦なら今日の新規扱いにはしない）
+    if (!ok) it.ids.forEach(id => { const c = S.cards[id] || { box: 0, c: 0, w: 0 }; c.box = Math.min(c.box || 1, 1); c.due = addDays(today(), 1); c.w = c.w || 0; S.cards[id] = c; });
+  });
+  m.score = score;
+  S.mocks.push({ date: today(), score, n: m.items.length, byArea, min: Math.round((m.end - m.start) / 60000) });
+  save(); render(); window.scrollTo(0, 0);
+}
+function MockMenu() {
+  const hist = S.mocks.slice(-8);
+  return `
+  <div class="card"><h2>本番形式の模試</h2>
+    <div class="small">4択50問・120分。本番の分野の比率に合わせて、毎回ちがう組み合わせで出題します。「正しいものはいくつあるか」の個数問題、組合せ問題も入ります。<br>間違えた問題の4つの文は、翌日の一問一答の復習に自動で入ります。</div>
+    <div class="mt"><button class="btn" onclick="startMock()">▶ 模試をはじめる（120分）</button></div></div>
+  ${hist.length ? `<div class="card"><h2>これまでの結果</h2>${hist.map(h => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0">
+      <span class="grow">${h.date.replace(/-/g, "/")}<span class="small">（${h.min}分）</span></span>
+      <b class="num" style="color:${h.score >= PASS_LINE ? "var(--ok)" : "var(--ng)"}">${h.score}点</b><span class="small">/${h.n}</span></div>`).join("")}
+    <div class="small">目標は${PASS_LINE}点（令和7年度の合格点）。</div></div>` : ""}`;
+}
+function MockResult(m) {
+  const pass = m.score >= PASS_LINE;
+  const by = {}; m.items.forEach((it, k) => { const b = by[it.area] || (by[it.area] = { n: 0, c: 0 }); b.n++; if (m.pick[k] === it.ans) b.c++; });
+  return `
+  <div class="card center"><div class="small">模試の結果</div>
+    <div class="hero" style="justify-content:center"><b class="num" style="color:${pass ? "var(--ok)" : "var(--ng)"}">${m.score}</b><span>/ ${m.items.length}点</span></div>
+    <div class="mt"><span class="tag ${pass ? "ok" : "ng"}">${pass ? "目標ライン到達" : `目標まであと${PASS_LINE - m.score}点`}</span></div>
+    <div class="small mt">かかった時間 ${Math.round((m.end - m.start) / 60000)}分</div></div>
+  <div class="card"><h2>分野別</h2>${Object.entries(by).map(([a, b]) => `<div class="area"><div><span class="dot" style="background:${AREAS[a].color}"></span>${AREAS[a].name}</div><div class="num small">${b.c}/${b.n}</div>
+    <div class="bar" style="grid-column:1/-1"><i style="width:${b.c / b.n * 100}%;background:${AREAS[a].color}"></i></div></div>`).join("")}</div>
+  <div class="card"><h2>1問ずつ見直す</h2><div class="small">タップすると、4つの文それぞれの○×と解説が出ます。</div>
+    ${m.items.map((it, k) => { const ok = m.pick[k] === it.ans;
+      const label = o => it.opts ? it.opts[o] : String(o + 1);
+      return `<details class="st"><summary><span class="tag ${ok ? "ok" : "ng"}">${ok ? "正解" : "×"}</span> 問${k + 1} ${STEM[it.type]}<span class="small">（あなた：${m.pick[k] === null ? "未解答" : label(m.pick[k])}／正解：${label(it.ans)}）</span></summary>
+        ${it.ids.map((id, j) => { const q = QM[id]; return `<div style="margin:8px 0 0;font-size:14px;line-height:1.7"><b>${it.opts ? KANA[j] : j + 1}</b> ${esc(q.q)}<br>
+          <span class="tag ${q.a ? "ok" : "ng"}">${q.a ? "○ 正しい" : "× 誤り"}</span> <span class="small">${esc(q.exp)}</span></div>`; }).join("")}</details>`; }).join("")}
+    <div class="btns mt"><button class="btn" onclick="S.cur=null;save();go('home')">閉じる</button></div></div>`;
+}
+
+// ---------- 記録 ----------
+function Stats() {
+  const days = []; for (let i = 13; i >= 0; i--) days.push(addDays(today(), -i));
+  const max = Math.max(10, ...days.map(d => S.log[d]?.n || 0));
+  let streak = 0; for (let d = today(); S.log[d]?.n; d = addDays(d, -1)) streak++;
+  const total = Object.values(S.log).reduce((s, l) => s + l.n, 0);
+  return `
+  <div class="card"><h2>毎日の学習量（14日）</h2>
+    <div class="row small"><span class="grow">連続 <b class="num">${streak}</b>日</span><span>累計 ${total}問</span></div>
+    <div class="days">${days.map(d => `<div style="height:${(S.log[d]?.n || 0) / max * 100}%" title="${d} ${S.log[d]?.n || 0}問"></div>`).join("")}</div>
+    <div class="dlab">${days.map(d => `<span>${+d.slice(8)}</span>`).join("")}</div></div>
+  <div class="card"><h2>分野別の正答率</h2>
+    ${Object.entries(AREAS).map(([a, A]) => { const s = areaStats(a); const pct = s.acc == null ? 0 : Math.round(s.acc * 100);
+      return `<div class="area"><div><span class="dot" style="background:${A.color}"></span>${A.name}</div><div class="num small">${s.acc == null ? "—" : pct + "%"}</div>
+      <div class="bar" style="grid-column:1/-1"><i style="width:${pct}%;background:${A.color}"></i></div></div>`; }).join("")}
+    <div class="small">本番で${PASS_LINE}点取るには、○×でどの分野も8割以上を目指しましょう。</div></div>
+  <div class="card"><h2>バックアップ</h2>
+    <div class="small">記録はこのスマホの中だけに保存されています。機種変更の前や念のため、下の「コピー」でLINEのKeepメモ等に貼っておくと、あとで「戻す」に貼れば復元できます。</div>
+    <div class="row mt" style="gap:8px"><button class="btn sec" onclick="backup()">コピー</button><button class="btn ghost" onclick="restore()">戻す</button></div>
+    <textarea id="bk" class="mt" placeholder="ここに貼り付けて「戻す」"></textarea></div>
+  <div class="ver">${APP_VERSION}・問題 ${Q.length}問</div>`;
+}
+function backup() {
+  const txt = JSON.stringify({ app: "chinkan", v: 1, at: new Date().toISOString(), data: S });
+  document.getElementById("bk").value = txt;
+  navigator.clipboard?.writeText(txt).then(() => alertBox("コピーしました。メモ等に貼って保管してください。"), () => alertBox("下の枠の文字を全部選んでコピーしてください。"));
+}
+function restore() {
+  try {
+    const o = JSON.parse(document.getElementById("bk").value);
+    if (o.app !== "chinkan" || !o.data?.cards) throw 0;
+    if (!confirm("今の記録を、貼り付けた記録で置き換えます。よろしいですか？")) return;
+    S = o.data; save(); go("home");
+  } catch (e) { alertBox("貼り付けた内容が読めませんでした。「コピー」で取った文字をそのまま貼ってください。"); }
+}
+
+// ---------- 起動 ----------
+(async () => {
+  renderTabs();
+  await loadQuestions();
+  if (S.cur && !S.cur.done) view = "mock";
+  render();
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+})();
+</script>
+</body>
+</html>
