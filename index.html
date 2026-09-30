@@ -102,7 +102,7 @@ select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-01-v1.1-book";
+const APP_VERSION = "2026-10-01-v1.2";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -132,6 +132,9 @@ function load() {
   s.plan = s.plan || null;   // 今日の新規（その日の間は固定）
   s.read = s.read || {};     // 教科書のSection → 読んだ日
   s.readPlan = s.readPlan || null; // 今日読む所（その日の間は固定）
+  s.pastCur = s.pastCur || null;   // 解いている途中の過去問（答案用紙）
+  s.pastLog = s.pastLog || [];     // 過去問の採点結果
+  s.lastBackup = s.lastBackup || null;
   s.cur = s.cur || null;     // 受験中の模試
   return s;
 }
@@ -145,11 +148,13 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000));
 
 // ---------- 問題 ----------
-let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [];
+let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [];
 const DATA_FILES = ["A", "B", "C", "D", "E", "X1", "X2", "X3", "X4"];
 async function loadQuestions() {
   const get = f => fetch(f, { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
-  const [chaps, ...parts] = await Promise.all([get("sections.json"), ...DATA_FILES.map(f => get(`data/${f}.json`))]);
+  const [chaps, past, nums, ...parts] = await Promise.all([get("sections.json"), get("data/past.json"), get("data/numbers.json"), ...DATA_FILES.map(f => get(`data/${f}.json`))]);
+  PAST = past && past.years ? past : null;
+  NUMS = Array.isArray(nums) ? nums : [];
   CHAPS = chaps;
   SECS = chaps.flatMap(c => c.secs.map(([id, title, page]) => ({ id, title, page, ch: c.ch })));
   SECS.forEach((x, i) => { x.pages = (SECS[i + 1]?.page || BOOK_END) - x.page; x.order = i; });
@@ -213,9 +218,10 @@ const TABS = [
   ["mock", "模試", '<path d="M9 4h6l1 2h3v15H5V6h3z"/><path d="M9 12l2 2 4-4"/>'],
   ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
 ];
+const PARENT = { past: "mock", numbers: "book" };
 function renderTabs() {
   document.getElementById("tabs").innerHTML = TABS.map(([k, l, d]) =>
-    `<button class="${view === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
+    `<button class="${(PARENT[view] || view) === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
   document.getElementById("hdrDays").textContent = `本番まで ${daysLeft()}日`;
 }
 function go(v) {
@@ -226,7 +232,7 @@ function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = view === "home" ? Home() : view === "book" ? Book() : view === "study" ? Study() : view === "mock" ? Mock() : Stats();
+  el.innerHTML = view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "past" ? Past() : view === "study" ? Study() : view === "mock" ? Mock() : Stats();
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -235,7 +241,10 @@ function Home() {
   const p = todayPlan(), L = S.log[today()] || { n: 0, c: 0 };
   const todo = p.due.length + p.newLeft.length;
   const seen = Object.keys(S.cards).filter(id => QM[id]).length;
-  const lastMock = S.mocks[S.mocks.length - 1];
+  const lastMock = S.mocks.filter(m => m.n >= 40).slice(-1)[0];
+  const lastPast = S.pastLog.slice(-1)[0];
+  const answered = Object.values(S.log).reduce((s, l) => s + l.n, 0);
+  const needBackup = answered >= 30 && (!S.lastBackup || addDays(S.lastBackup, 7) <= today());
   const dl = daysLeft();
   const phase = dl <= LAST_WEEK ? "仕上げ期：新しいことはしない。模試と、間違えた問題・★マークの総ざらいだけ。"
     : today() > READ_END ? `過去問期：<a href="${PAST_URL}" target="_blank" rel="noopener">公式の過去問</a>を時間を計って1年分ずつ。間違えた所は教科書に戻って読み直し。今日の分も続けます。`
@@ -246,6 +255,8 @@ function Home() {
     <div class="hero"><b class="num">${dl}</b><span>日</span></div>
     <div class="small mt">${phase}</div>
   </div>
+  ${needBackup ? `<div class="card" style="background:var(--warnbg)"><b>記録のバックアップを取りましょう</b><div class="small">${S.lastBackup ? `前回 ${S.lastBackup.slice(5).replace("-", "/")}` : "まだ一度も取っていません"}。スマホの故障や機種変更で記録が消えないように、週1回保存しておくと安心です。</div>
+    <div class="mt"><button class="btn sec" onclick="go('stats')">記録タブで保存する</button></div></div>` : ""}
   ${ReadToday()}
   <div class="card">
     <h2>今日の分（一問一答）</h2>
@@ -261,10 +272,12 @@ function Home() {
         <div class="bar" style="grid-column:1/-1"><i style="width:${pct}%;background:${A.color}"></i></div></div>`; }).join("")}
   </div>
   <div class="card">
-    <h2>模試</h2>
-    ${lastMock ? `<div class="row"><span class="grow">前回 ${lastMock.date.slice(5).replace("-", "/")}</span><b class="num" style="font-size:22px;color:${lastMock.score >= PASS_LINE ? "var(--ok)" : "var(--ng)"}">${lastMock.score}点</b><span class="small">/50（目標${PASS_LINE}点）</span></div>`
+    <h2>模試・過去問</h2>
+    ${lastPast ? `<div class="row"><span class="grow">過去問 ${esc(pastYear(lastPast.year)?.label || lastPast.year)}（${lastPast.date.slice(5).replace("-", "/")}）</span><b class="num" style="font-size:22px;color:${lastPast.score >= lastPast.pass ? "var(--ok)" : "var(--ng)"}">${lastPast.score}点</b><span class="small">/50（合格点${lastPast.pass}）</span></div>` : ""}
+    ${lastMock ? `<div class="row"><span class="grow">模試 ${lastMock.date.slice(5).replace("-", "/")}</span><b class="num" style="font-size:22px;color:${lastMock.score >= PASS_LINE ? "var(--ok)" : "var(--ng)"}">${lastMock.score}点</b><span class="small">/50（目標${PASS_LINE}点）</span></div>`
+      : lastPast ? ""
       : `<div class="small">本番と同じ4択50問・120分。まだ受けていません。一周の半分くらいまで進んだら一度受けてみましょう。</div>`}
-    <div class="mt"><button class="btn sec" onclick="go('mock')">模試へ</button></div>
+    <div class="mt"><button class="btn sec" onclick="go('mock')">模試・過去問へ</button></div>
   </div>`;
 }
 
@@ -325,7 +338,8 @@ function Book() {
   <div class="card"><h2>${esc(BOOK)}</h2>
     <div class="row small"><span class="grow">読んだ Section ${readN}/${SECS.length}</span><span class="num">${readPg}/${allPg}ページ</span></div>
     <div class="bar mt"><i style="width:${allPg ? readPg / allPg * 100 : 0}%;background:var(--brand)"></i></div>
-    <div class="small mt">読み終えたら□にチェック。「解く」でそのSectionの問題だけを出します。チェックしたSectionの問題は、翌日からの「今日の分」にも優先して入ります。</div></div>
+    <div class="small mt">読み終えたら□にチェック。「解く」でそのSectionの問題だけを出します。チェックしたSectionの問題は、翌日からの「今日の分」にも優先して入ります。</div>
+    ${NUMS.length ? `<div class="mt"><button class="btn sec" onclick="go('numbers')">🔢 数字まとめ（${NUMS.length}項目）</button></div>` : ""}</div>
   ${CHAPS.map(c => { const secs = SECS.filter(x => x.ch === c.ch), r = secs.filter(x => S.read[x.id]).length, open = cur === c.ch;
     return `<div class="card"><button onclick="openCh=${open ? -1 : c.ch};render()" style="border:0;background:none;padding:0;width:100%;text-align:left">
       <div class="row"><span class="chip">CHAPTER ${c.ch}</span><span class="grow"></span><span class="small num">${r}/${secs.length} ${open ? "▲" : "▼"}</span></div>
@@ -405,6 +419,7 @@ function StudyMenu() {
   const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
   const star = Q.filter(q => card(q.id)?.star).length;
   return `
+  ${WeakCard(3)}
   <div class="card"><h2>今日の分</h2><div class="small">復習${p.due.length}問＋新しい問題${p.newLeft.length}問</div>
     <div class="mt"><button class="btn" onclick="startToday()" ${p.due.length + p.newLeft.length ? "" : "disabled"}>▶ はじめる</button></div></div>
   <div class="card"><h2>分野を選んで解く（30問ずつ）</h2>
@@ -458,36 +473,38 @@ const STEM = {
   count: "次の記述ア〜エのうち、正しいものはいくつあるか。",
   combo: "次の記述ア〜エのうち、正しいものの組合せはどれか。",
 };
-function buildMock() {
+const MINI = { A: 3, B: 1, C: 2, D: 2, E: 2 }; // ミニ模試10問の分野配分（本番の比率を縮めたもの）
+function buildMock(size = 50) {
   const used = new Set(), items = [];
   for (const [a, A] of Object.entries(AREAS)) {
-    const n = A.mock;
+    const n = size >= 50 ? A.mock : MINI[a];
     // 本番の比率に近づける：個数・組合せを各分野に少し混ぜる
     const types = [];
     for (let i = 0; i < n; i++) types.push(i % 6 === 2 ? "count" : i % 9 === 5 ? "combo" : i % 2 ? "wrong" : "right");
     for (const t of shuffle(types)) { const it = makeItem(a, t, used) || makeItem(a, "right", used) || makeItem(a, "wrong", used); if (it) items.push(it); }
   }
-  return items;
+  return size >= 50 ? items : shuffle(items);
 }
-function startMock() {
-  const items = buildMock();
-  if (items.length < 20) { alertBox("問題がまだ少ないため模試を作れません。"); return; }
-  S.cur = { items, pick: items.map(() => null), flag: items.map(() => false), i: 0, start: Date.now(), done: false };
+function startMock(size = 50) {
+  const items = buildMock(size);
+  if (items.length < Math.min(size, 10)) { alertBox("問題がまだ少ないため模試を作れません。"); return; }
+  S.cur = { items, pick: items.map(() => null), flag: items.map(() => false), i: 0, start: Date.now(), done: false, limit: size >= 50 ? 7200 : 1200 };
   save(); render(); window.scrollTo(0, 0);
 }
 let timerId = null;
+// タイマーは画面の #timer（data-start / data-limit / data-kind）を見て動く
 function tick() {
-  const el = document.getElementById("timer"); if (!el || !S.cur || S.cur.done) { clearInterval(timerId); timerId = null; return; }
-  const left = Math.max(0, 120 * 60 - Math.floor((Date.now() - S.cur.start) / 1000));
-  el.textContent = `残り ${Math.floor(left / 60)}:${pad(left % 60)}`;
-  if (left === 0) finishMock(true);
+  const el = document.getElementById("timer"); if (!el) { clearInterval(timerId); timerId = null; return; }
+  const left = Math.max(0, +el.dataset.limit - Math.floor((Date.now() - +el.dataset.start) / 1000));
+  el.textContent = left ? `残り ${Math.floor(left / 60)}:${pad(left % 60)}` : "時間終了";
+  if (left === 0 && el.dataset.kind === "mock" && S.cur && !S.cur.done) finishMock(true);
 }
+function startTimer() { if (!timerId) timerId = setInterval(tick, 1000); setTimeout(tick, 0); }
 function Mock() {
   const m = S.cur;
   if (!m) return MockMenu();
   if (m.done) return MockResult(m);
-  if (!timerId) timerId = setInterval(tick, 1000);
-  setTimeout(tick, 0);
+  startTimer();
   const it = m.items[m.i], stmts = it.ids.map(id => QM[id]);
   const answeredN = m.pick.filter(x => x !== null).length;
   const body = it.opts
@@ -495,7 +512,7 @@ function Mock() {
        <div class="opts">${it.opts.map((o, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${o}</span></button>`).join("")}</div>`
     : `<div class="opts">${stmts.map((q, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${esc(q.q)}</span></button>`).join("")}</div>`;
   return `
-  <div class="qhead"><span>問${m.i + 1} / ${m.items.length}　<span class="chip" style="color:${AREAS[it.area].color}">${AREAS[it.area].short}</span></span><span class="timer num" id="timer"></span></div>
+  <div class="qhead"><span>問${m.i + 1} / ${m.items.length}　<span class="chip" style="color:${AREAS[it.area].color}">${AREAS[it.area].short}</span></span><span class="timer num" id="timer" data-start="${m.start}" data-limit="${m.limit || 7200}" data-kind="mock"></span></div>
   <div class="card">
     <div class="qtext" style="font-weight:700">【問${m.i + 1}】${STEM[it.type]}</div>
     ${body}
@@ -529,23 +546,26 @@ function finishMock(timeUp) {
   save(); render(); window.scrollTo(0, 0);
 }
 function MockMenu() {
-  const hist = S.mocks.slice(-8);
+  const hist = S.mocks.slice(-8).reverse();
   return `
-  <div class="card"><h2>本番形式の模試</h2>
+  ${PastMenu()}
+  <div class="card"><h2>本番形式の模試（アプリのオリジナル）</h2>
     <div class="small">4択50問・120分。本番の分野の比率に合わせて、毎回ちがう組み合わせで出題します。「正しいものはいくつあるか」の個数問題、組合せ問題も入ります。<br>間違えた問題の4つの文は、翌日の一問一答の復習に自動で入ります。</div>
-    <div class="mt"><button class="btn" onclick="startMock()">▶ 模試をはじめる（120分）</button></div></div>
-  ${hist.length ? `<div class="card"><h2>これまでの結果</h2>${hist.map(h => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0">
-      <span class="grow">${h.date.replace(/-/g, "/")}<span class="small">（${h.min}分）</span></span>
-      <b class="num" style="color:${h.score >= PASS_LINE ? "var(--ok)" : "var(--ng)"}">${h.score}点</b><span class="small">/${h.n}</span></div>`).join("")}
-    <div class="small">目標は${PASS_LINE}点（令和7年度の合格点）。</div></div>` : ""}`;
+    <div class="btns mt"><button class="btn" onclick="startMock(50)">▶ 模試（50問・120分）</button>
+    <button class="btn sec" onclick="startMock(10)">⚡ ミニ模試（10問・20分）スキマ時間に</button></div></div>
+  ${hist.length ? `<div class="card"><h2>模試の結果</h2>${hist.map(h => { const full = h.n >= 40, ok = full ? h.score >= PASS_LINE : h.score / h.n >= PASS_LINE / 50;
+      return `<div class="row" style="border-top:1px solid var(--line);padding:8px 0">
+      <span class="grow">${h.date.replace(/-/g, "/")}<span class="small">（${full ? "模試" : "ミニ"}・${h.min}分）</span></span>
+      <b class="num" style="color:${ok ? "var(--ok)" : "var(--ng)"}">${h.score}点</b><span class="small">/${h.n}</span></div>`; }).join("")}
+    <div class="small">目標は50問中${PASS_LINE}点（令和7年度の合格点）。ミニ模試は10問中8問が目安。</div></div>` : ""}`;
 }
 function MockResult(m) {
-  const pass = m.score >= PASS_LINE;
+  const full = m.items.length >= 40, pass = full ? m.score >= PASS_LINE : m.score / m.items.length >= PASS_LINE / 50;
   const by = {}; m.items.forEach((it, k) => { const b = by[it.area] || (by[it.area] = { n: 0, c: 0 }); b.n++; if (m.pick[k] === it.ans) b.c++; });
   return `
   <div class="card center"><div class="small">模試の結果</div>
     <div class="hero" style="justify-content:center"><b class="num" style="color:${pass ? "var(--ok)" : "var(--ng)"}">${m.score}</b><span>/ ${m.items.length}点</span></div>
-    <div class="mt"><span class="tag ${pass ? "ok" : "ng"}">${pass ? "目標ライン到達" : `目標まであと${PASS_LINE - m.score}点`}</span></div>
+    <div class="mt"><span class="tag ${pass ? "ok" : "ng"}">${full ? (pass ? "目標ライン到達" : `目標まであと${PASS_LINE - m.score}点`) : `正答率 ${Math.round(m.score / m.items.length * 100)}%（目標76%）`}</span></div>
     <div class="small mt">かかった時間 ${Math.round((m.end - m.start) / 60000)}分</div></div>
   <div class="card"><h2>分野別</h2>${Object.entries(by).map(([a, b]) => `<div class="area"><div><span class="dot" style="background:${AREAS[a].color}"></span>${AREAS[a].name}</div><div class="num small">${b.c}/${b.n}</div>
     <div class="bar" style="grid-column:1/-1"><i style="width:${b.c / b.n * 100}%;background:${AREAS[a].color}"></i></div></div>`).join("")}</div>
@@ -574,24 +594,149 @@ function Stats() {
       return `<div class="area"><div><span class="dot" style="background:${A.color}"></span>${A.name}</div><div class="num small">${s.acc == null ? "—" : pct + "%"}</div>
       <div class="bar" style="grid-column:1/-1"><i style="width:${pct}%;background:${A.color}"></i></div></div>`; }).join("")}
     <div class="small">本番で${PASS_LINE}点取るには、○×でどの分野も8割以上を目指しましょう。</div></div>
+  ${WeakCard(8)}
   <div class="card"><h2>バックアップ</h2>
-    <div class="small">記録はこのスマホの中だけに保存されています。機種変更の前や念のため、下の「コピー」でLINEのKeepメモ等に貼っておくと、あとで「戻す」に貼れば復元できます。</div>
-    <div class="row mt" style="gap:8px"><button class="btn sec" onclick="backup()">コピー</button><button class="btn ghost" onclick="restore()">戻す</button></div>
-    <textarea id="bk" class="mt" placeholder="ここに貼り付けて「戻す」"></textarea></div>
+    <div class="small">記録はこのスマホの中だけに保存されています。<b>週1回</b>保存しておくと、故障や機種変更でも元に戻せます。${S.lastBackup ? `前回 ${S.lastBackup.replace(/-/g, "/")}` : "まだ一度も保存していません。"}</div>
+    <div class="btns mt"><button class="btn sec" onclick="backupFile()">📥 ファイルに保存（おすすめ）</button>
+      <label class="btn ghost" style="cursor:pointer">📤 ファイルから戻す<input type="file" accept="application/json,.json" style="display:none" onchange="restoreFile(event)"></label></div>
+    <details class="st mt"><summary class="small">ファイルが使えない時：文字でコピー／貼り付け</summary>
+      <div class="row mt" style="gap:8px"><button class="btn sec" onclick="backup()">コピー</button><button class="btn ghost" onclick="restore()">戻す</button></div>
+      <textarea id="bk" class="mt" placeholder="ここに貼り付けて「戻す」"></textarea></details></div>
   <div class="ver">${APP_VERSION}・問題 ${Q.length}問</div>`;
 }
+const backupText = () => JSON.stringify({ app: "chinkan", v: 1, at: new Date().toISOString(), data: S });
+function markBackup() { S.lastBackup = today(); save(); }
 function backup() {
-  const txt = JSON.stringify({ app: "chinkan", v: 1, at: new Date().toISOString(), data: S });
+  const txt = backupText();
   document.getElementById("bk").value = txt;
-  navigator.clipboard?.writeText(txt).then(() => alertBox("コピーしました。メモ等に貼って保管してください。"), () => alertBox("下の枠の文字を全部選んでコピーしてください。"));
+  navigator.clipboard?.writeText(txt).then(() => { markBackup(); alertBox("コピーしました。メモ等に貼って保管してください。"); }, () => alertBox("下の枠の文字を全部選んでコピーしてください。"));
+}
+function backupFile() {
+  const url = URL.createObjectURL(new Blob([backupText()], { type: "application/json" }));
+  const a = document.createElement("a"); a.href = url; a.download = `賃管特訓_記録_${today()}.json`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  markBackup(); render(); alertBox("保存しました（ファイルアプリの「ダウンロード」に入ります）。");
+}
+function applyRestore(txt) {
+  const o = JSON.parse(txt);
+  if (o.app !== "chinkan" || !o.data?.cards) throw 0;
+  if (!confirm("今の記録を、この記録で置き換えます。よろしいですか？")) return;
+  localStorage.setItem(KEY, JSON.stringify(o.data)); S = load(); go("home");
+  alertBox("記録を戻しました。");
 }
 function restore() {
-  try {
-    const o = JSON.parse(document.getElementById("bk").value);
-    if (o.app !== "chinkan" || !o.data?.cards) throw 0;
-    if (!confirm("今の記録を、貼り付けた記録で置き換えます。よろしいですか？")) return;
-    S = o.data; save(); go("home");
-  } catch (e) { alertBox("貼り付けた内容が読めませんでした。「コピー」で取った文字をそのまま貼ってください。"); }
+  try { applyRestore(document.getElementById("bk").value); }
+  catch (e) { alertBox("貼り付けた内容が読めませんでした。「コピー」で取った文字をそのまま貼ってください。"); }
+}
+function restoreFile(e) {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  f.text().then(t => { try { applyRestore(t); } catch (x) { alertBox("このファイルは読めませんでした。「ファイルに保存」で作ったファイルを選んでください。"); } });
+}
+
+// ---------- 苦手Section ----------
+function secStats() {
+  return SECS.map(x => { let c = 0, w = 0, seen = 0; for (const q of secQs(x.id)) { const k = card(q.id); if (!k) continue; seen++; c += k.c; w += k.w; }
+    return { ...x, c, w, seen, acc: c + w ? c / (c + w) : null }; });
+}
+function WeakCard(n) {
+  const weak = secStats().filter(x => x.c + x.w >= 4 && x.acc < 0.8).sort((a, b) => a.acc - b.acc).slice(0, n);
+  if (!weak.length) return "";
+  return `<div class="card"><h2>苦手なSection</h2><div class="small">正答率の低い順（4回以上解いたSectionのみ）。教科書のページを読み直してから解き直すのが一番効きます。</div>
+    ${weak.map(x => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:8px">
+      <div class="grow"><div style="font-size:14px"><b class="num">${x.id}</b> ${esc(x.title)}</div><div class="small">教科書 p.${x.page}〜・正答率 <b style="color:var(--ng)">${Math.round(x.acc * 100)}%</b></div></div>
+      <button class="btn sec" style="width:auto;padding:7px 12px;font-size:13px" onclick="startSec('${x.id}')">解き直す</button></div>`).join("")}</div>`;
+}
+
+// ---------- 過去問（公式の本試験を紙で解いて、答えの番号だけ入れる） ----------
+const pastYear = y => PAST?.years.find(x => x.year === y);
+const pastOk = (q, pick) => pick != null && (q.ans === "all" || (Array.isArray(q.ans) ? q.ans.includes(pick) : q.ans === pick));
+function PastMenu() {
+  if (!PAST) return `<div class="card"><h2>過去問（公式の本試験）</h2><div class="small">準備中です。</div></div>`;
+  const cur = S.pastCur;
+  return `<div class="card"><h2>過去問（公式の本試験）</h2>
+    <div class="small">公式サイトの問題PDFを紙に印刷（または別の画面で表示）して解き、ここでは<b>選んだ番号だけ</b>を入れます。採点すると、間違えた問題が教科書のどのSectionかが分かります。<b>10/26〜が過去問期</b>です。</div>
+    ${cur && !cur.done ? `<div class="res" style="background:var(--warnbg)">${esc(pastYear(cur.year)?.label || "")}を解いている途中です。<button class="btn mt" onclick="go('past')">▶ 続きを入力する</button></div>` : ""}
+    ${PAST.years.map(y => { const log = S.pastLog.filter(l => l.year === y.year), best = log.length ? Math.max(...log.map(l => l.score)) : null;
+      return `<div class="row" style="border-top:1px solid var(--line);padding:9px 0;gap:8px">
+        <div class="grow"><div style="font-weight:700">${esc(y.label)}</div><div class="small">合格点 ${y.pass}点${best != null ? `・最高 <b style="color:${best >= y.pass ? "var(--ok)" : "var(--ng)"}">${best}点</b>（${log.length}回）` : "・未挑戦"}</div></div>
+        <button class="btn ${best == null ? "" : "sec"}" style="width:auto;padding:8px 14px;font-size:14px" onclick="startPast('${y.year}')">${best == null ? "解く" : "もう一度"}</button></div>`; }).join("")}
+    <div class="small mt">問題PDFは <a href="${esc(PAST.source)}" target="_blank" rel="noopener">公式の過去問ページ</a> にあります。</div></div>`;
+}
+function startPast(year) {
+  if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null) && !confirm("途中の過去問の入力を捨てて、新しく始めますか？")) { go("past"); return; }
+  const y = pastYear(year);
+  S.pastCur = { year, pick: y.qs.map(() => null), start: Date.now(), done: false };
+  save(); go("past");
+}
+function pickPast(i, k) { const p = S.pastCur.pick; p[i] = p[i] === k ? null : k; save(); render(); }
+function Past() {
+  const cur = S.pastCur, y = cur && pastYear(cur.year);
+  if (!y) { view = "mock"; return Mock(); }
+  if (cur.done) return PastResult(cur, y);
+  startTimer();
+  const n = cur.pick.filter(x => x != null).length;
+  return `<div class="qhead"><span>${esc(y.label)}　入力 ${n}/${y.qs.length}</span><span class="timer num" id="timer" data-start="${cur.start}" data-limit="7200" data-kind="past"></span></div>
+  <div class="card"><div class="small">${y.pdf ? `<a href="${esc(y.pdf)}" target="_blank" rel="noopener">📄 問題PDFを開く</a>　` : ""}紙で解いて、選んだ番号をタップ（もう一度押すと取り消し）。時間は本番と同じ120分が目安です。</div></div>
+  ${[0, 10, 20, 30, 40].map(s0 => `<div class="card" style="padding:8px 12px">${y.qs.slice(s0, s0 + 10).map((q, j) => { const i = s0 + j;
+    return `<div class="row" style="padding:5px 0;gap:6px"><b class="num" style="width:44px">問${q.no}</b>
+      ${[1, 2, 3, 4].map(k => `<button onclick="pickPast(${i},${k})" style="flex:1;border:1.5px solid ${cur.pick[i] === k ? "var(--brand)" : "var(--line)"};background:${cur.pick[i] === k ? "var(--brand)" : "var(--card)"};color:${cur.pick[i] === k ? "#fff" : "var(--ink)"};border-radius:9px;padding:8px 0;font-weight:700">${k}</button>`).join("")}</div>`; }).join("")}</div>`).join("")}
+  <div class="btns"><button class="btn" onclick="finishPast()">採点する</button>
+    <button class="linkbtn" onclick="go('mock')">あとで続ける（入力は保存されています）</button></div>`;
+}
+function finishPast() {
+  const cur = S.pastCur, y = pastYear(cur.year);
+  const blank = cur.pick.filter(x => x == null).length;
+  if (blank && !confirm(`まだ${blank}問が未入力です。採点しますか？（未入力は不正解）`)) return;
+  cur.done = true; cur.end = Date.now();
+  const wrong = y.qs.filter((q, i) => !pastOk(q, cur.pick[i])).map(q => q.no);
+  cur.score = y.qs.length - wrong.length;
+  S.pastLog.push({ year: y.year, date: today(), score: cur.score, pass: y.pass, n: y.qs.length, min: Math.round((cur.end - cur.start) / 60000), wrong });
+  save(); render(); window.scrollTo(0, 0);
+}
+function studyWrongSecs(year) {
+  const log = S.pastLog.filter(l => l.year === year).slice(-1)[0], y = pastYear(year); if (!log) return;
+  const secs = new Set(y.qs.filter(q => log.wrong.includes(q.no)).map(q => q.sec));
+  const ids = shuffle(Q.filter(q => secs.has(q.sec))).slice(0, 40).map(q => q.id);
+  startSession(ids, "過去問の復習");
+}
+function PastResult(cur, y) {
+  const pass = cur.score >= y.pass;
+  const byCh = {}; y.qs.forEach((q, i) => { const ch = SECM[q.sec]?.ch || 0; const b = byCh[ch] || (byCh[ch] = { n: 0, c: 0 }); b.n++; if (pastOk(q, cur.pick[i])) b.c++; });
+  const wrongs = y.qs.map((q, i) => ({ q, i })).filter(({ q, i }) => !pastOk(q, cur.pick[i]));
+  const ansTxt = a => a === "all" ? "全員正解" : Array.isArray(a) ? a.join("・") : a;
+  return `
+  <div class="card center"><div class="small">${esc(y.label)} 本試験</div>
+    <div class="hero" style="justify-content:center"><b class="num" style="color:${pass ? "var(--ok)" : "var(--ng)"}">${cur.score}</b><span>/ ${y.qs.length}点</span></div>
+    <div class="mt"><span class="tag ${pass ? "ok" : "ng"}">${pass ? `合格点（${y.pass}点）クリア` : `合格点（${y.pass}点）まであと${y.pass - cur.score}点`}</span></div>
+    <div class="small mt">かかった時間 ${Math.round((cur.end - cur.start) / 60000)}分</div></div>
+  <div class="card"><h2>教科書のCHAPTER別</h2>${CHAPS.map(c => { const b = byCh[c.ch]; if (!b) return "";
+    return `<div class="area"><div><span class="chip">CH${c.ch}</span> ${esc(c.title)}</div><div class="num small">${b.c}/${b.n}</div>
+      <div class="bar" style="grid-column:1/-1"><i style="width:${b.c / b.n * 100}%;background:var(--brand)"></i></div></div>`; }).join("")}</div>
+  <div class="card"><h2>間違えた問題（${wrongs.length}問）</h2>
+    <div class="small">問題PDFで解説を確認したら、教科書の該当ページを読み直しましょう。</div>
+    ${wrongs.map(({ q, i }) => { const x = SECM[q.sec];
+      return `<div style="border-top:1px solid var(--line);padding:8px 0"><div class="row"><b class="num" style="width:44px">問${q.no}</b><span class="grow" style="font-size:14px">${esc(q.topic)}</span>
+        <span class="small">あなた ${cur.pick[i] ?? "—"}／正解 <b>${ansTxt(q.ans)}</b></span></div>
+        <div class="small" style="margin-left:44px">${x ? `教科書 ${x.id} ${esc(x.title)}（p.${x.page}〜）` : ""}${q.note ? `<br>⚠ ${esc(q.note)}` : ""}</div></div>`; }).join("")}
+    <div class="btns mt">${wrongs.length ? `<button class="btn" onclick="studyWrongSecs('${y.year}')">間違えたSectionの一問一答を解く</button>` : ""}
+    <button class="btn ghost" onclick="S.pastCur=null;save();go('mock')">閉じる</button></div></div>`;
+}
+
+// ---------- 数字まとめ ----------
+let numCh = 1, numHide = false, numOpen = {};
+function Numbers() {
+  if (!NUMS.length) return `<div class="card">数字まとめは準備中です。</div>`;
+  const list = NUMS.filter(x => SECM[x.sec]?.ch === numCh);
+  return `<div class="card"><h2>🔢 数字まとめ</h2><div class="small">本番は数字のひっかけが多い試験です。「答えを隠す」にすると、タップするまで数字が見えないので暗記テストになります。</div>
+    <div class="row mt" style="gap:6px;flex-wrap:wrap">${CHAPS.map(c => `<button class="chip" style="border:0;padding:6px 12px;font-size:13px;${numCh === c.ch ? "background:var(--brand);color:#fff" : ""}" onclick="numCh=${c.ch};numOpen={};render()">CH${c.ch}</button>`).join("")}
+      <span class="grow"></span><button class="linkbtn" onclick="numHide=!numHide;numOpen={};render()">${numHide ? "答えを表示" : "答えを隠す"}</button></div></div>
+  <div class="card">${list.map((x, i) => { const shown = !numHide || numOpen[i];
+    return `<div style="border-top:${i ? "1px solid var(--line)" : "0"};padding:9px 0" ${numHide ? `onclick="numOpen[${i}]=!numOpen[${i}];render()"` : ""}>
+      <div class="small"><b class="num">${esc(x.sec)}</b> ${esc(SECM[x.sec]?.title || "")}</div>
+      <div style="font-weight:700;font-size:14.5px;margin-top:2px">${esc(x.item)}</div>
+      <div style="font-size:15px;margin-top:2px;color:${shown ? "var(--brand)" : "var(--sub)"}">${shown ? esc(x.num) : "（タップで表示）"}</div>
+      ${shown && x.tip ? `<div class="small">💡 ${esc(x.tip)}</div>` : ""}</div>`; }).join("") || `<div class="small">この章の数字はまだありません。</div>`}</div>
+  <div class="center"><button class="linkbtn" onclick="go('book')">◀ 教科書に戻る</button></div>`;
 }
 
 // ---------- 起動 ----------
@@ -599,6 +744,7 @@ function restore() {
   renderTabs();
   await loadQuestions();
   if (S.cur && !S.cur.done) view = "mock";
+  else if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null)) view = "past";
   render();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

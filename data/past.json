@@ -1,0 +1,2055 @@
+{
+ "source": "https://www.chintaikanrishi.jp/exam/past",
+ "years": [
+  {
+   "year": "R7",
+   "label": "令和7年度",
+   "date": "2025-11-16",
+   "pass": 38,
+   "pdf": "https://www.chintaikanrishi.jp/assets/common/else/past_question_2025.pdf",
+   "answer_pdf": "https://www.chintaikanrishi.jp/assets/common/else/past_answer_2025.pdf",
+   "qs": [
+    {
+     "no": 1,
+     "ans": 1,
+     "topic": "成年後見",
+     "sec": "3-7",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 2,
+     "ans": 1,
+     "topic": "サブリースと転貸借",
+     "sec": "3-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 3,
+     "ans": 2,
+     "topic": "賃貸人の修繕義務",
+     "sec": "3-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 4,
+     "ans": 3,
+     "topic": "定期建物賃貸借",
+     "sec": "3-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 5,
+     "ans": 1,
+     "topic": "更新拒絶と正当事由",
+     "sec": "3-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 6,
+     "ans": 1,
+     "topic": "賃料不払による解除",
+     "sec": "3-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 7,
+     "ans": 2,
+     "topic": "当事者の死亡と相続",
+     "sec": "3-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 8,
+     "ans": 2,
+     "topic": "管理業法の登録",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 9,
+     "ans": "all",
+     "topic": "管理業法の登録（標識等）",
+     "sec": "1-3",
+     "exempt": false,
+     "note": "公式：エの表現が不明瞭なため全ての解答を正解"
+    },
+    {
+     "no": 10,
+     "ans": 3,
+     "topic": "業務管理者",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 11,
+     "ans": 3,
+     "topic": "管理業者の義務と監督",
+     "sec": "1-7",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 12,
+     "ans": 2,
+     "topic": "委任契約",
+     "sec": "3-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 13,
+     "ans": 4,
+     "topic": "管理受託重説の説明事項",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 14,
+     "ans": 2,
+     "topic": "管理受託重説（従業者証明書等）",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 15,
+     "ans": 4,
+     "topic": "管理受託重説のIT活用",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 16,
+     "ans": 3,
+     "topic": "標準管理受託契約書",
+     "sec": "1-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 17,
+     "ans": 1,
+     "topic": "特定賃貸借重説書の記載事項",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 18,
+     "ans": 2,
+     "topic": "特定賃貸借重説（ガイドライン）",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 19,
+     "ans": 4,
+     "topic": "勧誘者",
+     "sec": "1-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 20,
+     "ans": 1,
+     "topic": "誇大広告等の禁止",
+     "sec": "1-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 21,
+     "ans": 2,
+     "topic": "特定転貸事業者への監督処分",
+     "sec": "1-12",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 22,
+     "ans": 3,
+     "topic": "障害者差別解消法",
+     "sec": "3-13",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 23,
+     "ans": 3,
+     "topic": "住宅セーフティネット法",
+     "sec": "3-13",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 24,
+     "ans": 3,
+     "topic": "個人情報保護法",
+     "sec": "3-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 25,
+     "ans": 3,
+     "topic": "委託者への定期報告",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 26,
+     "ans": 1,
+     "topic": "設備の法定点検",
+     "sec": "4-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 27,
+     "ans": 1,
+     "topic": "相隣関係",
+     "sec": "3-13",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 28,
+     "ans": 2,
+     "topic": "賃料滞納時の対応",
+     "sec": "2-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 29,
+     "ans": 1,
+     "topic": "賃料増減請求",
+     "sec": "3-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 30,
+     "ans": 2,
+     "topic": "連帯保証（法人保証）",
+     "sec": "3-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 31,
+     "ans": 3,
+     "topic": "会計の基礎",
+     "sec": "5-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 32,
+     "ans": 3,
+     "topic": "原状回復ガイドライン",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 33,
+     "ans": 4,
+     "topic": "原状回復",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 34,
+     "ans": 3,
+     "topic": "工作物責任等の損害賠償",
+     "sec": "3-12",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 35,
+     "ans": 1,
+     "topic": "建物の構造",
+     "sec": "4-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 36,
+     "ans": 3,
+     "topic": "耐震診断",
+     "sec": "4-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 37,
+     "ans": 4,
+     "topic": "室内漏水の原因と調査",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 38,
+     "ans": 2,
+     "topic": "共同住宅の防火管理",
+     "sec": "4-7",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 39,
+     "ans": 2,
+     "topic": "給水設備",
+     "sec": "4-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 40,
+     "ans": 2,
+     "topic": "賃貸住宅の登記",
+     "sec": "3-13",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 41,
+     "ans": 4,
+     "topic": "土地の価格（公示価格等）",
+     "sec": "5-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 42,
+     "ans": 2,
+     "topic": "不動産の税金",
+     "sec": "5-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 43,
+     "ans": 4,
+     "topic": "火災保険",
+     "sec": "5-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 44,
+     "ans": 3,
+     "topic": "空家対策法",
+     "sec": "2-11",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 45,
+     "ans": 1,
+     "topic": "新たな政策課題と管理士",
+     "sec": "1-14",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 46,
+     "ans": 3,
+     "topic": "募集広告と媒介報酬",
+     "sec": "2-1",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 47,
+     "ans": 2,
+     "topic": "建築基準法の用語",
+     "sec": "4-4",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 48,
+     "ans": 4,
+     "topic": "機械式駐車場・エレベーター",
+     "sec": "4-9",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 49,
+     "ans": 4,
+     "topic": "給湯設備",
+     "sec": "4-9",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 50,
+     "ans": 4,
+     "topic": "賃貸住宅の社会的情勢",
+     "sec": "2-11",
+     "exempt": true,
+     "note": ""
+    }
+   ]
+  },
+  {
+   "year": "R6",
+   "label": "令和6年度",
+   "date": "2024-11-17",
+   "pass": 35,
+   "pdf": "https://www.chintaikanrishi.jp/assets/common/else/past_question_2024.pdf",
+   "answer_pdf": "https://www.chintaikanrishi.jp/assets/common/else/past_answer_2024.pdf",
+   "qs": [
+    {
+     "no": 1,
+     "ans": 1,
+     "topic": "管理受託重説",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 2,
+     "ans": 1,
+     "topic": "管理受託重説書の記載",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 3,
+     "ans": 3,
+     "topic": "管理受託契約の変更",
+     "sec": "1-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 4,
+     "ans": 3,
+     "topic": "賃貸借特約の有効性",
+     "sec": "3-7",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 5,
+     "ans": 2,
+     "topic": "委任契約の成立と終了",
+     "sec": "3-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 6,
+     "ans": 4,
+     "topic": "防犯設計指針",
+     "sec": "2-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 7,
+     "ans": 4,
+     "topic": "賃貸住宅の維持保全",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 8,
+     "ans": 3,
+     "topic": "委託者への定期報告",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 9,
+     "ans": 1,
+     "topic": "原状回復ガイドライン",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 10,
+     "ans": 2,
+     "topic": "原状回復ガイドライン",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 11,
+     "ans": 1,
+     "topic": "原状回復の少額訴訟",
+     "sec": "2-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 12,
+     "ans": 3,
+     "topic": "災害時の建物調査",
+     "sec": "4-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 13,
+     "ans": 2,
+     "topic": "採光規定",
+     "sec": "4-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 14,
+     "ans": 4,
+     "topic": "外壁の定期調査",
+     "sec": "4-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 15,
+     "ans": 3,
+     "topic": "結露",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 16,
+     "ans": 4,
+     "topic": "自動火災報知設備",
+     "sec": "4-7",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 17,
+     "ans": 1,
+     "topic": "賃料減額請求",
+     "sec": "3-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 18,
+     "ans": 2,
+     "topic": "滞納賃料の法的回収",
+     "sec": "2-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 19,
+     "ans": 2,
+     "topic": "金銭の分別管理",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 20,
+     "ans": 1,
+     "topic": "サブリースと転貸借",
+     "sec": "3-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 21,
+     "ans": 4,
+     "topic": "契約期間と更新",
+     "sec": "3-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 22,
+     "ans": 3,
+     "topic": "定期建物賃貸借",
+     "sec": "3-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 23,
+     "ans": 1,
+     "topic": "賃借人の破産",
+     "sec": "3-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 24,
+     "ans": 4,
+     "topic": "連帯保証",
+     "sec": "3-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 25,
+     "ans": 4,
+     "topic": "賃借権の譲渡・転貸",
+     "sec": "3-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 26,
+     "ans": 2,
+     "topic": "管理業法の登録",
+     "sec": "1-3",
+     "exempt": false,
+     "note": "刑法改正（R7.6施行）で禁錮刑→拘禁刑（用語のみ・正解は不変）"
+    },
+    {
+     "no": 27,
+     "ans": 1,
+     "topic": "従業者証明書",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 28,
+     "ans": 2,
+     "topic": "帳簿の備付け",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 29,
+     "ans": 4,
+     "topic": "標識の掲示",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 30,
+     "ans": 3,
+     "topic": "賃貸住宅管理業の定義",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 31,
+     "ans": 3,
+     "topic": "業務管理者",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 32,
+     "ans": 4,
+     "topic": "不当な勧誘等の禁止",
+     "sec": "1-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 33,
+     "ans": 3,
+     "topic": "特定転貸事業者等の監督",
+     "sec": "1-12",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 34,
+     "ans": 4,
+     "topic": "特定賃貸借標準契約書",
+     "sec": "1-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 35,
+     "ans": 3,
+     "topic": "特定賃貸借重説",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 36,
+     "ans": 4,
+     "topic": "特定賃貸借重説書",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 37,
+     "ans": 4,
+     "topic": "特定賃貸借重説の方法",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 38,
+     "ans": 2,
+     "topic": "特定賃貸借締結時書面",
+     "sec": "1-11",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 39,
+     "ans": 1,
+     "topic": "消費者契約法",
+     "sec": "3-13",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 40,
+     "ans": 3,
+     "topic": "家電リサイクル法",
+     "sec": "3-13",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 41,
+     "ans": 4,
+     "topic": "賃貸住宅管理の動向",
+     "sec": "2-11",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 42,
+     "ans": 2,
+     "topic": "賃貸不動産経営管理士",
+     "sec": "1-14",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 43,
+     "ans": 2,
+     "topic": "媒介業務と報酬",
+     "sec": "2-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 44,
+     "ans": 1,
+     "topic": "相続税・贈与税",
+     "sec": "5-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 45,
+     "ans": 3,
+     "topic": "不動産証券化",
+     "sec": "5-7",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 46,
+     "ans": 4,
+     "topic": "建物の構造",
+     "sec": "4-1",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 47,
+     "ans": 4,
+     "topic": "防水工法",
+     "sec": "4-3",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 48,
+     "ans": 2,
+     "topic": "ガス設備",
+     "sec": "4-9",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 49,
+     "ans": 4,
+     "topic": "管理士とサブリース",
+     "sec": "1-14",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 50,
+     "ans": 4,
+     "topic": "保険",
+     "sec": "5-4",
+     "exempt": true,
+     "note": ""
+    }
+   ]
+  },
+  {
+   "year": "R5",
+   "label": "令和5年度",
+   "date": "2023-11-19",
+   "pass": 36,
+   "pdf": "https://www.chintaikanrishi.jp/assets/common/else/past_question_2023.pdf",
+   "answer_pdf": "https://www.chintaikanrishi.jp/assets/common/else/past_answer_2023.pdf",
+   "qs": [
+    {
+     "no": 1,
+     "ans": 2,
+     "topic": "管理受託重説",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 2,
+     "ans": 3,
+     "topic": "管理受託重説の説明事項",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 3,
+     "ans": 4,
+     "topic": "変更契約の電話重説",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 4,
+     "ans": 3,
+     "topic": "契約期間中の変更対応",
+     "sec": "1-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 5,
+     "ans": 4,
+     "topic": "金銭管理と善管注意",
+     "sec": "3-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 6,
+     "ans": 3,
+     "topic": "設備の法定検査",
+     "sec": "4-4",
+     "exempt": false,
+     "note": "水道行政のR6.4国交省移管で「厚生労働大臣」→国土交通大臣等に変更"
+    },
+    {
+     "no": 7,
+     "ans": 2,
+     "topic": "賃貸借の約定（特約）",
+     "sec": "3-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 8,
+     "ans": 3,
+     "topic": "委託者への定期報告",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 9,
+     "ans": 1,
+     "topic": "原状回復ガイドライン",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 10,
+     "ans": 4,
+     "topic": "原状回復GL（経過年数）",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 11,
+     "ans": 1,
+     "topic": "原状回復と敷金返還",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 12,
+     "ans": 4,
+     "topic": "耐震基準の変遷",
+     "sec": "4-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 13,
+     "ans": 4,
+     "topic": "建築基準法（内装制限等）",
+     "sec": "4-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 14,
+     "ans": 1,
+     "topic": "換気方式",
+     "sec": "4-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 15,
+     "ans": 3,
+     "topic": "漏水・詰まり",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 16,
+     "ans": 4,
+     "topic": "屋根・外壁の劣化と点検",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 17,
+     "ans": 1,
+     "topic": "排水・通気設備",
+     "sec": "4-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 18,
+     "ans": 4,
+     "topic": "金銭の分別管理",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 19,
+     "ans": 4,
+     "topic": "賃料債務の消滅",
+     "sec": "3-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 20,
+     "ans": 1,
+     "topic": "敷金",
+     "sec": "3-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 21,
+     "ans": 2,
+     "topic": "賃貸借契約の成立・特約",
+     "sec": "3-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 22,
+     "ans": 3,
+     "topic": "共有物の管理",
+     "sec": "3-13",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 23,
+     "ans": 2,
+     "topic": "修繕と費用償還",
+     "sec": "3-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 24,
+     "ans": 2,
+     "topic": "定期建物賃貸借",
+     "sec": "3-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 25,
+     "ans": 4,
+     "topic": "賃貸借の解除・終了",
+     "sec": "3-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 26,
+     "ans": 1,
+     "topic": "オーナーチェンジ",
+     "sec": "3-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 27,
+     "ans": 3,
+     "topic": "業務管理者",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 28,
+     "ans": 4,
+     "topic": "管理業者の業務",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 29,
+     "ans": 4,
+     "topic": "管理業法の登録",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 30,
+     "ans": 3,
+     "topic": "管理業者の義務と監督",
+     "sec": "1-7",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 31,
+     "ans": 1,
+     "topic": "管理業法の登録",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 32,
+     "ans": 3,
+     "topic": "賃貸住宅管理業の定義",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 33,
+     "ans": 1,
+     "topic": "勧誘者",
+     "sec": "1-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 34,
+     "ans": 2,
+     "topic": "誇大広告等の禁止",
+     "sec": "1-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 35,
+     "ans": 2,
+     "topic": "不当な勧誘等の禁止",
+     "sec": "1-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 36,
+     "ans": 3,
+     "topic": "特定賃貸借重説",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 37,
+     "ans": 2,
+     "topic": "特定賃貸借重説書",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 38,
+     "ans": 3,
+     "topic": "所有者の金銭負担",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 39,
+     "ans": 4,
+     "topic": "特定賃貸借標準契約書",
+     "sec": "1-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 40,
+     "ans": 2,
+     "topic": "人の死の告知GL",
+     "sec": "2-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 41,
+     "ans": 1,
+     "topic": "障害者差別解消の対応指針",
+     "sec": "3-13",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 42,
+     "ans": 1,
+     "topic": "賃貸不動産経営管理士",
+     "sec": "1-14",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 43,
+     "ans": 4,
+     "topic": "経営支援業務",
+     "sec": "5-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 44,
+     "ans": 3,
+     "topic": "募集広告",
+     "sec": "2-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 45,
+     "ans": 1,
+     "topic": "相続税・贈与税",
+     "sec": "5-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 46,
+     "ans": 2,
+     "topic": "制振・免震構造",
+     "sec": "4-2",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 47,
+     "ans": 4,
+     "topic": "給水設備",
+     "sec": "4-5",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 48,
+     "ans": 1,
+     "topic": "賃貸住宅管理の動向",
+     "sec": "2-11",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 49,
+     "ans": "all",
+     "topic": "不動産の税金",
+     "sec": "5-5",
+     "exempt": true,
+     "note": "公式：出題範囲を逸脱する選択肢があり全ての解答を正解"
+    },
+    {
+     "no": 50,
+     "ans": 2,
+     "topic": "不動産証券化",
+     "sec": "5-7",
+     "exempt": true,
+     "note": ""
+    }
+   ]
+  },
+  {
+   "year": "R4",
+   "label": "令和4年度",
+   "date": "2022-11-20",
+   "pass": 34,
+   "pdf": "https://www.chintaikanrishi.jp/assets/common/else/past_question_2022.pdf",
+   "answer_pdf": "https://www.chintaikanrishi.jp/assets/common/else/past_answer_2022.pdf",
+   "qs": [
+    {
+     "no": 1,
+     "ans": 4,
+     "topic": "管理受託重説",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 2,
+     "ans": 2,
+     "topic": "重説書の電磁的提供",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 3,
+     "ans": 1,
+     "topic": "標準管理受託契約書",
+     "sec": "1-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 4,
+     "ans": 1,
+     "topic": "管理受託契約の締結時書面",
+     "sec": "1-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 5,
+     "ans": 1,
+     "topic": "大規模修繕と請負",
+     "sec": "3-11",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 6,
+     "ans": 3,
+     "topic": "管理業務報告の方法",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 7,
+     "ans": 3,
+     "topic": "賃貸住宅の維持管理",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 8,
+     "ans": 2,
+     "topic": "秘密保持義務",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 9,
+     "ans": 4,
+     "topic": "建築物の定期調査・報告",
+     "sec": "4-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 10,
+     "ans": 1,
+     "topic": "原状回復ガイドライン",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 11,
+     "ans": 4,
+     "topic": "原状回復GL（借主負担）",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 12,
+     "ans": 1,
+     "topic": "建物の構造形式",
+     "sec": "4-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 13,
+     "ans": 1,
+     "topic": "避難規定",
+     "sec": "4-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 14,
+     "ans": 1,
+     "topic": "内装制限・シックハウス",
+     "sec": "4-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 15,
+     "ans": 3,
+     "topic": "シックハウス",
+     "sec": "4-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 16,
+     "ans": 2,
+     "topic": "雨水の浸入",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 17,
+     "ans": 4,
+     "topic": "外壁の劣化現象",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 18,
+     "ans": 2,
+     "topic": "排水・通気設備",
+     "sec": "4-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 19,
+     "ans": 2,
+     "topic": "電気・ガス設備",
+     "sec": "4-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 20,
+     "ans": 1,
+     "topic": "賃料",
+     "sec": "3-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 21,
+     "ans": 2,
+     "topic": "家賃等の分別管理",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 22,
+     "ans": 3,
+     "topic": "企業会計原則",
+     "sec": "5-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 23,
+     "ans": 4,
+     "topic": "一部滅失と借主の義務",
+     "sec": "3-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 24,
+     "ans": 3,
+     "topic": "定期建物賃貸借",
+     "sec": "3-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 25,
+     "ans": 3,
+     "topic": "抵当権と賃借権",
+     "sec": "3-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 26,
+     "ans": 1,
+     "topic": "終身建物賃貸借",
+     "sec": "3-6",
+     "exempt": false,
+     "note": "高齢者住まい法改正（R7.10施行）で終身建物賃貸借の認可手続が変更"
+    },
+    {
+     "no": 27,
+     "ans": 3,
+     "topic": "連帯保証",
+     "sec": "3-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 28,
+     "ans": 2,
+     "topic": "賃貸借と使用貸借",
+     "sec": "3-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 29,
+     "ans": 4,
+     "topic": "管理業法の制定背景",
+     "sec": "1-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 30,
+     "ans": 2,
+     "topic": "業務管理者",
+     "sec": "1-4",
+     "exempt": false,
+     "note": "刑法改正（R7.6施行）で禁錮→拘禁刑（用語のみ・正解は不変）"
+    },
+    {
+     "no": 31,
+     "ans": 3,
+     "topic": "登録の経過措置",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 32,
+     "ans": "all",
+     "topic": "罰則（両罰規定）",
+     "sec": "1-13",
+     "exempt": false,
+     "note": "公式：正解の組合せ（イとウ）が選択肢になく全ての解答を正解／刑法改正（R7.6施行）で懲役→拘禁刑"
+    },
+    {
+     "no": 33,
+     "ans": 2,
+     "topic": "賃貸住宅管理業の定義",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 34,
+     "ans": 4,
+     "topic": "管理業法の登録",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 35,
+     "ans": 1,
+     "topic": "特定賃貸借契約の定義",
+     "sec": "1-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 36,
+     "ans": 4,
+     "topic": "誇大広告等の禁止",
+     "sec": "1-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 37,
+     "ans": 2,
+     "topic": "業務状況調書等の閲覧",
+     "sec": "1-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 38,
+     "ans": 2,
+     "topic": "特定賃貸借締結時書面",
+     "sec": "1-11",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 39,
+     "ans": 3,
+     "topic": "特定賃貸借重説",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 40,
+     "ans": 3,
+     "topic": "特定賃貸借重説",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 41,
+     "ans": 1,
+     "topic": "特定賃貸借標準契約書",
+     "sec": "1-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 42,
+     "ans": 3,
+     "topic": "個人情報保護法",
+     "sec": "3-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 43,
+     "ans": 4,
+     "topic": "人の死の告知GL",
+     "sec": "2-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 44,
+     "ans": 1,
+     "topic": "賃貸住宅管理（計画修繕等）",
+     "sec": "2-11",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 45,
+     "ans": 4,
+     "topic": "管理士に期待される役割",
+     "sec": "1-14",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 46,
+     "ans": 2,
+     "topic": "管理士のコンプライアンス",
+     "sec": "1-14",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 47,
+     "ans": 4,
+     "topic": "入居者の募集・審査",
+     "sec": "2-2",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 48,
+     "ans": 4,
+     "topic": "保険",
+     "sec": "5-4",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 49,
+     "ans": 3,
+     "topic": "不動産の税金",
+     "sec": "5-5",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 50,
+     "ans": 1,
+     "topic": "PM業務とAM業務",
+     "sec": "5-7",
+     "exempt": true,
+     "note": ""
+    }
+   ]
+  },
+  {
+   "year": "R3",
+   "label": "令和3年度",
+   "date": "2021-11-21",
+   "pass": 40,
+   "pdf": "https://www.chintaikanrishi.jp/assets/common/else/past_question_2021.pdf",
+   "answer_pdf": "https://www.chintaikanrishi.jp/assets/common/else/past_answer_2021.pdf",
+   "qs": [
+    {
+     "no": 1,
+     "ans": 3,
+     "topic": "管理受託重説",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 2,
+     "ans": 4,
+     "topic": "重説の説明事項",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 3,
+     "ans": 4,
+     "topic": "管理受託重説のIT活用",
+     "sec": "1-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 4,
+     "ans": 3,
+     "topic": "管理受託契約の性質",
+     "sec": "3-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 5,
+     "ans": 1,
+     "topic": "標準管理受託契約書",
+     "sec": "1-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 6,
+     "ans": 3,
+     "topic": "管理の実務（鍵・空室）",
+     "sec": "2-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 7,
+     "ans": 4,
+     "topic": "管理と自然災害",
+     "sec": "2-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 8,
+     "ans": 3,
+     "topic": "土地工作物責任",
+     "sec": "3-12",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 9,
+     "ans": 4,
+     "topic": "原状回復ガイドライン",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 10,
+     "ans": 2,
+     "topic": "原状回復ガイドライン",
+     "sec": "2-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 11,
+     "ans": 2,
+     "topic": "防犯設計指針",
+     "sec": "2-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 12,
+     "ans": 3,
+     "topic": "住宅の居室（換気・階段）",
+     "sec": "4-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 13,
+     "ans": 3,
+     "topic": "耐震改修",
+     "sec": "4-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 14,
+     "ans": 1,
+     "topic": "修繕履歴情報",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 15,
+     "ans": 1,
+     "topic": "建物の維持保全",
+     "sec": "4-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 16,
+     "ans": 1,
+     "topic": "屋上と外壁の管理",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 17,
+     "ans": 1,
+     "topic": "長期修繕計画",
+     "sec": "4-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 18,
+     "ans": 3,
+     "topic": "給水・給湯設備",
+     "sec": "4-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 19,
+     "ans": 3,
+     "topic": "換気設備",
+     "sec": "4-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 20,
+     "ans": 3,
+     "topic": "敷金",
+     "sec": "3-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 21,
+     "ans": 3,
+     "topic": "賃料増減請求",
+     "sec": "3-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 22,
+     "ans": 2,
+     "topic": "賃料回収と明渡し",
+     "sec": "2-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 23,
+     "ans": 2,
+     "topic": "賃貸住宅標準契約書",
+     "sec": "1-2",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 24,
+     "ans": 3,
+     "topic": "借主の死亡",
+     "sec": "3-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 25,
+     "ans": 4,
+     "topic": "費用償還・造作買取",
+     "sec": "3-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 26,
+     "ans": 4,
+     "topic": "定期建物賃貸借",
+     "sec": "3-6",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 27,
+     "ans": 4,
+     "topic": "連帯保証",
+     "sec": "3-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 28,
+     "ans": 4,
+     "topic": "オーナーチェンジ",
+     "sec": "3-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 29,
+     "ans": 2,
+     "topic": "賃貸住宅の定義",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 30,
+     "ans": 2,
+     "topic": "管理業務の定義",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 31,
+     "ans": 4,
+     "topic": "管理業者の業務",
+     "sec": "1-4",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 32,
+     "ans": 2,
+     "topic": "登録と廃業等の届出",
+     "sec": "1-3",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 33,
+     "ans": 3,
+     "topic": "特定賃貸借標準契約書",
+     "sec": "1-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 34,
+     "ans": 2,
+     "topic": "特定賃貸借標準契約書",
+     "sec": "1-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 35,
+     "ans": 2,
+     "topic": "貸主への報告（標準契約書）",
+     "sec": "1-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 36,
+     "ans": 2,
+     "topic": "特定賃貸借締結時書面",
+     "sec": "1-11",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 37,
+     "ans": 4,
+     "topic": "特定賃貸借重説の事項",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 38,
+     "ans": 2,
+     "topic": "特定賃貸借重説の方法",
+     "sec": "1-10",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 39,
+     "ans": 4,
+     "topic": "誇大広告等の禁止",
+     "sec": "1-9",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 40,
+     "ans": 1,
+     "topic": "勧誘者",
+     "sec": "1-8",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 41,
+     "ans": 1,
+     "topic": "特定賃貸借の監督",
+     "sec": "1-12",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 42,
+     "ans": 4,
+     "topic": "賃貸住宅の管理業務",
+     "sec": "1-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 43,
+     "ans": 1,
+     "topic": "管理士の業務",
+     "sec": "1-14",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 44,
+     "ans": 1,
+     "topic": "おとり広告",
+     "sec": "2-1",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 45,
+     "ans": 1,
+     "topic": "不動産の税金",
+     "sec": "5-5",
+     "exempt": false,
+     "note": ""
+    },
+    {
+     "no": 46,
+     "ans": 4,
+     "topic": "賃貸住宅の政策・制度",
+     "sec": "2-11",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 47,
+     "ans": 1,
+     "topic": "管理業務に関わる法令",
+     "sec": "3-13",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 48,
+     "ans": 1,
+     "topic": "新たな政策課題",
+     "sec": "1-14",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 49,
+     "ans": 2,
+     "topic": "保険",
+     "sec": "5-4",
+     "exempt": true,
+     "note": ""
+    },
+    {
+     "no": 50,
+     "ans": 3,
+     "topic": "企画提案と物件調査",
+     "sec": "5-1",
+     "exempt": true,
+     "note": ""
+    }
+   ]
+  }
+ ]
+}
