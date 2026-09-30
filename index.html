@@ -85,8 +85,15 @@ nav.tabs svg{width:22px;height:22px}
 .tag.ok{background:var(--okbg);color:var(--ok)}.tag.ng{background:var(--ngbg);color:var(--ng)}
 details.st{border-top:1px solid var(--line);padding:8px 0}
 details.st summary{cursor:pointer;font-size:14px;line-height:1.6}
-.days{display:flex;align-items:flex-end;gap:3px;height:70px;margin-top:6px}
-.days div{flex:1;background:var(--brand);border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
+.days{display:flex;align-items:flex-end;gap:3px;height:96px;margin-top:6px}
+.days .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.days .col b{font-size:9.5px;font-weight:600;color:var(--sub);line-height:1.2;margin-bottom:2px;font-variant-numeric:tabular-nums}
+.days .col i{display:block;width:100%;background:var(--brand);border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
+.days .col.today b{color:var(--brand)}
+.dtbl{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
+.dtbl td{padding:7px 4px;border-top:1px solid var(--line)}
+.dtbl td.r{text-align:right;font-variant-numeric:tabular-nums}
+.dtbl tr.today td{font-weight:700;color:var(--brand)}
 .dlab{display:flex;gap:3px;font-size:10px;color:var(--sub)}.dlab span{flex:1;text-align:center}
 textarea{width:100%;min-height:90px;font:12px ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);padding:8px}
 select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
@@ -110,7 +117,7 @@ select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-01-v1.4";
+const APP_VERSION = "2026-10-01-v1.5";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -760,8 +767,12 @@ function Stats() {
   return `
   <div class="card"><h2>毎日の学習量（14日）</h2>
     <div class="row small"><span class="grow">連続 <b class="num">${streak}</b>日</span><span>累計 ${total}問</span></div>
-    <div class="days">${days.map(d => `<div style="height:${(S.log[d]?.n || 0) / max * 100}%" title="${d} ${S.log[d]?.n || 0}問"></div>`).join("")}</div>
-    <div class="dlab">${days.map(d => `<span>${+d.slice(8)}</span>`).join("")}</div></div>
+    <div class="days">${days.map(d => { const n = S.log[d]?.n || 0; return `<div class="col ${d === today() ? "today" : ""}"><b>${n || ""}</b><i style="height:${n / max * 78}%"></i></div>`; }).join("")}</div>
+    <div class="dlab">${days.map(d => `<span>${+d.slice(8)}</span>`).join("")}</div>
+    <table class="dtbl">${days.slice(-7).reverse().map(d => { const L = S.log[d], w = "日月火水木金土"[new Date(d + "T00:00:00").getDay()];
+      return `<tr class="${d === today() ? "today" : ""}"><td>${+d.slice(5, 7)}/${+d.slice(8)}（${w}）${d === today() ? " 今日" : d === addDays(today(), -1) ? " 昨日" : ""}</td>
+        <td class="r">${L?.n ? `${L.n}問` : "—"}</td><td class="r small">${L?.n ? `正答 ${Math.round(L.c / L.n * 100)}%` : ""}</td></tr>`; }).join("")}</table>
+    <div class="small mt">数えているのは一問一答で解いた問題（おかわり・Section別・苦手の解き直しも含む）。日付はスマホの時計で0時に切り替わります。</div></div>
   <div class="card"><h2>分野別の正答率</h2>
     ${Object.entries(AREAS).map(([a, A]) => { const s = areaStats(a); const pct = s.acc == null ? 0 : Math.round(s.acc * 100);
       return `<div class="area"><div><span class="dot" style="background:${A.color}"></span>${A.name}</div><div class="num small">${s.acc == null ? "—" : pct + "%"}</div>
