@@ -117,7 +117,7 @@ select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-01-v1.7-bundle";
+const APP_VERSION = "2026-10-01-v1.8-bg";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -166,7 +166,7 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000));
 
 // ---------- 問題 ----------
-let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], LEC = {};
+let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], LEC = {}, AUD = {};
 const LEC_FILES = ["lec_1a", "lec_1b", "lec_2", "lec_3", "lec_4", "lec_5"];
 const DATA_FILES = ["A", "B", "C", "D", "E", "X1", "X2", "X3", "X4", ...Array.from({ length: 11 }, (_, i) => "Y" + String(i + 1).padStart(2, "0"))];
 async function loadQuestions() {
@@ -176,6 +176,7 @@ async function loadQuestions() {
   const lecs = await Promise.all(LEC_FILES.map(f => fetch(`data/${f}.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}))));
   LEC = Object.assign({}, ...lecs);
   NUMS = Array.isArray(nums) ? nums : [];
+  AUD = await fetch("audio/index.json", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
   CHAPS = chaps;
   SECS = chaps.flatMap(c => c.secs.map(([id, title, page]) => ({ id, title, page, ch: c.ch })));
   SECS.forEach((x, i) => { x.pages = (SECS[i + 1]?.page || BOOK_END) - x.page; x.order = i; });
@@ -271,7 +272,7 @@ function renderTabs() {
   document.getElementById("hdrDays").textContent = `本番まで ${daysLeft()}日`;
 }
 function go(v) {
-  if (v !== view) { TTS.stop(); if (view === "listen") stopListen(); if (view === "lecture") stopLecture(); }
+  if (v !== view) { TTS.stop(); if (view === "listen") stopListen(); if (view === "lecture" && !(LV && LV.audio)) stopLecture(); }
   if (view === "study" && sess && v !== "study") sess = null;
   view = v; render(); window.scrollTo(0, 0);
 }
@@ -279,7 +280,7 @@ function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : Stats();
+  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : Stats());
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -377,7 +378,7 @@ const qSpeech = q => q.q;
 const aSpeech = (q, ok) => `${ok == null ? "" : ok ? "正解。" : "不正解。"}答えは、${q.a ? "マル" : "バツ"}。${q.exp}`;
 function sayQ() { const q = QM[sess.ids[sess.i]]; TTS.speak(sess.ans === null ? qSpeech(q) : aSpeech(q, sess.ans === q.a)); }
 function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else TTS.stop(); render(); }
-function setRate(r) { S.tts.rate = r; save(); render(); }
+function setRate(r) { S.tts.rate = r; save(); if (AP.el) AP.el.playbackRate = r; render(); }
 const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
 
 // ---------- 聞き流し（画面に触らずに、問題→考える時間→答えと解説→次へ） ----------
@@ -385,6 +386,7 @@ let LS = null, wakeLock = null, thinkTimer = null;
 function startListen(ids, label) {
   if (!TTS.ok) { alertBox("このスマホ（ブラウザ）は読み上げに対応していません。"); return; }
   if (!ids.length) { alertBox("該当する問題がありません。"); return; }
+  if (AP.el && !AP.el.paused) AP.el.pause();
   LS = { ids, i: 0, label, phase: "q", playing: true };
   sess = null; view = "listen"; render(); window.scrollTo(0, 0);
   keepAwake(true); playStep();
@@ -466,6 +468,7 @@ function startLecture(ids, opt = {}) {
   if (!TTS.ok) { alertBox("このスマホ（ブラウザ）は読み上げに対応していません。文章は画面で読めます。"); }
   // 複数Sectionを通しで聞くときだけ「まとめて聞く」（続きの保存・問題はさみ）
   const bundle = ids.length > 1;
+  if (ids.every(id => AUD[id]?.lec)) { apStart(ids, { ...opt, bundle }); return; }
   LV = { ids, si: opt.si || 0, bi: opt.bi || 0, playing: TTS.ok, done: false, label: opt.label || "", bundle, mix: bundle && (opt.mix ?? S.tts.lecMix), q: null };
   sess = null; view = "lecture"; render(); window.scrollTo(0, 0);
   if (TTS.ok) { keepAwake(true); lecPlay(true); }
@@ -522,10 +525,10 @@ function lecQStep() {
   }
 }
 function lecScroll() { setTimeout(() => document.getElementById("lecCur")?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }
-function lecToggle() { if (!LV) return; if (LV.done) { LV.si = 0; LV.bi = 0; LV.done = false; LV.q = null; } LV.playing = !LV.playing; if (LV.playing) { keepAwake(true); lecPlay(LV.bi === 0); } else { clearTimeout(lecTimer); TTS.stop(); render(); } }
-function lecJump(bi) { if (!LV) return; clearTimeout(lecTimer); LV.q = null; TTS.stop(); LV.bi = bi; LV.done = false; LV.playing = TTS.ok; if (LV.playing) { keepAwake(true); lecPlay(false); } else render(); }
+function lecToggle() { if (!LV) return; if (LV.audio) { apToggle(); return; } if (LV.done) { LV.si = 0; LV.bi = 0; LV.done = false; LV.q = null; } LV.playing = !LV.playing; if (LV.playing) { keepAwake(true); lecPlay(LV.bi === 0); } else { clearTimeout(lecTimer); TTS.stop(); render(); } }
+function lecJump(bi) { if (!LV) return; if (LV.audio) { apSeekBlock(bi); return; } clearTimeout(lecTimer); LV.q = null; TTS.stop(); LV.bi = bi; LV.done = false; LV.playing = TTS.ok; if (LV.playing) { keepAwake(true); lecPlay(false); } else render(); }
 function lecMove(d) {
-  if (!LV) return;
+  if (!LV) return; if (LV.audio) { apMove(d); return; }
   if (LV.q) { clearTimeout(lecTimer); TTS.stop(); if (d > 0) { LV.q = null; LV.playing = true; lecNextSec(); } else { LV.q = null; LV.playing = true; lecPlay(false); } return; }
   const bl = lecBlocks(LV.ids[LV.si]);
   let bi = LV.bi + d, si = LV.si;
@@ -533,8 +536,8 @@ function lecMove(d) {
   if (bi >= bl.length) { if (si < LV.ids.length - 1) { si++; bi = 0; } else bi = bl.length - 1; }
   LV.si = si; lecJump(bi);
 }
-function lecGoSec(i) { if (!LV) return; LV.si = i; lecJump(0); }
-function stopLecture() { clearTimeout(lecTimer); TTS.stop(); keepAwake(false); LV = null; }
+function lecGoSec(i) { if (!LV) return; if (LV.audio) { apGoSec(i); return; } LV.si = i; lecJump(0); }
+function stopLecture() { clearTimeout(lecTimer); TTS.stop(); keepAwake(false); if (LV && LV.audio) apStop(); LV = null; }
 // 講義のあとの確認問題：苦手→未挑戦→その他の順に10問
 function lecQuiz(id, n = 10) {
   const qs = secQs(id), rank = q => { const c = card(q.id); return !c ? 1 : (c.box <= 2 || c.w > c.c) ? 0 : 2; };
@@ -543,6 +546,7 @@ function lecQuiz(id, n = 10) {
 }
 function Lecture() {
   if (!LV) { view = "book"; return Book(); }
+  if (LV.audio) return AudioLecture();
   const id = LV.ids[LV.si], x = SECM[id], L = LEC[id], bl = lecBlocks(id), n = secQs(id).length;
   const Qs = LV.q, qq = Qs && Qs.ids[Qs.i] ? QM[Qs.ids[Qs.i]] : null;
   const leftMin = LV.bundle ? Math.round(LV.ids.slice(LV.si).reduce((s2, k) => s2 + lecMin(k, LV.mix), 0)) : 0;
@@ -569,10 +573,158 @@ function Lecture() {
   <div class="center"><button class="linkbtn" onclick="go('book')">講義をやめる</button></div>`;
 }
 
+// ---------- 音声ファイルで再生（画面を消しても・他のアプリでも聞ける） ----------
+const AP = { el: null, lastSave: 0, lastBlock: -1 };
+function apEl() {
+  if (AP.el) return AP.el;
+  const a = AP.el = new Audio(); a.preload = "auto";
+  a.addEventListener("ended", () => apNext());
+  a.addEventListener("timeupdate", apTick);
+  a.addEventListener("play", () => { if (LV) { LV.playing = true; LV.done = false; } apMedia(); render(); });
+  a.addEventListener("pause", () => { if (LV) LV.playing = false; apSavePos(true); render(); });
+  a.addEventListener("loadedmetadata", () => { a.playbackRate = S.tts.rate; if (AP.seekTo) { a.currentTime = Math.min(AP.seekTo, a.duration - 1); AP.seekTo = 0; } });
+  a.addEventListener("error", () => { if (LV && LV.audio) alertBox("音声ファイルを読み込めませんでした。電波の良い所でもう一度お試しください。"); });
+  return a;
+}
+const apItem = () => LV && LV.items[LV.ii];
+const apSrc = it => `audio/${it.kind}/${it.sec}.mp3?v=${AUD[it.sec]?.[it.kind + "_hash"] || ""}`;
+function apStart(ids, opt) {
+  const mix = opt.bundle && (opt.mix ?? S.tts.lecMix);
+  const items = ids.flatMap(id => [{ sec: id, kind: "lec" }, ...(mix && AUD[id]?.q ? [{ sec: id, kind: "q" }] : [])]);
+  // 続きから：古い形式（si）にも対応
+  let ii = opt.ii ?? (opt.si ? items.findIndex(x => x.sec === ids[opt.si]) : 0); if (ii < 0) ii = 0;
+  LV = { audio: true, ids, items, ii, si: ids.indexOf(items[ii].sec), playing: true, done: false, label: opt.label || "", bundle: opt.bundle, mix };
+  sess = null; view = "lecture"; render(); window.scrollTo(0, 0);
+  apLoad(ii, opt.t || 0);
+}
+function apLoad(ii, t = 0) {
+  const a = apEl(); LV.ii = ii; LV.si = LV.ids.indexOf(LV.items[ii].sec); AP.lastBlock = -1;
+  AP.seekTo = t; a.src = apSrc(LV.items[ii]); a.playbackRate = S.tts.rate;
+  a.play().catch(() => { LV.playing = false; render(); });
+  apMedia(); render(); lecScroll();
+}
+function apNext() {
+  if (!LV || !LV.audio) return;
+  if (LV.ii < LV.items.length - 1) { apLoad(LV.ii + 1); return; }
+  LV.playing = false; LV.done = true; if (LV.bundle) { S.lecPos = null; save(); }
+  render();
+  const id = LV.items[LV.ii].sec;
+  // 1Sectionだけ聞いた時は、画面を見ていればそのまま問題へ
+  if (!LV.bundle && S.tts.lecQuiz && secQs(id).length && document.visibilityState === "visible") lecQuiz(id);
+}
+function apToggle() {
+  const a = apEl(); if (!LV) return;
+  if (LV.done) { LV.done = false; apLoad(0); return; }
+  if (a.paused) a.play().catch(() => {}); else a.pause();
+}
+function apMove(d) {
+  const a = apEl(); if (!LV) return;
+  if (d < 0 && a.currentTime > 4) { a.currentTime = 0; return; }
+  const ii = LV.ii + d; if (ii < 0 || ii >= LV.items.length) return;
+  apLoad(ii);
+}
+function apSkip(sec) { const a = apEl(); a.currentTime = Math.max(0, Math.min((a.duration || 0) - 0.5, a.currentTime + sec)); }
+function apGoSec(i) { const ii = LV.items.findIndex(x => x.sec === LV.ids[i] && x.kind === "lec"); if (ii >= 0) apLoad(ii); }
+function apStop() { if (AP.el) { AP.el.pause(); AP.el.removeAttribute("src"); AP.el.load(); } if ("mediaSession" in navigator) navigator.mediaSession.metadata = null; }
+function apSavePos(force) {
+  if (!LV || !LV.audio || !LV.bundle || LV.done) return;
+  const now = Date.now(); if (!force && now - AP.lastSave < 5000) return; AP.lastSave = now;
+  S.lecPos = { ids: LV.ids, ii: LV.ii, si: LV.si, t: Math.floor(AP.el?.currentTime || 0), label: LV.label, mix: LV.mix, at: today() }; save();
+}
+// 講義の文章のどこを読んでいるか：文字数の割合から推定（目安）
+function apParts(it) {
+  if (it.kind === "lec") { const bl = lecBlocks(it.sec); return [`Section ${it.sec}、${SECM[it.sec]?.title || ""}。`, ...bl.map(b => b.say || b.t)].map(t => t.length + 8); }
+  const ids = AUD[it.sec]?.q_ids || []; return [40, ...ids.flatMap(id => [QM[id] ? QM[id].q.length + 24 : 60, QM[id] ? QM[id].exp.length + 14 : 60])];
+}
+function apPartIndex() {
+  const a = AP.el, it = apItem(); if (!a || !it || !a.duration) return 0;
+  const P = apParts(it), tot = P.reduce((x, y) => x + y, 0), pos = a.currentTime / a.duration * tot;
+  let acc = 0; for (let i = 0; i < P.length; i++) { acc += P[i]; if (pos < acc) return i; } return P.length - 1;
+}
+function apSeekBlock(bi) {
+  const a = apEl(), it = apItem(); if (!it || it.kind !== "lec" || !a.duration) return;
+  const P = apParts(it), tot = P.reduce((x, y) => x + y, 0), before = P.slice(0, bi + 1).reduce((x, y) => x + y, 0);
+  a.currentTime = before / tot * a.duration; if (a.paused) a.play().catch(() => {});
+}
+function apTick() {
+  const a = AP.el; if (!a || !LV || !LV.audio) return;
+  const bar = document.getElementById("apBar"), tm = document.getElementById("apTime");
+  const fmt = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
+  if (bar && a.duration) bar.style.width = (a.currentTime / a.duration * 100) + "%";
+  if (tm && a.duration) tm.textContent = `${fmt(a.currentTime)} / ${fmt(a.duration)}`;
+  const pi = apPartIndex(); if (pi !== AP.lastBlock && view === "lecture" && document.visibilityState === "visible") { AP.lastBlock = pi; render(); lecScroll(); }
+  apSavePos(false);
+  if ("mediaSession" in navigator && navigator.mediaSession.setPositionState && a.duration) { try { navigator.mediaSession.setPositionState({ duration: a.duration, playbackRate: a.playbackRate, position: a.currentTime }); } catch (e) {} }
+}
+// ロック画面・イヤホンの操作
+function apMedia() {
+  if (!("mediaSession" in navigator) || !LV) return;
+  const it = apItem(); if (!it) return;
+  navigator.mediaSession.metadata = new MediaMetadata({ title: `${it.sec} ${SECM[it.sec]?.title || ""}${it.kind === "q" ? "（確認問題）" : ""}`, artist: "賃管特訓", album: LV.label || "音声講義", artwork: [{ src: "icon-512.png", sizes: "512x512", type: "image/png" }] });
+  const h = (k, f) => { try { navigator.mediaSession.setActionHandler(k, f); } catch (e) {} };
+  h("play", () => AP.el.play()); h("pause", () => AP.el.pause());
+  h("previoustrack", () => apMove(-1)); h("nexttrack", () => apMove(1));
+  h("seekbackward", () => apSkip(-15)); h("seekforward", () => apSkip(15));
+  h("seekto", d => { if (d.seekTime != null) AP.el.currentTime = d.seekTime; });
+}
+function apRemainMin() {
+  if (!LV) return 0; const a = AP.el;
+  const rest = LV.items.slice(LV.ii).reduce((x, it) => x + (AUD[it.sec]?.[it.kind] || 0), 0) - (a?.currentTime || 0);
+  return Math.max(0, rest / 60 / S.tts.rate);
+}
+function AudioLecture() {
+  const it = apItem(), id = it.sec, x = SECM[id], pi = apPartIndex(), n = secQs(id).length;
+  const items = LV.items, cur = `${LV.ii + 1}/${items.length}`;
+  let body;
+  if (it.kind === "lec") {
+    const bl = lecBlocks(id), bi = Math.max(0, pi - 1);
+    body = `<div class="card"><div class="small">教科書 p.${x?.page || ""}〜</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
+      ${bl.map((b, i) => `<div ${i === bi ? 'id="lecCur"' : ""} onclick="lecJump(${i})" style="cursor:pointer;border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${i === bi ? "background:var(--brandbg)" : ""}">
+        <div style="font-weight:700;font-size:14px;color:${i === bi ? "var(--brand)" : "var(--ink)"}">${esc(b.h)}</div>
+        <div style="font-size:15px;line-height:1.85;margin-top:3px">${esc(b.t)}</div></div>`).join("")}
+      <div class="small mt">文章をタップすると、そのあたりから再生します（位置は目安です）。</div></div>`;
+  } else {
+    const ids = AUD[id]?.q_ids || [], qi = Math.floor((pi - 1) / 2), ans = (pi - 1) % 2 === 1;
+    body = `<div class="card"><div class="small">${esc(id)} ${esc(x?.title || "")}</div><h2 style="margin:2px 0 8px">確認問題（聞き流し・記録には入りません）</h2>
+      ${ids.map((qid, k) => { const q = QM[qid]; if (!q) return ""; const on = k === qi, open = k < qi || (on && ans);
+        return `<div ${on ? 'id="lecCur"' : ""} style="border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${on ? "background:var(--brandbg)" : ""}">
+          <div style="font-size:15px;line-height:1.75"><b>${k + 1}.</b> ${esc(q.q)}</div>
+          ${open ? `<div class="small" style="margin-top:4px"><span class="tag ${q.a ? "ok" : "ng"}">${q.a ? "○" : "×"}</span> ${esc(q.exp)}</div>` : ""}</div>`; }).join("")}</div>`;
+  }
+  return `<div class="qhead"><span>🎧 ${esc(LV.bundle ? (LV.label || "まとめて聞く") : "講義")} ${items.length > 1 ? cur : ""}</span><span>${LV.done ? "おわり" : LV.playing ? "再生中" : "一時停止"}${LV.bundle && !LV.done ? `・残り約${Math.round(apRemainMin())}分` : ""}</span></div>
+  ${LV.ids.length > 1 ? `<div class="seg" style="margin-bottom:10px">${LV.ids.map((s2, i) => `<button class="${s2 === id ? "on" : ""}" onclick="lecGoSec(${i})">${s2}</button>`).join("")}</div>` : ""}
+  ${body}
+  <div class="bar" style="margin-top:4px"><i id="apBar" style="width:0%;background:var(--brand)"></i></div>
+  <div class="row small" style="margin-top:4px"><span class="grow">${it.kind === "q" ? "確認問題" : "講義"}</span><span id="apTime" class="num"></span></div>
+  <div class="player">
+    <button onclick="apSkip(-15)" aria-label="15秒戻る" style="font-size:14px">↺15</button>
+    <button onclick="lecMove(-1)" aria-label="前へ">⏮</button>
+    <button class="main" onclick="lecToggle()" aria-label="再生・一時停止">${LV.done ? "↺" : LV.playing ? "⏸" : "▶"}</button>
+    <button onclick="lecMove(1)" aria-label="次へ">⏭</button>
+    <button onclick="apSkip(15)" aria-label="15秒進む" style="font-size:14px">15↻</button>
+  </div>
+  <div class="card mt">
+    ${n ? `<button class="btn" onclick="lecQuiz('${id}')">✏️ このSectionの問題を解く（10問・苦手優先）</button>` : ""}
+    <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
+    <div class="small mt">🔒 画面を消しても、ほかのアプリを使っていても再生が続きます（ロック画面のボタンでも操作できます）。この画面を離れても止まりません。</div></div>
+  <div class="center"><button class="linkbtn" onclick="stopLecture();go('book')">講義をやめる</button></div>`;
+}
+// ほかの画面にいる時の小さな再生バー
+function MiniPlayer() {
+  if (!LV || !LV.audio || view === "lecture") return "";
+  const it = apItem(); if (!it) return "";
+  return `<div class="card" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--brandbg)">
+    <button class="spk on" style="width:40px;height:40px;border-radius:50%;padding:0;font-size:16px" onclick="lecToggle()">${LV.playing ? "⏸" : "▶"}</button>
+    <div class="grow" onclick="go('lecture')" style="cursor:pointer;min-width:0"><div style="font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🎧 ${esc(it.sec)} ${esc(SECM[it.sec]?.title || "")}${it.kind === "q" ? "（確認問題）" : ""}</div>
+      <div class="small">${LV.done ? "おわり" : LV.playing ? "再生中" : "一時停止"}・タップで開く</div></div>
+    <button class="linkbtn" onclick="stopLecture();render()" aria-label="閉じる">✕</button></div>`;
+}
+
 // ---------- まとめて聞く ----------
 // 1Sectionの目安の分数（日本語の読み上げは1倍速でおよそ1分360字）。問題5問は1問約35秒
 function lecMin(id, mix) {
   const L = LEC[id]; if (!L) return 0;
+  if (AUD[id]?.lec) return (AUD[id].lec + (mix ? AUD[id].q || 0 : 0)) / 60 / S.tts.rate;
   const ch = L.intro.length + L.summary.length + L.points.reduce((s2, p) => s2 + p.h.length + p.t.length, 0);
   return ch / (360 * S.tts.rate) + (mix && secQs(id).length ? 5 * (35 + S.tts.think) / 60 : 0);
 }
@@ -587,7 +739,7 @@ function bundleIds(kind) {
 }
 const BUNDLE_LABEL = k => k === "all" ? "全範囲" : k === "weak" ? "苦手Section" : k === "unread" ? "まだ読んでいない所" : k === "read" ? "読んだ所の復習" : `CHAPTER${k}`;
 function startBundle(kind) { const ids = bundleIds(kind); if (!ids.length) { alertBox("該当するSectionがありません。"); return; } startLecture(ids, { label: BUNDLE_LABEL(kind), mix: S.tts.lecMix }); }
-function resumeBundle() { const P = S.lecPos; if (!P) return; startLecture(P.ids, { si: P.si, bi: P.bi, label: P.label, mix: P.mix }); }
+function resumeBundle() { const P = S.lecPos; if (!P) return; startLecture(P.ids, { si: P.si, bi: P.bi, ii: P.ii, t: P.t, label: P.label, mix: P.mix }); }
 function BundleCard() {
   if (!Object.keys(LEC).length) return "";
   const P = S.lecPos, mix = S.tts.lecMix;
@@ -599,7 +751,7 @@ function BundleCard() {
     ${P ? `<div class="mt"><button class="btn" onclick="resumeBundle()">▶ 続きから聞く（${esc(P.label || "")}・${esc(P.ids[P.si] || "")}から）</button></div>` : ""}
     <div class="btns mt">${CHAPS.map(c => row(String(c.ch), c.title)).join("")}${row("weak", "正答率の低い順")}${row("unread", "")}${row("read", "")}${row("all", "")}</div>
     <div class="row mt"><span class="grow small">Sectionごとに確認問題を5問はさむ（問題→考える時間→答え）</span><button class="spk ${mix ? "on" : ""}" onclick="S.tts.lecMix=!S.tts.lecMix;save();render()">${mix ? "ON" : "OFF"}</button></div>
-    <div class="small mt">聞いている間は画面が消えないようにしています。画面を消したり別のアプリに切り替えると止まる機種があります。</div></div>`;
+    <div class="small mt">${Object.keys(AUD).length ? "🔒 画面を消しても、ほかのアプリを使っていても聞けます（音声ファイルで再生）。" : "聞いている間は画面が消えないようにしています。"}</div></div>`;
 }
 
 // ---------- 教科書 ----------
@@ -673,6 +825,7 @@ function Book() {
 
 // ---------- 一問一答 ----------
 function startSession(ids, label) {
+  if (AP.el && !AP.el.paused) AP.el.pause();
   if (!ids.length) { alertBox("該当する問題がありません。"); return; }
   sess = { ids, i: 0, label, ans: null, ok: 0, done: 0, requeued: {} };
   view = "study"; render(); window.scrollTo(0, 0);
