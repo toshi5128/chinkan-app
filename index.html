@@ -117,7 +117,7 @@ select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-01-v1.8-bg";
+const APP_VERSION = "2026-10-01-v1.9-voicevox";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -706,7 +706,8 @@ function AudioLecture() {
   <div class="card mt">
     ${n ? `<button class="btn" onclick="lecQuiz('${id}')">✏️ このSectionの問題を解く（10問・苦手優先）</button>` : ""}
     <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
-    <div class="small mt">🔒 画面を消しても、ほかのアプリを使っていても再生が続きます（ロック画面のボタンでも操作できます）。この画面を離れても止まりません。</div></div>
+    <div class="small mt">🔒 画面を消しても、ほかのアプリを使っていても再生が続きます（ロック画面のボタンでも操作できます）。この画面を離れても止まりません。</div>
+    <div class="small mt">音声：VOICEVOX:No.7</div></div>
   <div class="center"><button class="linkbtn" onclick="stopLecture();go('book')">講義をやめる</button></div>`;
 }
 // ほかの画面にいる時の小さな再生バー
@@ -1099,7 +1100,7 @@ function Stats() {
     <details class="st mt"><summary class="small">ファイルが使えない時：文字でコピー／貼り付け</summary>
       <div class="row mt" style="gap:8px"><button class="btn sec" onclick="backup()">コピー</button><button class="btn ghost" onclick="restore()">戻す</button></div>
       <textarea id="bk" class="mt" placeholder="ここに貼り付けて「戻す」"></textarea></details></div>
-  <div class="ver">${APP_VERSION}・問題 ${Q.length}問</div>`;
+  <div class="ver">${APP_VERSION}・問題 ${Q.length}問${Object.keys(AUD).length ? "・講義音声 VOICEVOX:No.7" : ""}</div>`;
 }
 const backupText = () => JSON.stringify({ app: "chinkan", v: 1, at: new Date().toISOString(), data: S });
 function markBackup() { S.lastBackup = today(); save(); }

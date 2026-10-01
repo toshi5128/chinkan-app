@@ -13,6 +13,7 @@ def clean(t):  # アプリの TTS.clean と同じ読み替え
     t = re.sub(r"(\d+)\s*/\s*(\d+)", r"\2分の\1", t)
     t = re.sub(r"㎡|m²", "平方メートル", t).replace("％", "パーセント").replace("%", "パーセント")
     t = re.sub(r"[〜～]", "から", t); t = re.sub(r"p\.(\d+)", r"\1ページ", t)
+    t = re.sub(r"(?<![0-9０-９])年(?=[0-9０-９])", "ねん", t)  # 「年14.6パーセント」の年
     t = re.sub(r"[（(]", "、", t); t = re.sub(r"[）)]", "、", t); t = re.sub(r"[「」『』【】]", "", t)
     return t.replace("→", "、つまり、").replace("・", "、")
 

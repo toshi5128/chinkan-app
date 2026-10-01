@@ -1,1 +1,5 @@
 node_modules/
+tools/audio_build.log
+tools/audio_build.err
+tools/vv_cache.json
+tools/*_mismatch.json
