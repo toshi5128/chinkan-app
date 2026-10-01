@@ -28,7 +28,7 @@ Q = [q for f in files for q in json.load(open(D("data", f + ".json"), encoding="
 def lecture_parts(sid):
     L = LEC[sid]; P = [{"t": clean(f"Section {sid.replace('-', 'の')}、{title[sid]}。")}, {"b": 0.6}, {"t": clean(L["intro"])}, {"b": 0.9}]
     for i, p in enumerate(L["points"]):
-        P += [{"t": clean(f"ポイント{i+1}。{p['h']}。")}, {"b": 0.4}, {"t": clean(p["t"])}, {"b": 0.9}]
+        P += [{"t": clean(f"ポイント{i+1}。《{p['h']}》。")}, {"b": 0.4}, {"t": clean(p["t"])}, {"b": 0.9}]
     P += [{"t": "まとめです。"}, {"b": 0.4}, {"t": clean(L["summary"])}, {"b": 1.0}]
     return P
 
