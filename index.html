@@ -118,7 +118,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-02-v2.7-progress";
+const APP_VERSION = "2026-10-03-v3.0";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -154,7 +154,8 @@ function load() {
   s.newPerDay = s.newPerDay ?? 200; // 1日の新しい問題数（0＝おまかせ）。初期値は200問
   if (!s.pd200) { s.pd200 = 1; s._toPd200 = s.newPerDay !== 200; s.newPerDay = 200; }
   s.tts = Object.assign({ auto: true, rate: 1.2, think: 4, lecQuiz: true, lecMix: true }, s.tts || {});
-  s.heard = s.heard || {};   // 講義を最後まで聞いた回数：Section → {n, last}
+  s.heard = s.heard || {};
+  s.autoNext = s.autoNext ?? true; // 正解なら自動で次へ   // 講義を最後まで聞いた回数：Section → {n, last}
   s.lecPos = s.lecPos || null; // まとめて聞くの続き（どの一覧の、どこまで） // 読み上げの設定
   s.cur = s.cur || null;     // 受験中の模試
   return s;
@@ -247,7 +248,7 @@ function record(id, ok) {
   if (ok) { c.box = Math.min(5, Math.max(c.box, 1) + 1); c.c++; }
   else { c.box = 1; c.w++; }
   c.due = addDays(t, INTERVAL[c.box]);
-  c.last = t;
+  c.last = t; c.lastOk = ok;
   S.cards[id] = c;
   const L = S.log[t] || { n: 0, c: 0 }; L.n++; if (ok) L.c++; S.log[t] = L;
   save();
@@ -309,6 +310,8 @@ function Home() {
   </div>
   ${needBackup ? `<div class="card" style="background:var(--warnbg)"><b>記録のバックアップを取りましょう</b><div class="small">${S.lastBackup ? `前回 ${S.lastBackup.slice(5).replace("-", "/")}` : "まだ一度も取っていません"}。スマホの故障や機種変更で記録が消えないように、週1回保存しておくと安心です。</div>
     <div class="mt"><button class="btn sec" onclick="go('stats')">記録タブで保存する</button></div></div>` : ""}
+  ${TodaySteps()}
+  ${PredictCard()}
   ${ReadToday()}
   <div class="card">
     <h2>今日の分（一問一答）</h2>
@@ -750,6 +753,68 @@ function MiniPlayer() {
     <button class="linkbtn" onclick="stopLecture();render()" aria-label="閉じる">✕</button></div>`;
 }
 
+// ---------- 今日の仕上げ：間違い直し・4択ドリル ----------
+const todayWrongIds = () => Q.filter(q => { const c = card(q.id); return c && c.last === today() && c.lastOk === false; }).map(q => q.id);
+function startTodayWrong() { const ids = shuffle(todayWrongIds()); startSession(ids, "今日の間違い直し"); }
+function todayRangeSecs() { todayPlan(); return [...new Set(S.plan.newIds.map(id => QM[id]?.sec).filter(Boolean))]; }
+function buildDrill(secs, n = 10) {
+  const base = Q.filter(q => secs.includes(q.sec)), used = new Set(), items = [];
+  const types = ["right", "wrong", "count", "right", "wrong", "combo", "right", "wrong", "count", "right"];
+  for (let i = 0; items.length < n && i < n * 3; i++) { const it = makeItem(null, types[i % types.length], used, base) || makeItem(null, "right", used, base); if (it) items.push(it); }
+  return items;
+}
+function startDrill() {
+  const secs = todayRangeSecs(), items = buildDrill(secs, 10);
+  if (items.length < 5) { alertBox("今日の範囲の問題が少ないため、ドリルを作れません。"); return; }
+  S.cur = { items, pick: items.map(() => null), flag: items.map(() => false), i: 0, start: Date.now(), done: false, limit: 1200, drill: true };
+  save(); go("mock");
+}
+
+// ---------- 予想得点（○×の正解率 → 本番の4択の点数） ----------
+// 4択は4つの文をほぼ全部判断できないと取れない。個数・組合せ問題（約3割）は4つ全部。わからない問題も4分の1は当たる
+function predict() {
+  let total = 0, seenAll = 0; const by = {};
+  for (const [a, A] of Object.entries(AREAS)) {
+    const st = areaStats(a); seenAll += st.seen;
+    const acc = st.acc ?? 0.5, cov = st.total ? st.seen / st.total : 0;
+    const pAt = x => { const k = 0.72 * x ** 3 + 0.28 * x ** 4; return k + (1 - k) * 0.25; };
+    const pNow = cov * acc + (1 - cov) * 0.5;
+    const pts = A.mock * pAt(pNow), best = A.mock * pAt(Math.max(pNow, 0.95));
+    by[a] = { pts, gain: best - pts, acc: st.acc, cov }; total += pts;
+  }
+  return { total, by, seenAll };
+}
+function PredictCard() {
+  const P = predict();
+  if (P.seenAll < 100) return `<div class="card"><h2>予想得点</h2><div class="small">100問ほど解くと、今の実力なら本番で何点取れそうかを出します（今 ${P.seenAll}問）。</div></div>`;
+  const score = Math.round(P.total), ok = score >= PASS_LINE;
+  // まだ手を付けていない分野は計画どおり後で回るので、半分以上解いた分野の中から「苦手」を勧める
+  const top = Object.entries(P.by).filter(([, b]) => b.cov >= 0.5 && b.acc != null && b.acc < 0.95).sort((x, y) => y[1].gain - x[1].gain).slice(0, 2).filter(([, b]) => b.gain >= 0.5);
+  return `<div class="card"><h2>予想得点（今の実力なら）</h2>
+    <div class="row" style="align-items:baseline;gap:6px"><b class="num" style="font-size:40px;color:${ok ? "var(--ok)" : "var(--ng)"}">${score}</b><span>点</span><span class="grow"></span><span class="small">合格ライン ${PASS_LINE}点（${ok ? "到達" : `あと${PASS_LINE - score}点`}）</span></div>
+    <div class="bar mt" style="height:10px;position:relative"><i style="width:${Math.min(100, score * 2)}%;background:${ok ? "var(--ok)" : "var(--ng)"}"></i></div>
+    <div class="small mt">○×の正解率を、本番の4択（個数問題を含む）に換算した目安です。○×で9割を超えると、本番でも合格ラインに届きやすくなります。${P.seenAll < Q.length ? `<br>まだ解いていない問題（${Q.length - P.seenAll}問）は「当てずっぽう」として計算しているので、一周するまでは低めに出ます。` : ""}</div>
+    ${top.length ? `<div class="mt" style="font-weight:700;font-size:14px">点を伸ばしやすい分野</div>${top.map(([a, b]) => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:8px"><span class="dot" style="background:${AREAS[a].color}"></span>
+      <div class="grow" style="font-size:14px">${AREAS[a].name}<div class="small">正答率 ${b.acc == null ? "—" : Math.round(b.acc * 100) + "%"}・挑戦 ${Math.round(b.cov * 100)}%・伸びしろ 約+${b.gain.toFixed(1)}点</div></div>
+      <button class="btn sec" style="width:auto;padding:7px 12px;font-size:13px" onclick="startArea('${a}','weak')">苦手を解く</button></div>`).join("")}` : `<div class="small mt">分野ごとに半分以上解き進めると、点を伸ばしやすい分野をここに出します。</div>`}</div>`;
+}
+
+// ---------- 今日やること（3ステップ） ----------
+function TodaySteps() {
+  const p = todayPlan(), secs = todaySecs(), heardAll = secs.length > 0 && secs.every(heardToday);
+  const doneAll = p.newTotal > 0 && !p.newLeft.length && !p.due.length, wrong = todayWrongIds().length;
+  const inSess = sess && sess.i < sess.ids.length;
+  const step = (n, title, st, body) => `<div style="display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line)">
+    <div style="width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:800;${st ? "background:var(--ok);color:#fff" : "background:var(--brandbg);color:var(--brand)"}">${st ? "✓" : n}</div>
+    <div class="grow"><div style="font-weight:700">${title}</div>${body}</div></div>`;
+  return `<div class="card"><h2>今日やること</h2>
+    ${step(1, "聞く（インプット）", heardAll, heardAll ? `<div class="small">今日の範囲（${secs.join("・")}）を聞きました</div>` : secs.length ? `<div class="small">${secs.join("・")}・${fmtMin(secs.reduce((x, id) => x + lecMin(id, false), 0))}</div><button class="btn sec mt" style="padding:9px" onclick="startTodayLecture()">🎧 聞いてから解く</button>` : `<div class="small">講義はありません</div>`)}
+    ${step(2, "解く（アウトプット）", doneAll, `<div class="small">新しい問題 <b>${p.newDone}/${p.newTotal}</b>・復習 残り${p.due.length}問</div>${doneAll ? "" : `<button class="btn mt" style="padding:9px" onclick="${inSess ? "go('study')" : "startToday()"}">▶ ${inSess ? "続きから" : "解く"}（残り${p.newLeft.length + p.due.length}問）</button>`}`)}
+    ${step(3, "仕上げ（間違い直し・4択）", doneAll && !wrong, `<div class="small">${wrong ? `今日まだ間違えたままの問題 <b style="color:var(--ng)">${wrong}問</b>` : "今日の間違いはありません"}</div>
+      <div class="row mt" style="gap:6px">${wrong ? `<button class="btn sec" style="padding:9px" onclick="startTodayWrong()">間違いを解き直す</button>` : ""}<button class="btn ghost" style="padding:9px" onclick="startDrill()">4択ドリル10問</button></div>`)}
+  </div>`;
+}
+
 // ---------- 今日の進み具合 ----------
 function TodayProgress() {
   const p = todayPlan(), L = S.log[today()] || { n: 0, c: 0 };
@@ -932,7 +997,8 @@ function Study() {
     return `<div class="card center"><h2>おつかれさまでした</h2>
       <div class="hero" style="justify-content:center"><b class="num">${rate}</b><span>%</span></div>
       <div class="small">${sess.label}：${sess.done}問中 ${sess.ok}問正解</div>
-      <div class="btns mt">${todayPlan().due.length + todayPlan().newLeft.length ? `<button class="btn" onclick="startToday()">▶ 今日の分の続き</button>` : `<button class="btn" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}
+      <div class="btns mt">${todayWrongIds().length ? `<button class="btn" onclick="startTodayWrong()">✏️ 今日間違えた${todayWrongIds().length}問を解き直す</button>` : ""}
+        ${todayPlan().due.length + todayPlan().newLeft.length ? `<button class="btn ${todayWrongIds().length ? "sec" : ""}" onclick="startToday()">▶ 今日の分の続き</button>` : `<button class="btn sec" onclick="startDrill()">📝 今日の範囲で4択ドリル（10問）</button><button class="btn ghost" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}
         <button class="btn ghost" onclick="go('home')">ホームへ</button><button class="btn ghost" onclick="endSess();render()">ほかの問題を解く</button></div></div>`;
   }
   const q = QM[sess.ids[sess.i]], c = card(q.id), A = AREAS[q.area];
@@ -943,6 +1009,7 @@ function Study() {
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
+    <div class="row" style="justify-content:flex-end;margin-bottom:4px"><button class="spk ${S.autoNext ? "on" : ""}" onclick="S.autoNext=!S.autoNext;save();render()">正解なら自動で次へ ${S.autoNext ? "ON" : "OFF"}</button></div>
     <div class="qtext">${esc(q.q)}</div>
     <div class="ox">
       <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
@@ -955,30 +1022,37 @@ function Study() {
         <span class="grow"></span>
         <button class="linkbtn" onclick="toggleStar('${q.id}')">${card(q.id)?.star ? "★マーク済み" : "☆ マークする"}</button>
       </div>
+      ${autoTimer ? `<div class="row mt"><span class="grow small" style="color:var(--ok)">正解！ まもなく次の問題へ…</span><button class="linkbtn" onclick="cancelAuto()">止めて解説を読む</button></div>` : ""}
       <button class="btn mt" onclick="nextQ()">次へ ▶</button>` : ""}
   </div>
   <div class="center"><button class="linkbtn" onclick="sess.ids=sess.ids.slice(0,sess.i);saveSess();render()">ここでやめる</button></div>
   <div class="center small">他の画面に行っても、アプリを閉じても、この問題から続きができます。</div><div></div>`;
 }
+let autoTimer = null;
+function cancelAuto() { clearTimeout(autoTimer); autoTimer = null; render(); }
 function answer(v) {
   const q = QM[sess.ids[sess.i]]; const ok = v === q.a;
   sess.ans = v; sess.done++; if (ok) sess.ok++;
   record(q.id, ok);
   // 間違えた問題は、5問あとにもう一度（1セッション1回まで）
   if (!ok && !sess.requeued[q.id]) { sess.requeued[q.id] = 1; sess.ids.splice(Math.min(sess.ids.length, sess.i + 6), 0, q.id); }
-  saveSess(); render();
-  if (S.tts.auto) TTS.speak(aSpeech(q, ok)); else TTS.stop();
+  saveSess();
+  // 正解なら少し見せて自動で次へ（間違えた時は止まって解説を読む）
+  clearTimeout(autoTimer); autoTimer = null;
+  if (ok && S.autoNext) { const at = sess.i; autoTimer = setTimeout(() => { autoTimer = null; if (sess && sess.i === at && sess.ans !== null) nextQ(); }, 1300); }
+  render();
+  if (S.tts.auto) TTS.speak(ok && S.autoNext ? "正解。" : aSpeech(q, ok)); else TTS.stop();
 }
 function luck() {
   const q = QM[sess.ids[sess.i]], c = S.cards[q.id];
-  c.box = 1; c.due = addDays(today(), 1); c.c--; c.w++;
+  c.box = 1; c.due = addDays(today(), 1); c.c--; c.w++; c.lastOk = false;
   const L = S.log[today()]; if (L) L.c--; sess.ok--;
   save();
   if (!sess.requeued[q.id]) { sess.requeued[q.id] = 1; sess.ids.splice(Math.min(sess.ids.length, sess.i + 6), 0, q.id); }
   nextQ();
 }
 function toggleStar(id) { const c = S.cards[id]; if (!c) return; c.star = !c.star; save(); render(); }
-function nextQ() { sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
+function nextQ() { clearTimeout(autoTimer); autoTimer = null; sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
 function StudyMenu() {
   const p = todayPlan();
   const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
@@ -1018,8 +1092,8 @@ function pickStmts(pool, nTrue, nFalse) {
   if (T.length >= nTrue && F.length >= nFalse) return shuffle([...T.slice(0, nTrue), ...F.slice(0, nFalse)]);
   return null;
 }
-function makeItem(area, type, used) {
-  const pool = Q.filter(q => q.area === area && !used.has(q.id));
+function makeItem(area, type, used, base) {
+  const pool = (base || Q.filter(q => q.area === area)).filter(q => !used.has(q.id));
   let st, ans, opts;
   if (type === "right") { st = pickStmts(pool, 1, 3); if (!st) return null; ans = st.findIndex(q => q.a); }
   else if (type === "wrong") { st = pickStmts(pool, 3, 1); if (!st) return null; ans = st.findIndex(q => !q.a); }
@@ -1035,7 +1109,7 @@ function makeItem(area, type, used) {
     ans = four.indexOf(good); opts = four.map(([x, y]) => `${KANA[x]}、${KANA[y]}`);
   }
   st.forEach(q => used.add(q.id));
-  return { area, type, ids: st.map(q => q.id), ans, opts: opts || null };
+  return { area: area || st[0].area, type, ids: st.map(q => q.id), ans, opts: opts || null };
 }
 const STEM = {
   right: "次の記述のうち、正しいものはどれか。",
