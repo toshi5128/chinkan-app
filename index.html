@@ -118,7 +118,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-02-v2.1-today";
+const APP_VERSION = "2026-10-02-v2.2-sync";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -299,8 +299,8 @@ function Home() {
   const needBackup = answered >= 30 && (!S.lastBackup || addDays(S.lastBackup, 7) <= today());
   const dl = daysLeft();
   const phase = dl <= LAST_WEEK ? "仕上げ期：新しいことはしない。模試と、間違えた問題・★マークの総ざらいだけ。"
-    : today() > READ_END ? `過去問期：<a href="${PAST_URL}" target="_blank" rel="noopener">公式の過去問</a>を時間を計って1年分ずつ。間違えた所は教科書に戻って読み直し。今日の分も続けます。`
-    : "教科書期（〜10/25）：教科書を読む → 読んだSectionの問題を解く、の繰り返し。1周目は覚えなくてOK。";
+    : today() > readEnd() ? `過去問期：<a href="${PAST_URL}" target="_blank" rel="noopener">公式の過去問</a>を時間を計って1年分ずつ。間違えた所は教科書に戻って読み直し。今日の分も続けます。`
+    : `教科書期（〜${mdj(readEnd())}ごろ）：今日の範囲を読む・聞く → すぐ解く、の繰り返し。1周目は覚えなくてOK。一周したら過去問へ。`;
   return `
   <div class="card">
     <div class="small">令和8年11月15日（日）13:00 本番まで</div>
@@ -786,16 +786,30 @@ function BundleCard() {
 
 // ---------- 教科書 ----------
 const secQs = id => Q.filter(q => q.sec === id);
+function readEnd() {
+  if (!S.newPerDay) return READ_END;
+  const unseen = Q.filter(q => !card(q.id)).length;
+  if (!unseen) return addDays(today(), -1);
+  const end = addDays(today(), Math.ceil(unseen / S.newPerDay) - 1);
+  return end < READ_END ? end : READ_END;
+}
+const mdj = d => `${+d.slice(5, 7)}/${+d.slice(8)}`;
 function readPlan() {
   const t = today();
   if (!S.readPlan || S.readPlan.date !== t) {
+    // まず「今日解く新しい問題が出るSection」のうち、まだ読んでいない所＝今日読む所（読む・聞く・解くを同じ範囲に）
+    todayPlan();
+    const sync = [...new Set(S.plan.newIds.map(id => QM[id]?.sec).filter(Boolean))]
+      .filter(id => !S.read[id] && SECM[id]).sort((a, b) => SECM[a].order - SECM[b].order);
+    if (sync.length) { S.readPlan = { date: t, ids: sync, sync: true }; save(); return S.readPlan; }
+    const RE = readEnd();
     const left = SECS.filter(x => !S.read[x.id]);
-    const days = Math.max(1, Math.round((new Date(READ_END + "T00:00:00") - new Date(t + "T00:00:00")) / 86400000) + 1);
+    const days = Math.max(1, Math.round((new Date(RE + "T00:00:00") - new Date(t + "T00:00:00")) / 86400000) + 1);
     const leftPages = left.reduce((s, x) => s + x.pages, 0);
-    const target = t > READ_END ? Infinity : Math.ceil(leftPages / days);
+    const target = t > RE ? Infinity : Math.ceil(leftPages / days);
     const ids = []; let pg = 0;
     // 1日分のページ数に届くまでSectionを順に。半分以上はみ出すSectionは翌日へ
-    for (const x of left) { if (ids.length && (t > READ_END || pg + x.pages / 2 > target)) break; ids.push(x.id); pg += x.pages; }
+    for (const x of left) { if (ids.length && (t > RE || pg + x.pages / 2 > target)) break; ids.push(x.id); pg += x.pages; }
     S.readPlan = { date: t, ids, target: isFinite(target) ? target : 0 };
     save();
   }
@@ -814,7 +828,7 @@ function ReadToday() {
     ${secs.map(SecRow).join("")}
     ${done === secs.length && next ? `<div class="res ok">今日の分は読み終わりました。余裕があれば次の <b>Section ${next.id}</b> へ（教科書タブ）。</div>` : ""}
     ${secs.some(x => LEC[x.id]) ? `<div class="mt"><button class="btn sec" onclick="startLecture(${JSON.stringify(secs.map(x => x.id)).replace(/"/g, "'")})">🎧 今日の範囲を講義で聞く（教科書がない時に）</button></div>` : ""}
-    <div class="small mt">10/25までに1周するペースで割り振っています。遅れても、残りの日数で自動で組み直します。</div></div>`;
+    <div class="small mt">${p.sync ? `今日解く問題が出る範囲です（読む・聞く・解くを同じ範囲に）。このペースで<b>${mdj(readEnd())}ごろ</b>に教科書も問題も1周します。` : `${mdj(readEnd())}までに1周するペースで割り振っています。遅れても、残りの日数で自動で組み直します。`}</div></div>`;
 }
 function SecRow(x) {
   const qs = secQs(x.id), n = qs.length, r = S.read[x.id];
@@ -1277,7 +1291,8 @@ function Numbers() {
 (async () => {
   renderTabs();
   await loadQuestions();
-  if (S._toPd200) { delete S._toPd200; setPerDay(200); } // 今日の分を200問に組み直す（解いた分はそのまま）
+  if (S._toPd200) { delete S._toPd200; setPerDay(200); }
+  if (S.readPlan && !S.readPlan.sync) S.readPlan = null; // 今日読む所を「今日解く範囲」に合わせて組み直す // 今日の分を200問に組み直す（解いた分はそのまま）
   if (S.cur && !S.cur.done) view = "mock";
   else if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null)) view = "past";
   render();
