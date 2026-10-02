@@ -118,7 +118,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-02-v2.3-resume";
+const APP_VERSION = "2026-10-02-v2.4-range";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -744,7 +744,8 @@ function MiniPlayer() {
 // ---------- 今日の範囲を聞いてから解く ----------
 function todaySecs() {
   const p = todayPlan(), ids = (p.newLeft.length ? p.newLeft : p.due);
-  const secs = [...new Set(ids.map(id => QM[id]?.sec).filter(Boolean))];
+  const rp = S.readPlan && S.readPlan.date === today() && S.readPlan.sync ? S.readPlan.ids.filter(id => !S.read[id]) : [];
+  const secs = [...new Set([...ids.map(id => QM[id]?.sec), ...rp].filter(Boolean))];
   return secs.filter(id => LEC[id]).sort((a, b) => (SECM[a]?.order ?? 999) - (SECM[b]?.order ?? 999));
 }
 function startTodayLecture() {
@@ -837,7 +838,7 @@ function ReadToday() {
     <div class="small">教科書 p.${secs[0].page}〜${last.page + last.pages - 1}（${pages}ページ）</div>
     ${secs.map(SecRow).join("")}
     ${done === secs.length && next ? `<div class="res ok">今日の分は読み終わりました。余裕があれば次の <b>Section ${next.id}</b> へ（教科書タブ）。</div>` : ""}
-    ${secs.some(x => LEC[x.id]) ? `<div class="mt"><button class="btn sec" onclick="startLecture(${JSON.stringify(secs.map(x => x.id)).replace(/"/g, "'")})">🎧 今日の範囲を講義で聞く（教科書がない時に）</button></div>` : ""}
+    <div class="mt btns">${TodayListenBtn()}</div>
     <div class="small mt">${p.sync ? `今日解く問題が出る範囲です（読む・聞く・解くを同じ範囲に）。このペースで<b>${mdj(readEnd())}ごろ</b>に教科書も問題も1周します。` : `${mdj(readEnd())}までに1周するペースで割り振っています。遅れても、残りの日数で自動で組み直します。`}</div></div>`;
 }
 function SecRow(x) {
