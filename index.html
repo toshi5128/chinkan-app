@@ -118,7 +118,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-02-v2.4-range";
+const APP_VERSION = "2026-10-02-v2.5-keep";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -277,7 +277,6 @@ function renderTabs() {
 }
 function go(v) {
   if (v !== view) { TTS.stop(); if (view === "listen") stopListen(); if (view === "lecture" && !(LV && LV.audio)) stopLecture(); }
-  if (view === "study" && sess && v !== "study") sess = null;
   view = v; render(); window.scrollTo(0, 0);
 }
 function render() {
@@ -313,7 +312,7 @@ function Home() {
   <div class="card">
     <h2>今日の分（一問一答）</h2>
     ${todo ? `<div class="row small"><span class="grow">復習 <b class="num">${p.due.length}</b>問 ＋ 新しい問題 <b class="num">${p.newLeft.length}</b>問</span><span>今日 ${L.n}問解いた</span></div>
-      <div class="btns mt">${TodayListenBtn()}<button class="btn" onclick="startToday()">▶ すぐ解く（${todo}問）</button></div>`
+      <div class="btns mt">${sess && sess.i < sess.ids.length ? `<button class="btn" onclick="go('study')">▶ 続きから（${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}問目）</button>` : ""}${TodayListenBtn()}<button class="btn ${sess && sess.i < sess.ids.length ? "ghost" : ""}" onclick="startToday()">▶ ${sess && sess.i < sess.ids.length ? `今日の分を新しく始め直す（残り${todo}問）` : `すぐ解く（${todo}問）`}</button></div>`
       : `<div class="res ok"><b class="t">今日の分は完了です 🎉</b><br>今日 ${L.n}問・正答率 ${L.n ? Math.round(L.c / L.n * 100) : 0}%。</div>
         <div class="btns mt"><button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button></div>`}
     <details class="mt"><summary class="small">1日の新しい問題数：${S.newPerDay ? S.newPerDay + "問" : `おまかせ（約${autoQuota()}問）`}</summary><div class="mt">${PerDaySeg()}</div>
@@ -392,7 +391,7 @@ function startListen(ids, label) {
   if (!ids.length) { alertBox("該当する問題がありません。"); return; }
   if (AP.el && !AP.el.paused) AP.el.pause();
   LS = { ids, i: 0, label, phase: "q", playing: true };
-  sess = null; view = "listen"; render(); window.scrollTo(0, 0);
+  view = "listen"; render(); window.scrollTo(0, 0);
   keepAwake(true); playStep();
 }
 function playStep() {
@@ -474,7 +473,7 @@ function startLecture(ids, opt = {}) {
   const bundle = ids.length > 1;
   if (ids.every(id => AUD[id]?.lec)) { apStart(ids, { ...opt, bundle }); return; }
   LV = { ids, si: opt.si || 0, bi: opt.bi || 0, playing: TTS.ok, done: false, label: opt.label || "", bundle, mix: bundle && (opt.mix ?? S.tts.lecMix), q: null, thenToday: !!opt.thenToday };
-  sess = null; view = "lecture"; render(); window.scrollTo(0, 0);
+  view = "lecture"; render(); window.scrollTo(0, 0);
   if (TTS.ok) { keepAwake(true); lecPlay(true); }
 }
 function lecSavePos() {
@@ -601,7 +600,7 @@ function apStart(ids, opt) {
   let ii = opt.ii ?? (opt.si ? items.findIndex(x => x.sec === ids[opt.si]) : 0); if (ii < 0) ii = 0;
   const autoplay = opt.autoplay !== false;
   LV = { audio: true, ids, items, ii, si: ids.indexOf(items[ii].sec), playing: autoplay, done: false, label: opt.label || "", bundle: opt.bundle, mix, thenToday: !!opt.thenToday, restoring: !autoplay };
-  if (autoplay) { sess = null; view = "lecture"; }
+  if (autoplay) { view = "lecture"; }
   render(); if (autoplay) window.scrollTo(0, 0);
   apLoad(ii, opt.t || 0, autoplay);
 }
@@ -879,10 +878,14 @@ function Book() {
 }
 
 // ---------- 一問一答 ----------
+function saveSess() {
+  S.sess = sess && sess.i < sess.ids.length ? { ...sess, date: today() } : null; save();
+}
+function endSess() { sess = null; S.sess = null; save(); }
 function startSession(ids, label) {
   if (AP.el && !AP.el.paused) AP.el.pause();
   if (!ids.length) { alertBox("該当する問題がありません。"); return; }
-  sess = { ids, i: 0, label, ans: null, ok: 0, done: 0, requeued: {} };
+  sess = { ids, i: 0, label, ans: null, ok: 0, done: 0, requeued: {} }; saveSess();
   view = "study"; render(); window.scrollTo(0, 0);
   if (S.tts.auto) sayQ();
 }
@@ -905,7 +908,7 @@ function Study() {
       <div class="hero" style="justify-content:center"><b class="num">${rate}</b><span>%</span></div>
       <div class="small">${sess.label}：${sess.done}問中 ${sess.ok}問正解</div>
       <div class="btns mt">${todayPlan().due.length + todayPlan().newLeft.length ? `<button class="btn" onclick="startToday()">▶ 今日の分の続き</button>` : `<button class="btn" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}
-        <button class="btn ghost" onclick="go('home')">ホームへ</button><button class="btn ghost" onclick="sess=null;render()">ほかの問題を解く</button></div></div>`;
+        <button class="btn ghost" onclick="go('home')">ホームへ</button><button class="btn ghost" onclick="endSess();render()">ほかの問題を解く</button></div></div>`;
   }
   const q = QM[sess.ids[sess.i]], c = card(q.id), A = AREAS[q.area];
   const answered = sess.ans !== null, ok = answered && sess.ans === q.a;
@@ -929,7 +932,8 @@ function Study() {
       </div>
       <button class="btn mt" onclick="nextQ()">次へ ▶</button>` : ""}
   </div>
-  <div class="center"><button class="linkbtn" onclick="sess.ids=sess.ids.slice(0,sess.i);render()">ここでやめる</button></div>`;
+  <div class="center"><button class="linkbtn" onclick="sess.ids=sess.ids.slice(0,sess.i);saveSess();render()">ここでやめる</button></div>
+  <div class="center small">他の画面に行っても、アプリを閉じても、この問題から続きができます。</div><div></div>`;
 }
 function answer(v) {
   const q = QM[sess.ids[sess.i]]; const ok = v === q.a;
@@ -937,7 +941,7 @@ function answer(v) {
   record(q.id, ok);
   // 間違えた問題は、5問あとにもう一度（1セッション1回まで）
   if (!ok && !sess.requeued[q.id]) { sess.requeued[q.id] = 1; sess.ids.splice(Math.min(sess.ids.length, sess.i + 6), 0, q.id); }
-  render();
+  saveSess(); render();
   if (S.tts.auto) TTS.speak(aSpeech(q, ok)); else TTS.stop();
 }
 function luck() {
@@ -949,7 +953,7 @@ function luck() {
   nextQ();
 }
 function toggleStar(id) { const c = S.cards[id]; if (!c) return; c.star = !c.star; save(); render(); }
-function nextQ() { sess.i++; sess.ans = null; render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
+function nextQ() { sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
 function StudyMenu() {
   const p = todayPlan();
   const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
@@ -1307,6 +1311,8 @@ function Numbers() {
   if (S.lecPos && S.lecPos.at >= addDays(today(), -7) && S.lecPos.ids?.every(id => AUD[id]?.lec)) {
     const P = S.lecPos; apStart(P.ids, { ii: P.ii, si: P.si, t: P.t, label: P.label, mix: P.mix, thenToday: P.thenToday, bundle: P.ids.length > 1, autoplay: false });
   } // 今日読む所を「今日解く範囲」に合わせて組み直す // 今日の分を200問に組み直す（解いた分はそのまま）
+  if (S.sess && S.sess.date === today() && S.sess.i < S.sess.ids.length && S.sess.ids.every(id => QM[id])) { sess = { ...S.sess }; view = "study"; }
+  else if (S.sess) { S.sess = null; save(); }
   if (S.cur && !S.cur.done) view = "mock";
   else if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null)) view = "past";
   render();
