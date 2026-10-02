@@ -118,7 +118,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-02-v2.2-sync";
+const APP_VERSION = "2026-10-02-v2.3-resume";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -478,8 +478,8 @@ function startLecture(ids, opt = {}) {
   if (TTS.ok) { keepAwake(true); lecPlay(true); }
 }
 function lecSavePos() {
-  if (!LV || !LV.bundle) return;
-  S.lecPos = { ids: LV.ids, si: LV.si, bi: LV.bi, label: LV.label, mix: LV.mix, at: today() }; save();
+  if (!LV) return;
+  S.lecPos = { ids: LV.ids, si: LV.si, bi: LV.bi, label: LV.label, mix: LV.mix, thenToday: LV.thenToday, at: today() }; save();
 }
 function lecPlay(announce) {
   if (!LV || !LV.playing) return;
@@ -499,7 +499,7 @@ function lecNextSec() {
   if (!LV) return;
   const id = LV.ids[LV.si];
   if (LV.si < LV.ids.length - 1) { LV.si++; LV.bi = 0; LV.q = null; lecPlay(true); return; }
-  LV.playing = false; LV.done = true; LV.q = null; keepAwake(false); if (LV.bundle) { S.lecPos = null; save(); } render();
+  LV.playing = false; LV.done = true; LV.q = null; keepAwake(false); S.lecPos = null; save(); render();
   if (LV.thenToday) { TTS.speak("今日の範囲の講義は、ここまでです。続けて、今日の問題を解きましょう。", () => { if (LV && LV.done) todayAfterLecture(); }); return; }
   {
     if (S.tts.lecQuiz && LV.ids.length === 1 && secQs(id).length) TTS.speak("講義はここまでです。続けて、問題を解きましょう。", () => { if (LV && LV.done) lecQuiz(id); });
@@ -586,7 +586,7 @@ function apEl() {
   const a = AP.el = new Audio(); a.preload = "auto";
   a.addEventListener("ended", () => apNext());
   a.addEventListener("timeupdate", apTick);
-  a.addEventListener("play", () => { if (LV) { LV.playing = true; LV.done = false; } apMedia(); render(); });
+  a.addEventListener("play", () => { if (LV) { LV.playing = true; LV.done = false; LV.restoring = false; } apMedia(); render(); });
   a.addEventListener("pause", () => { if (LV) LV.playing = false; apSavePos(true); render(); });
   a.addEventListener("loadedmetadata", () => { a.playbackRate = S.tts.rate; if (AP.seekTo) { a.currentTime = Math.min(AP.seekTo, a.duration - 1); AP.seekTo = 0; } });
   a.addEventListener("error", () => { if (LV && LV.audio) alertBox("音声ファイルを読み込めませんでした。電波の良い所でもう一度お試しください。"); });
@@ -599,20 +599,23 @@ function apStart(ids, opt) {
   const items = ids.flatMap(id => [{ sec: id, kind: "lec" }, ...(mix && AUD[id]?.q ? [{ sec: id, kind: "q" }] : [])]);
   // 続きから：古い形式（si）にも対応
   let ii = opt.ii ?? (opt.si ? items.findIndex(x => x.sec === ids[opt.si]) : 0); if (ii < 0) ii = 0;
-  LV = { audio: true, ids, items, ii, si: ids.indexOf(items[ii].sec), playing: true, done: false, label: opt.label || "", bundle: opt.bundle, mix, thenToday: !!opt.thenToday };
-  sess = null; view = "lecture"; render(); window.scrollTo(0, 0);
-  apLoad(ii, opt.t || 0);
+  const autoplay = opt.autoplay !== false;
+  LV = { audio: true, ids, items, ii, si: ids.indexOf(items[ii].sec), playing: autoplay, done: false, label: opt.label || "", bundle: opt.bundle, mix, thenToday: !!opt.thenToday, restoring: !autoplay };
+  if (autoplay) { sess = null; view = "lecture"; }
+  render(); if (autoplay) window.scrollTo(0, 0);
+  apLoad(ii, opt.t || 0, autoplay);
 }
-function apLoad(ii, t = 0) {
+function apLoad(ii, t = 0, play = true) {
   const a = apEl(); LV.ii = ii; LV.si = LV.ids.indexOf(LV.items[ii].sec); AP.lastBlock = -1;
-  AP.seekTo = t; a.src = apSrc(LV.items[ii]); a.playbackRate = S.tts.rate;
-  a.play().catch(() => { LV.playing = false; render(); });
-  apMedia(); render(); lecScroll();
+  AP.seekTo = t; AP.resumeAt = t; a.src = apSrc(LV.items[ii]); a.playbackRate = S.tts.rate;
+  if (play) a.play().catch(() => { LV.playing = false; render(); });
+  else { a.preload = "metadata"; LV.playing = false; }
+  apMedia(); render(); if (play) lecScroll();
 }
 function apNext() {
   if (!LV || !LV.audio) return;
   if (LV.ii < LV.items.length - 1) { apLoad(LV.ii + 1); return; }
-  LV.playing = false; LV.done = true; if (LV.bundle) { S.lecPos = null; save(); }
+  LV.playing = false; LV.done = true; S.lecPos = null; save();
   render();
   const id = LV.items[LV.ii].sec;
   // 今日の範囲を聞き終えたら、そのまま今日の分を解く（画面を見ていない時は、戻った時にボタンを出す）
@@ -622,6 +625,7 @@ function apNext() {
 }
 function apToggle() {
   const a = apEl(); if (!LV) return;
+  LV.restoring = false;
   if (LV.done) { LV.done = false; apLoad(0); return; }
   if (a.paused) a.play().catch(() => {}); else a.pause();
 }
@@ -635,9 +639,9 @@ function apSkip(sec) { const a = apEl(); a.currentTime = Math.max(0, Math.min((a
 function apGoSec(i) { const ii = LV.items.findIndex(x => x.sec === LV.ids[i] && x.kind === "lec"); if (ii >= 0) apLoad(ii); }
 function apStop() { if (AP.el) { AP.el.pause(); AP.el.removeAttribute("src"); AP.el.load(); } if ("mediaSession" in navigator) navigator.mediaSession.metadata = null; }
 function apSavePos(force) {
-  if (!LV || !LV.audio || !LV.bundle || LV.done) return;
+  if (!LV || !LV.audio || LV.done || LV.restoring) return;
   const now = Date.now(); if (!force && now - AP.lastSave < 5000) return; AP.lastSave = now;
-  S.lecPos = { ids: LV.ids, ii: LV.ii, si: LV.si, t: Math.floor(AP.el?.currentTime || 0), label: LV.label, mix: LV.mix, at: today() }; save();
+  S.lecPos = { ids: LV.ids, ii: LV.ii, si: LV.si, t: Math.floor(AP.el?.currentTime || 0), label: LV.label, mix: LV.mix, thenToday: LV.thenToday, at: today() }; save();
 }
 // 講義の文章のどこを読んでいるか：文字数の割合から推定（目安）
 function apParts(it) {
@@ -711,6 +715,7 @@ function AudioLecture() {
     <button onclick="lecMove(1)" aria-label="次へ">⏭</button>
     <button onclick="apSkip(15)" aria-label="15秒進む" style="font-size:14px">15↻</button>
   </div>
+  <div class="center small" style="margin-top:4px">${LV.done ? "最初から聞き直す" : LV.playing ? "⏸で一時停止（止めた所は自動で保存）" : `▶で${LV.restoring ? "前回の続き" : "止めた所"}から再生`}</div>
   <div class="card mt">
     ${n ? `<button class="btn" onclick="lecQuiz('${id}')">✏️ このSectionの問題を解く（10問・苦手優先）</button>` : ""}
     <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
@@ -721,13 +726,18 @@ function AudioLecture() {
   <div class="center"><button class="linkbtn" onclick="stopLecture();go('book')">講義をやめる</button></div>`;
 }
 // ほかの画面にいる時の小さな再生バー
+const mmss = x => `${Math.floor(x / 60)}分${String(Math.floor(x % 60)).padStart(2, "0")}秒`;
 function MiniPlayer() {
   if (!LV || !LV.audio || view === "lecture") return "";
   const it = apItem(); if (!it) return "";
-  return `<div class="card" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--brandbg)">
-    <button class="spk on" style="width:40px;height:40px;border-radius:50%;padding:0;font-size:16px" onclick="lecToggle()">${LV.playing ? "⏸" : "▶"}</button>
-    <div class="grow" onclick="go('lecture')" style="cursor:pointer;min-width:0"><div style="font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🎧 ${esc(it.sec)} ${esc(SECM[it.sec]?.title || "")}${it.kind === "q" ? "（確認問題）" : ""}</div>
-      <div class="small">${LV.done ? "おわり" : LV.playing ? "再生中" : "一時停止"}・タップで開く</div></div>
+  const t = AP.el && AP.el.currentTime ? AP.el.currentTime : (AP.resumeAt || 0);
+  const state = LV.done ? "聞き終わりました" : LV.playing ? "再生中" : `一時停止中・${mmss(t)}から再開`;
+  return `<div class="card" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--brandbg);border-color:var(--brand)">
+    <button class="spk on" style="width:48px;height:48px;border-radius:50%;padding:0;font-size:20px;flex:none" onclick="lecToggle()" aria-label="${LV.playing ? "一時停止" : "再生"}">${LV.playing ? "⏸" : "▶"}</button>
+    <div class="grow" onclick="go('lecture')" style="cursor:pointer;min-width:0">
+      ${LV.restoring ? `<div class="small" style="color:var(--brand);font-weight:700">▶ 前回の続きから聞けます</div>` : ""}
+      <div style="font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🎧 ${esc(it.sec)} ${esc(SECM[it.sec]?.title || "")}${it.kind === "q" ? "（確認問題）" : ""}</div>
+      <div class="small">${state}${LV.ids.length > 1 ? `・${LV.ii + 1}/${LV.items.length}本目` : ""}・タップで講義画面</div></div>
     <button class="linkbtn" onclick="stopLecture();render()" aria-label="閉じる">✕</button></div>`;
 }
 
@@ -769,7 +779,7 @@ function bundleIds(kind) {
 }
 const BUNDLE_LABEL = k => k === "all" ? "全範囲" : k === "weak" ? "苦手Section" : k === "unread" ? "まだ読んでいない所" : k === "read" ? "読んだ所の復習" : `CHAPTER${k}`;
 function startBundle(kind) { const ids = bundleIds(kind); if (!ids.length) { alertBox("該当するSectionがありません。"); return; } startLecture(ids, { label: BUNDLE_LABEL(kind), mix: S.tts.lecMix }); }
-function resumeBundle() { const P = S.lecPos; if (!P) return; startLecture(P.ids, { si: P.si, bi: P.bi, ii: P.ii, t: P.t, label: P.label, mix: P.mix }); }
+function resumeBundle() { const P = S.lecPos; if (!P) return; startLecture(P.ids, { si: P.si, bi: P.bi, ii: P.ii, t: P.t, label: P.label, mix: P.mix, thenToday: P.thenToday }); }
 function BundleCard() {
   if (!Object.keys(LEC).length) return "";
   const P = S.lecPos, mix = S.tts.lecMix;
@@ -1292,7 +1302,10 @@ function Numbers() {
   renderTabs();
   await loadQuestions();
   if (S._toPd200) { delete S._toPd200; setPerDay(200); }
-  if (S.readPlan && !S.readPlan.sync) S.readPlan = null; // 今日読む所を「今日解く範囲」に合わせて組み直す // 今日の分を200問に組み直す（解いた分はそのまま）
+  if (S.readPlan && !S.readPlan.sync) S.readPlan = null;
+  if (S.lecPos && S.lecPos.at >= addDays(today(), -7) && S.lecPos.ids?.every(id => AUD[id]?.lec)) {
+    const P = S.lecPos; apStart(P.ids, { ii: P.ii, si: P.si, t: P.t, label: P.label, mix: P.mix, thenToday: P.thenToday, bundle: P.ids.length > 1, autoplay: false });
+  } // 今日読む所を「今日解く範囲」に合わせて組み直す // 今日の分を200問に組み直す（解いた分はそのまま）
   if (S.cur && !S.cur.done) view = "mock";
   else if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null)) view = "past";
   render();
