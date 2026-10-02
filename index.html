@@ -118,7 +118,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-02-v2.6-heard";
+const APP_VERSION = "2026-10-02-v2.7-progress";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -238,7 +238,7 @@ function todayPlan() {
   }
   const newLeft = S.plan.newIds.filter(id => QM[id] && !card(id));
   const due = Q.filter(q => { const c = card(q.id); return c && c.due <= t; }).sort((a, b) => card(a.id).due.localeCompare(card(b.id).due)).map(q => q.id);
-  return { newLeft, due, newTotal: S.plan.newIds.length };
+  return { newLeft, due, newTotal: S.plan.newIds.length, newDone: S.plan.newIds.length - newLeft.length };
 }
 
 function record(id, ok) {
@@ -312,8 +312,9 @@ function Home() {
   ${ReadToday()}
   <div class="card">
     <h2>今日の分（一問一答）</h2>
-    ${todo ? `<div class="row small"><span class="grow">復習 <b class="num">${p.due.length}</b>問 ＋ 新しい問題 <b class="num">${p.newLeft.length}</b>問</span><span>今日 ${L.n}問解いた</span></div>
-      <div class="btns mt">${sess && sess.i < sess.ids.length ? `<button class="btn" onclick="go('study')">▶ 続きから（${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}問目）</button>` : ""}${TodayListenBtn()}<button class="btn ${sess && sess.i < sess.ids.length ? "ghost" : ""}" onclick="startToday()">▶ ${sess && sess.i < sess.ids.length ? `今日の分を新しく始め直す（残り${todo}問）` : `すぐ解く（${todo}問）`}</button></div>`
+    ${TodayProgress()}
+    ${todo ? `
+      <div class="btns mt">${sess && sess.i < sess.ids.length ? `<button class="btn" onclick="go('study')">▶ 続きから（${sess.label === "今日の分" ? `新しい問題 ${p.newDone}/${p.newTotal}問まで解いた` : `${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}問目`}）</button>` : ""}${TodayListenBtn()}<button class="btn ${sess && sess.i < sess.ids.length ? "ghost" : ""}" onclick="startToday()">▶ ${sess && sess.i < sess.ids.length ? `今日の分を新しく始め直す（残り${todo}問）` : `すぐ解く（${todo}問）`}</button></div>`
       : `<div class="res ok"><b class="t">今日の分は完了です 🎉</b><br>今日 ${L.n}問・正答率 ${L.n ? Math.round(L.c / L.n * 100) : 0}%。</div>
         <div class="btns mt"><button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button></div>`}
     <details class="mt"><summary class="small">1日の新しい問題数：${S.newPerDay ? S.newPerDay + "問" : `おまかせ（約${autoQuota()}問）`}</summary><div class="mt">${PerDaySeg()}</div>
@@ -749,6 +750,18 @@ function MiniPlayer() {
     <button class="linkbtn" onclick="stopLecture();render()" aria-label="閉じる">✕</button></div>`;
 }
 
+// ---------- 今日の進み具合 ----------
+function TodayProgress() {
+  const p = todayPlan(), L = S.log[today()] || { n: 0, c: 0 };
+  const pct = p.newTotal ? Math.round(p.newDone / p.newTotal * 100) : 100;
+  return `<div style="margin:4px 0 2px">
+    <div class="row"><span class="grow" style="font-size:14px">新しい問題 <b class="num" style="font-size:20px;color:var(--brand)">${p.newDone}</b><span class="num">/${p.newTotal}問</span>${p.newTotal && !p.newLeft.length ? " ✓" : ""}</span>
+      <span class="small num">${pct}%</span></div>
+    <div class="bar mt" style="height:10px"><i style="width:${pct}%;background:var(--brand)"></i></div>
+    <div class="row small mt"><span class="grow">復習 残り <b class="num">${p.due.length}</b>問</span><span>今日解いた合計 <b class="num">${L.n}</b>問${L.n ? `・正答 ${Math.round(L.c / L.n * 100)}%` : ""}</span></div>
+  </div>`;
+}
+
 // ---------- 今日の範囲を聞いてから解く ----------
 function todaySecs() {
   const p = todayPlan(), ids = (p.newLeft.length ? p.newLeft : p.due);
@@ -926,7 +939,7 @@ function Study() {
   const answered = sess.ans !== null, ok = answered && sess.ans === q.a;
   return `
   <div class="prog"><i style="width:${sess.i / sess.ids.length * 100}%"></i></div>
-  <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}</span>
+  <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}${(() => { const tp = todayPlan(); return tp.newTotal ? `<span style="margin-left:8px;color:var(--brand);font-weight:700">今日 ${tp.newDone}/${tp.newTotal}</span>` : ""; })()}</span>
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
@@ -972,7 +985,7 @@ function StudyMenu() {
   const star = Q.filter(q => card(q.id)?.star).length;
   return `
   ${WeakCard(3)}
-  <div class="card"><h2>今日の分</h2><div class="small">復習${p.due.length}問＋新しい問題${p.newLeft.length}問</div>
+  <div class="card"><h2>今日の分</h2>${TodayProgress()}
     <div class="btns mt">${p.due.length + p.newLeft.length ? `${TodayListenBtn()}<button class="btn" onclick="startToday()">▶ すぐ解く</button>` : `<button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}</div>
     <div class="small mt">1日の新しい問題数</div><div class="mt">${PerDaySeg()}</div></div>
   <div class="card"><h2>分野を選んで解く（30問ずつ）</h2>
