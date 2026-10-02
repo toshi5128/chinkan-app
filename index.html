@@ -118,7 +118,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-02-v2.5-keep";
+const APP_VERSION = "2026-10-02-v2.6-heard";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -154,6 +154,7 @@ function load() {
   s.newPerDay = s.newPerDay ?? 200; // 1日の新しい問題数（0＝おまかせ）。初期値は200問
   if (!s.pd200) { s.pd200 = 1; s._toPd200 = s.newPerDay !== 200; s.newPerDay = 200; }
   s.tts = Object.assign({ auto: true, rate: 1.2, think: 4, lecQuiz: true, lecMix: true }, s.tts || {});
+  s.heard = s.heard || {};   // 講義を最後まで聞いた回数：Section → {n, last}
   s.lecPos = s.lecPos || null; // まとめて聞くの続き（どの一覧の、どこまで） // 読み上げの設定
   s.cur = s.cur || null;     // 受験中の模試
   return s;
@@ -490,6 +491,7 @@ function lecPlay(announce) {
     if (!LV || !LV.playing) return;
     if (LV.bi < bl.length - 1) { LV.bi++; lecPlay(false); return; }
     // Sectionを聞き終えた：まとめて聞く＋問題はさみなら、確認問題を5問（聞き流し形式）
+    markHeard(id); (LV.heardNow = LV.heardNow || []).push(id);
     if (LV.mix && secQs(id).length) { lecStartQ(id); return; }
     lecNextSec();
   });
@@ -559,7 +561,7 @@ function Lecture() {
     ${qq ? `<div class="qtext">${esc(qq.q)}</div>${Qs.phase === "a" ? `<div class="res ${qq.a ? "ok" : "ng"}">答えは <b>${qq.a ? "○（正しい）" : "×（誤り）"}</b><br>${esc(qq.exp)}</div>` : `<div class="small">考える時間のあと、答えを読み上げます。</div>`}` : `<div class="qtext">ここで確認問題です。</div>`}
     <div class="mt"><button class="btn ghost" onclick="lecMove(1)">問題をとばして次のSectionへ ⏭</button></div></div>` : ""}
   ${LV.ids.length > 1 ? `<div class="seg" style="margin-bottom:10px">${LV.ids.map((s2, i) => `<button class="${i === LV.si ? "on" : ""}" onclick="lecGoSec(${i})">${s2}</button>`).join("")}</div>` : ""}
-  <div class="card"><div class="small">教科書 p.${x?.page || ""}〜</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
+  <div class="card"><div class="small">教科書 p.${x?.page || ""}〜 ・ 🎧 このSectionは今回で${heardN(id) + (LV.heardNow?.includes(id) ? 0 : 1)}回目</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
     ${bl.map((b, i) => `<div ${i === LV.bi && !Qs ? 'id="lecCur"' : ""} onclick="lecJump(${i})" style="cursor:pointer;border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${i === LV.bi ? "background:var(--brandbg)" : ""}">
       <div style="font-weight:700;font-size:14px;color:${i === LV.bi ? "var(--brand)" : "var(--ink)"}">${esc(b.h)}</div>
       <div style="font-size:15px;line-height:1.85;margin-top:3px">${emph(b.t)}</div></div>`).join("")}
@@ -577,6 +579,12 @@ function Lecture() {
   ${LV.thenToday ? `<div class="card mt"><button class="btn" onclick="todayAfterLecture()">✏️ 今日の問題を解く${LV.done ? "" : "（講義をやめて）"}</button></div>` : ""}
   <div class="center"><button class="linkbtn" onclick="go('book')">講義をやめる</button></div>`;
 }
+
+// ---------- 講義を聞いた回数 ----------
+function markHeard(sec) { const h = S.heard[sec] || { n: 0 }; h.n++; h.last = today(); S.heard[sec] = h; save(); }
+const heardN = sec => S.heard[sec]?.n || 0;
+const heardToday = sec => S.heard[sec]?.last === today();
+const heardTag = sec => { const n = heardN(sec); return n ? `🎧${n}回${heardToday(sec) ? "（今日✓）" : ""}` : "🎧未"; };
 
 // ---------- 音声ファイルで再生（画面を消しても・他のアプリでも聞ける） ----------
 const AP = { el: null, lastSave: 0, lastBlock: -1 };
@@ -613,6 +621,7 @@ function apLoad(ii, t = 0, play = true) {
 }
 function apNext() {
   if (!LV || !LV.audio) return;
+  const fin = LV.items[LV.ii]; if (fin && fin.kind === "lec") { markHeard(fin.sec); (LV.heardNow = LV.heardNow || []).push(fin.sec); }
   if (LV.ii < LV.items.length - 1) { apLoad(LV.ii + 1); return; }
   LV.playing = false; LV.done = true; S.lecPos = null; save();
   render();
@@ -689,7 +698,7 @@ function AudioLecture() {
   let body;
   if (it.kind === "lec") {
     const bl = lecBlocks(id), bi = Math.max(0, pi - 1);
-    body = `<div class="card"><div class="small">教科書 p.${x?.page || ""}〜</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
+    body = `<div class="card"><div class="small">教科書 p.${x?.page || ""}〜 ・ 🎧 このSectionは今回で${heardN(id) + (LV.heardNow?.includes(id) ? 0 : 1)}回目</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
       ${bl.map((b, i) => `<div ${i === bi ? 'id="lecCur"' : ""} onclick="lecJump(${i})" style="cursor:pointer;border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${i === bi ? "background:var(--brandbg)" : ""}">
         <div style="font-weight:700;font-size:14px;color:${i === bi ? "var(--brand)" : "var(--ink)"}">${esc(b.h)}</div>
         <div style="font-size:15px;line-height:1.85;margin-top:3px">${emph(b.t)}</div></div>`).join("")}
@@ -720,7 +729,7 @@ function AudioLecture() {
     <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
     <div class="small mt">🔒 画面を消しても、ほかのアプリを使っていても再生が続きます（ロック画面のボタンでも操作できます）。この画面を離れても止まりません。</div>
     <div class="small mt">音声：VOICEVOX:No.7</div></div>
-  ${LV.thenToday ? `<div class="card mt" style="${LV.done ? "background:var(--okbg)" : ""}">${LV.done ? `<b>今日の範囲の講義はここまで。</b><div class="small">忘れないうちに、今日の問題を解きましょう。</div>` : `<div class="small">聞き終わると、そのまま今日の問題（${todayPlan().due.length + todayPlan().newLeft.length}問）が始まります。</div>`}
+  ${LV.thenToday ? `<div class="card mt" style="${LV.done ? "background:var(--okbg)" : ""}">${LV.done ? `<b>今日の範囲を聞きました ✓</b><div class="small">${(LV.heardNow || []).map(id => `${id}（${heardN(id)}回目）`).join("・")}<br>忘れないうちに、今日の問題を解きましょう。</div>` : `<div class="small">聞き終わると、そのまま今日の問題（${todayPlan().due.length + todayPlan().newLeft.length}問）が始まります。</div>`}
     <div class="mt"><button class="btn" onclick="todayAfterLecture()">✏️ 今日の問題を解く${LV.done ? "" : "（講義をやめて）"}</button></div></div>` : ""}
   <div class="center"><button class="linkbtn" onclick="stopLecture();go('book')">講義をやめる</button></div>`;
 }
@@ -755,7 +764,10 @@ function todayAfterLecture() { stopLecture(); startToday(); }
 function TodayListenBtn(cls = "sec") {
   const ids = todaySecs(); if (!ids.length) return "";
   const m = ids.reduce((x, id) => x + lecMin(id, false), 0);
-  return `<button class="btn ${cls}" onclick="startTodayLecture()">🎧 今日の範囲を聞いてから解く<br><span class="small" style="color:inherit;font-weight:400">${ids.length}本の講義（${ids.join("・")}）・${fmtMin(m)} → 終わったらそのまま問題へ</span></button>`;
+  const allToday = ids.every(heardToday), next = Math.min(...ids.map(heardN)) + 1;
+  return `<button class="btn ${cls}" onclick="startTodayLecture()">🎧 ${allToday ? `今日の範囲をもう一度聞く（${next}回目）` : `今日の範囲を聞いてから解く${next > 1 ? `（${next}回目）` : ""}`}<br>
+    <span class="small" style="color:inherit;font-weight:400">${ids.map(id => `${id}${heardToday(id) ? "✓" : ""}<span style="opacity:.75">(${heardN(id)})</span>`).join("・")}・${fmtMin(m)} → 終わったらそのまま問題へ</span></button>
+    ${allToday ? `<div class="small center" style="color:var(--ok);font-weight:700">✓ 今日の範囲はすべて聞きました（かっこ内は聞いた回数）</div>` : `<div class="small center">✓＝今日聞いた　（ ）＝これまでに聞いた回数</div>`}`;
 }
 // 画面を消して聞いていた → 戻ってきたら「解く」ボタンが出るように描き直す
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && LV && LV.done && LV.thenToday) render(); });
@@ -847,7 +859,7 @@ function SecRow(x) {
     <div class="row" style="align-items:flex-start">
       <button onclick="toggleRead('${x.id}')" aria-label="読んだ" style="border:2px solid ${r ? "var(--ok)" : "var(--sub)"};background:${r ? "var(--ok)" : "transparent"};color:#fff;border-radius:7px;width:26px;height:26px;flex:none;font-size:15px;line-height:1;padding:0">${r ? "✓" : ""}</button>
       <div class="grow"><div style="font-size:14.5px;line-height:1.5"><b class="num">${x.id}</b> ${esc(x.title)}</div>
-        <div class="small">p.${x.page}〜（${x.pages}ページ）${n ? `・問題 ${seen}/${n}` : ""}</div></div>
+        <div class="small">p.${x.page}〜（${x.pages}ページ）${n ? `・問題 ${seen}/${n}` : ""}${LEC[x.id] ? `・<span style="${heardToday(x.id) ? "color:var(--ok);font-weight:700" : ""}">${heardTag(x.id)}</span>` : ""}</div></div>
       ${LEC[x.id] ? `<button class="btn ghost" style="width:auto;padding:7px 10px;font-size:13px;flex:none" onclick="startLecture(['${x.id}'])" aria-label="講義を聞く">🎧</button>` : ""}
       ${n ? `<button class="btn ${r ? "" : "sec"}" style="width:auto;padding:7px 12px;font-size:13px;flex:none" onclick="startSec('${x.id}')">解く</button>` : ""}
     </div></div>`;
@@ -865,7 +877,7 @@ function Book() {
   const cur = openCh ?? (SECS.find(x => !S.read[x.id])?.ch || 1);
   return `
   <div class="card"><h2>${esc(BOOK)}</h2>
-    <div class="row small"><span class="grow">読んだ Section ${readN}/${SECS.length}</span><span class="num">${readPg}/${allPg}ページ</span></div>
+    <div class="row small"><span class="grow">読んだ Section ${readN}/${SECS.length}・🎧聞いた ${SECS.filter(x => heardN(x.id)).length}/${SECS.length}</span><span class="num">${readPg}/${allPg}ページ</span></div>
     <div class="bar mt"><i style="width:${allPg ? readPg / allPg * 100 : 0}%;background:var(--brand)"></i></div>
     <div class="small mt">読み終えたら□にチェック。「解く」でそのSectionの問題だけを出します。チェックしたSectionの問題は、翌日からの「今日の分」にも優先して入ります。</div>
     ${NUMS.length ? `<div class="mt"><button class="btn sec" onclick="go('numbers')">🔢 数字まとめ（${NUMS.length}項目）</button></div>` : ""}</div>
