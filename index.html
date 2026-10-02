@@ -118,7 +118,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-02-v2.0-emph";
+const APP_VERSION = "2026-10-02-v2.1-today";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -151,7 +151,8 @@ function load() {
   s.pastCur = s.pastCur || null;   // 解いている途中の過去問（答案用紙）
   s.pastLog = s.pastLog || [];     // 過去問の採点結果
   s.lastBackup = s.lastBackup || null;
-  s.newPerDay = s.newPerDay || 0; // 1日の新しい問題数（0＝おまかせ）
+  s.newPerDay = s.newPerDay ?? 200; // 1日の新しい問題数（0＝おまかせ）。初期値は200問
+  if (!s.pd200) { s.pd200 = 1; s._toPd200 = s.newPerDay !== 200; s.newPerDay = 200; }
   s.tts = Object.assign({ auto: true, rate: 1.2, think: 4, lecQuiz: true, lecMix: true }, s.tts || {});
   s.lecPos = s.lecPos || null; // まとめて聞くの続き（どの一覧の、どこまで） // 読み上げの設定
   s.cur = s.cur || null;     // 受験中の模試
@@ -312,7 +313,7 @@ function Home() {
   <div class="card">
     <h2>今日の分（一問一答）</h2>
     ${todo ? `<div class="row small"><span class="grow">復習 <b class="num">${p.due.length}</b>問 ＋ 新しい問題 <b class="num">${p.newLeft.length}</b>問</span><span>今日 ${L.n}問解いた</span></div>
-      <div class="mt"><button class="btn" onclick="startToday()">▶ 今日の分をはじめる（${todo}問）</button></div>`
+      <div class="btns mt">${TodayListenBtn()}<button class="btn" onclick="startToday()">▶ すぐ解く（${todo}問）</button></div>`
       : `<div class="res ok"><b class="t">今日の分は完了です 🎉</b><br>今日 ${L.n}問・正答率 ${L.n ? Math.round(L.c / L.n * 100) : 0}%。</div>
         <div class="btns mt"><button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button></div>`}
     <details class="mt"><summary class="small">1日の新しい問題数：${S.newPerDay ? S.newPerDay + "問" : `おまかせ（約${autoQuota()}問）`}</summary><div class="mt">${PerDaySeg()}</div>
@@ -472,7 +473,7 @@ function startLecture(ids, opt = {}) {
   // 複数Sectionを通しで聞くときだけ「まとめて聞く」（続きの保存・問題はさみ）
   const bundle = ids.length > 1;
   if (ids.every(id => AUD[id]?.lec)) { apStart(ids, { ...opt, bundle }); return; }
-  LV = { ids, si: opt.si || 0, bi: opt.bi || 0, playing: TTS.ok, done: false, label: opt.label || "", bundle, mix: bundle && (opt.mix ?? S.tts.lecMix), q: null };
+  LV = { ids, si: opt.si || 0, bi: opt.bi || 0, playing: TTS.ok, done: false, label: opt.label || "", bundle, mix: bundle && (opt.mix ?? S.tts.lecMix), q: null, thenToday: !!opt.thenToday };
   sess = null; view = "lecture"; render(); window.scrollTo(0, 0);
   if (TTS.ok) { keepAwake(true); lecPlay(true); }
 }
@@ -499,6 +500,7 @@ function lecNextSec() {
   const id = LV.ids[LV.si];
   if (LV.si < LV.ids.length - 1) { LV.si++; LV.bi = 0; LV.q = null; lecPlay(true); return; }
   LV.playing = false; LV.done = true; LV.q = null; keepAwake(false); if (LV.bundle) { S.lecPos = null; save(); } render();
+  if (LV.thenToday) { TTS.speak("今日の範囲の講義は、ここまでです。続けて、今日の問題を解きましょう。", () => { if (LV && LV.done) todayAfterLecture(); }); return; }
   {
     if (S.tts.lecQuiz && LV.ids.length === 1 && secQs(id).length) TTS.speak("講義はここまでです。続けて、問題を解きましょう。", () => { if (LV && LV.done) lecQuiz(id); });
     else TTS.speak(LV.bundle ? `${LV.label ? LV.label + "の" : ""}講義は、ここまでです。おつかれさまでした。` : "講義はここまでです。おつかれさまでした。");
@@ -573,6 +575,7 @@ function Lecture() {
       <div class="row mt"><span class="grow small">聞き終わったら自動で問題へ</span><button class="spk ${S.tts.lecQuiz ? "on" : ""}" onclick="S.tts.lecQuiz=!S.tts.lecQuiz;save();render()">${S.tts.lecQuiz ? "ON" : "OFF"}</button></div>` : ""}
     <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
     <div class="small mt">講義は、教科書の範囲に沿ってこのアプリ用に書いた要点です（教科書の文章そのものではありません）。細かい所は教科書で確かめてください。</div></div>
+  ${LV.thenToday ? `<div class="card mt"><button class="btn" onclick="todayAfterLecture()">✏️ 今日の問題を解く${LV.done ? "" : "（講義をやめて）"}</button></div>` : ""}
   <div class="center"><button class="linkbtn" onclick="go('book')">講義をやめる</button></div>`;
 }
 
@@ -596,7 +599,7 @@ function apStart(ids, opt) {
   const items = ids.flatMap(id => [{ sec: id, kind: "lec" }, ...(mix && AUD[id]?.q ? [{ sec: id, kind: "q" }] : [])]);
   // 続きから：古い形式（si）にも対応
   let ii = opt.ii ?? (opt.si ? items.findIndex(x => x.sec === ids[opt.si]) : 0); if (ii < 0) ii = 0;
-  LV = { audio: true, ids, items, ii, si: ids.indexOf(items[ii].sec), playing: true, done: false, label: opt.label || "", bundle: opt.bundle, mix };
+  LV = { audio: true, ids, items, ii, si: ids.indexOf(items[ii].sec), playing: true, done: false, label: opt.label || "", bundle: opt.bundle, mix, thenToday: !!opt.thenToday };
   sess = null; view = "lecture"; render(); window.scrollTo(0, 0);
   apLoad(ii, opt.t || 0);
 }
@@ -612,6 +615,8 @@ function apNext() {
   LV.playing = false; LV.done = true; if (LV.bundle) { S.lecPos = null; save(); }
   render();
   const id = LV.items[LV.ii].sec;
+  // 今日の範囲を聞き終えたら、そのまま今日の分を解く（画面を見ていない時は、戻った時にボタンを出す）
+  if (LV.thenToday) { if (document.visibilityState === "visible") todayAfterLecture(); return; }
   // 1Sectionだけ聞いた時は、画面を見ていればそのまま問題へ
   if (!LV.bundle && S.tts.lecQuiz && secQs(id).length && document.visibilityState === "visible") lecQuiz(id);
 }
@@ -711,6 +716,8 @@ function AudioLecture() {
     <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
     <div class="small mt">🔒 画面を消しても、ほかのアプリを使っていても再生が続きます（ロック画面のボタンでも操作できます）。この画面を離れても止まりません。</div>
     <div class="small mt">音声：VOICEVOX:No.7</div></div>
+  ${LV.thenToday ? `<div class="card mt" style="${LV.done ? "background:var(--okbg)" : ""}">${LV.done ? `<b>今日の範囲の講義はここまで。</b><div class="small">忘れないうちに、今日の問題を解きましょう。</div>` : `<div class="small">聞き終わると、そのまま今日の問題（${todayPlan().due.length + todayPlan().newLeft.length}問）が始まります。</div>`}
+    <div class="mt"><button class="btn" onclick="todayAfterLecture()">✏️ 今日の問題を解く${LV.done ? "" : "（講義をやめて）"}</button></div></div>` : ""}
   <div class="center"><button class="linkbtn" onclick="stopLecture();go('book')">講義をやめる</button></div>`;
 }
 // ほかの画面にいる時の小さな再生バー
@@ -723,6 +730,25 @@ function MiniPlayer() {
       <div class="small">${LV.done ? "おわり" : LV.playing ? "再生中" : "一時停止"}・タップで開く</div></div>
     <button class="linkbtn" onclick="stopLecture();render()" aria-label="閉じる">✕</button></div>`;
 }
+
+// ---------- 今日の範囲を聞いてから解く ----------
+function todaySecs() {
+  const p = todayPlan(), ids = (p.newLeft.length ? p.newLeft : p.due);
+  const secs = [...new Set(ids.map(id => QM[id]?.sec).filter(Boolean))];
+  return secs.filter(id => LEC[id]).sort((a, b) => (SECM[a]?.order ?? 999) - (SECM[b]?.order ?? 999));
+}
+function startTodayLecture() {
+  const ids = todaySecs(); if (!ids.length) { startToday(); return; }
+  startLecture(ids, { label: "今日の範囲", mix: false, thenToday: true });
+}
+function todayAfterLecture() { stopLecture(); startToday(); }
+function TodayListenBtn(cls = "sec") {
+  const ids = todaySecs(); if (!ids.length) return "";
+  const m = ids.reduce((x, id) => x + lecMin(id, false), 0);
+  return `<button class="btn ${cls}" onclick="startTodayLecture()">🎧 今日の範囲を聞いてから解く<br><span class="small" style="color:inherit;font-weight:400">${ids.length}本の講義（${ids.join("・")}）・${fmtMin(m)} → 終わったらそのまま問題へ</span></button>`;
+}
+// 画面を消して聞いていた → 戻ってきたら「解く」ボタンが出るように描き直す
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && LV && LV.done && LV.thenToday) render(); });
 
 // ---------- まとめて聞く ----------
 // 1Sectionの目安の分数（日本語の読み上げは1倍速でおよそ1分360字）。問題5問は1問約35秒
@@ -906,7 +932,7 @@ function StudyMenu() {
   return `
   ${WeakCard(3)}
   <div class="card"><h2>今日の分</h2><div class="small">復習${p.due.length}問＋新しい問題${p.newLeft.length}問</div>
-    <div class="btns mt">${p.due.length + p.newLeft.length ? `<button class="btn" onclick="startToday()">▶ はじめる</button>` : `<button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}</div>
+    <div class="btns mt">${p.due.length + p.newLeft.length ? `${TodayListenBtn()}<button class="btn" onclick="startToday()">▶ すぐ解く</button>` : `<button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}</div>
     <div class="small mt">1日の新しい問題数</div><div class="mt">${PerDaySeg()}</div></div>
   <div class="card"><h2>分野を選んで解く（30問ずつ）</h2>
     ${Object.entries(AREAS).map(([a, A]) => { const s = areaStats(a);
@@ -1251,6 +1277,7 @@ function Numbers() {
 (async () => {
   renderTabs();
   await loadQuestions();
+  if (S._toPd200) { delete S._toPd200; setPerDay(200); } // 今日の分を200問に組み直す（解いた分はそのまま）
   if (S.cur && !S.cur.done) view = "mock";
   else if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null)) view = "past";
   render();
