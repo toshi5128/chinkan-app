@@ -118,7 +118,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-03-v3.0";
+const APP_VERSION = "2026-10-03-v3.1";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -772,17 +772,22 @@ function startDrill() {
 
 // ---------- 予想得点（○×の正解率 → 本番の4択の点数） ----------
 // 4択は4つの文をほぼ全部判断できないと取れない。個数・組合せ問題（約3割）は4つ全部。わからない問題も4分の1は当たる
+// 「今の正解率のまま全範囲をやったら何点か」を出す。まだ解いていない分野は、全体の正解率で埋める（当てずっぽう扱いにしない）
+// 解いた数が少ない分野は、全体の正解率に寄せてブレを抑える（10問ぶんの重み）
 function predict() {
-  let total = 0, seenAll = 0; const by = {};
+  const pAt = x => { const k = 0.72 * x ** 3 + 0.28 * x ** 4; return k + (1 - k) * 0.25; };
+  const st = {}; let seenAll = 0, accSum = 0;
+  for (const a of Object.keys(AREAS)) { st[a] = areaStats(a); seenAll += st[a].seen; if (st[a].acc != null) accSum += st[a].acc * st[a].seen; }
+  const overall = seenAll ? accSum / seenAll : 0.5;
+  let total = 0, raw = 0; const by = {};
   for (const [a, A] of Object.entries(AREAS)) {
-    const st = areaStats(a); seenAll += st.seen;
-    const acc = st.acc ?? 0.5, cov = st.total ? st.seen / st.total : 0;
-    const pAt = x => { const k = 0.72 * x ** 3 + 0.28 * x ** 4; return k + (1 - k) * 0.25; };
-    const pNow = cov * acc + (1 - cov) * 0.5;
+    const s = st[a], cov = s.total ? s.seen / s.total : 0, acc = s.acc ?? overall;
+    const pNow = (s.seen * acc + 10 * overall) / (s.seen + 10);
     const pts = A.mock * pAt(pNow), best = A.mock * pAt(Math.max(pNow, 0.95));
-    by[a] = { pts, gain: best - pts, acc: st.acc, cov }; total += pts;
+    raw += A.mock * pAt(cov * acc + (1 - cov) * 0.5);
+    by[a] = { pts, gain: best - pts, acc: s.acc, cov }; total += pts;
   }
-  return { total, by, seenAll };
+  return { total, raw, by, seenAll, overall };
 }
 function PredictCard() {
   const P = predict();
@@ -790,10 +795,10 @@ function PredictCard() {
   const score = Math.round(P.total), ok = score >= PASS_LINE;
   // まだ手を付けていない分野は計画どおり後で回るので、半分以上解いた分野の中から「苦手」を勧める
   const top = Object.entries(P.by).filter(([, b]) => b.cov >= 0.5 && b.acc != null && b.acc < 0.95).sort((x, y) => y[1].gain - x[1].gain).slice(0, 2).filter(([, b]) => b.gain >= 0.5);
-  return `<div class="card"><h2>予想得点（今の実力なら）</h2>
+  return `<div class="card"><h2>予想得点（今の正解率のままなら）</h2>
     <div class="row" style="align-items:baseline;gap:6px"><b class="num" style="font-size:40px;color:${ok ? "var(--ok)" : "var(--ng)"}">${score}</b><span>点</span><span class="grow"></span><span class="small">合格ライン ${PASS_LINE}点（${ok ? "到達" : `あと${PASS_LINE - score}点`}）</span></div>
     <div class="bar mt" style="height:10px;position:relative"><i style="width:${Math.min(100, score * 2)}%;background:${ok ? "var(--ok)" : "var(--ng)"}"></i></div>
-    <div class="small mt">○×の正解率を、本番の4択（個数問題を含む）に換算した目安です。○×で9割を超えると、本番でも合格ラインに届きやすくなります。${P.seenAll < Q.length ? `<br>まだ解いていない問題（${Q.length - P.seenAll}問）は「当てずっぽう」として計算しているので、一周するまでは低めに出ます。` : ""}</div>
+    <div class="small mt">今までの○×の正解率（${Math.round(P.overall * 100)}%）のまま全範囲を仕上げた場合の、本番4択（個数問題を含む）での目安です。○×で9割を超えると、合格ラインに届きやすくなります。${P.seenAll < Q.length ? `<br>まだ解いていない問題（${Q.length - P.seenAll}問）も同じ正解率で数えています。今日いきなり本番を受けたら（未着手を当てずっぽうにすると）約${Math.round(P.raw)}点です。` : ""}</div>
     ${top.length ? `<div class="mt" style="font-weight:700;font-size:14px">点を伸ばしやすい分野</div>${top.map(([a, b]) => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:8px"><span class="dot" style="background:${AREAS[a].color}"></span>
       <div class="grow" style="font-size:14px">${AREAS[a].name}<div class="small">正答率 ${b.acc == null ? "—" : Math.round(b.acc * 100) + "%"}・挑戦 ${Math.round(b.cov * 100)}%・伸びしろ 約+${b.gain.toFixed(1)}点</div></div>
       <button class="btn sec" style="width:auto;padding:7px 12px;font-size:13px" onclick="startArea('${a}','weak')">苦手を解く</button></div>`).join("")}` : `<div class="small mt">分野ごとに半分以上解き進めると、点を伸ばしやすい分野をここに出します。</div>`}</div>`;
