@@ -145,7 +145,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-05-v3.2";
+const APP_VERSION = "2026-10-05-v3.3";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -381,6 +381,8 @@ const TTS = {
     // 聞き取りやすい順（iPhone=Kyoko/O-ren、Android=Google、Windows=Nanami/Haruka）
     const pref = ["O-ren", "Kyoko", "Google", "Nanami", "Otoya", "Haruka", "Hattori"];
     this.voice = pref.map(n => vs.find(v => v.name.includes(n))).find(Boolean) || vs[0] || null;
+    // 会話の相方用に、別の日本語の声があれば使う（無ければ同じ声で高さだけ変える）
+    this.voice2 = ["Kyoko", "O-ren", "Nanami", "Haruka", "Google"].map(n => vs.find(v => v.name.includes(n) && v !== this.voice)).find(Boolean) || vs.find(v => v !== this.voice) || this.voice;
   },
   // 記号や略記を、耳で分かる言い方に
   clean(t) {
@@ -404,6 +406,25 @@ const TTS = {
       if (i >= parts.length) { onend && onend(); return; }
       const u = new SpeechSynthesisUtterance(parts[i]);
       u.lang = "ja-JP"; u.rate = S.tts.rate; if (this.voice) u.voice = this.voice;
+      u.onend = () => next(i + 1);
+      u.onerror = e => { if (e.error !== "interrupted" && e.error !== "canceled") next(i + 1); };
+      speechSynthesis.speak(u);
+    };
+    next(0);
+  },
+  // 会話の講義：進行役(A)は低め、相方(B)は高め＋別の声で、1行ずつ順に読む
+  speakLines(lines, onend) {
+    if (!this.ok) { onend && onend(); return; }
+    this.stop();
+    if (!this.voice) this.pickVoice();
+    const my = ++this.token;
+    const parts = lines.flatMap(([w, t]) => (this.clean(t).match(/[^。！？!?]+[。！？!?]*/g) || []).map(x => [w, x.trim()]).filter(x => x[1]));
+    const next = i => {
+      if (my !== this.token) return;
+      if (i >= parts.length) { onend && onend(); return; }
+      const [w, t] = parts[i], u = new SpeechSynthesisUtterance(t);
+      u.lang = "ja-JP"; u.rate = S.tts.rate; u.pitch = w === "B" ? 1.35 : 0.85;
+      const v = w === "B" ? this.voice2 : this.voice; if (v) u.voice = v;
       u.onend = () => next(i + 1);
       u.onerror = e => { if (e.error !== "interrupted" && e.error !== "canceled") next(i + 1); };
       speechSynthesis.speak(u);
@@ -543,14 +564,16 @@ function lecPlay(announce) {
   const id = LV.ids[LV.si], bl = lecBlocks(id), b = bl[LV.bi];
   lecSavePos(); render(); lecScroll();
   const head = announce && LV.bi === 0 ? `Section ${id.replace("-", "の")}、${SECM[id]?.title || ""}。` : "";
-  TTS.speak(head + (b.say || b.t), () => {
+  const after = () => {
     if (!LV || !LV.playing) return;
     if (LV.bi < bl.length - 1) { LV.bi++; lecPlay(false); return; }
     // Sectionを聞き終えた：まとめて聞く＋問題はさみなら、確認問題を5問（聞き流し形式）
     markHeard(id); (LV.heardNow = LV.heardNow || []).push(id);
     if (LV.mix && secQs(id).length) { lecStartQ(id); return; }
     lecNextSec();
-  });
+  };
+  if (b.lines) TTS.speakLines(head ? [["A", head], ...b.lines] : b.lines, after);
+  else TTS.speak(head + (b.say || b.t), after);
 }
 function lecNextSec() {
   if (!LV) return;
