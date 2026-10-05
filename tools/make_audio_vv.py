@@ -71,11 +71,13 @@ def split(t, n=180):  # 長い段落は文で区切る（エンジンの負担�
 
 def render(parts, wav_path):
     """parts: {"t", "spk"?} 話す / {"b": 秒} 間 / {"mark": 1} ここから次のかたまり。かたまりの開始秒のリストを返す"""
-    pcm = bytearray(); marks = []
+    global LINE_STARTS
+    pcm = bytearray(); marks = []; LINE_STARTS = []
     for p in parts:
         if "mark" in p: marks.append(round(len(pcm) / 2 / RATE, 2))
         elif "b" in p: pcm += b"\x00\x00" * int(RATE * p["b"])
         else:
+            LINE_STARTS.append(round(len(pcm) / 2 / RATE, 2))  # 吹き出し1つごとの話し始め（アプリが今読んでいる行に色を付ける）
             for chunk in split(p["t"]): pcm += synth(chunk, p.get("spk"))
     with wave.open(wav_path, "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(bytes(pcm))
@@ -116,8 +118,8 @@ if __name__ == "__main__":
             wav = os.path.join(TMP, f"vv_{kind}_{sid}.wav"); marks = render(parts, wav); to_mp3(wav, mp3); os.remove(wav)
             e = idx.setdefault(sid, {}); e[kind] = duration(mp3); e[kind + "_hash"] = h; e[kind + "_voice"] = tag
             if kind == "lec":
-                if talk: e["lec_marks"] = marks
-                else: e.pop("lec_marks", None)
+                if talk: e["lec_marks"] = marks; e["lec_lines"] = LINE_STARTS[1:]  # 先頭は題名なので除く
+                else: e.pop("lec_marks", None); e.pop("lec_lines", None)
             if kind == "q": e["q_ids"] = [q["id"] for q in quiz_ids(sid)]
             json.dump(idx, open(idx_path, "w", encoding="utf-8", newline="\n"), ensure_ascii=False, indent=1)
             print(f"{sid} {kind} {e[kind]}s  経過{int(time.time()-t0)}s  強調{EMPH_STAT}", flush=True)

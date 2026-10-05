@@ -29,6 +29,7 @@
 .tl.B .who{background:var(--warnbg)}
 .tl .say{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:7px 11px;font-size:15px;line-height:1.75;min-width:0;flex:0 1 auto;max-width:calc(100% - 40px);overflow-wrap:anywhere}
 .tl.B .say{background:var(--warnbg);border-color:transparent}
+.tl.now .say{outline:3px solid var(--brand);outline-offset:1px;font-weight:600}.tl.now .who{transform:scale(1.15);box-shadow:0 0 0 2px var(--brand)}
 .zu{border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:10px;background:var(--bg)}
 .zu .zt{font-size:13px;font-weight:800;color:var(--brand);margin-bottom:8px}
 .zrel{display:flex;flex-direction:column;gap:8px}
@@ -145,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-05-v3.4";
+const APP_VERSION = "2026-10-05-v3.5";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -413,16 +414,17 @@ const TTS = {
     next(0);
   },
   // 会話の講義：進行役(A)は低め、相方(B)は高め＋別の声で、1行ずつ順に読む
-  speakLines(lines, onend) {
+  speakLines(lines, onend, onLine) {
     if (!this.ok) { onend && onend(); return; }
     this.stop();
     if (!this.voice) this.pickVoice();
     const my = ++this.token;
-    const parts = lines.flatMap(([w, t]) => (this.clean(t).match(/[^。！？!?]+[。！？!?]*/g) || []).map(x => [w, x.trim()]).filter(x => x[1]));
+    const parts = lines.flatMap(([w, t], li) => (this.clean(t).match(/[^。！？!?]+[。！？!?]*/g) || []).map(x => [w, x.trim(), li]).filter(x => x[1]));
     const next = i => {
       if (my !== this.token) return;
       if (i >= parts.length) { onend && onend(); return; }
-      const [w, t] = parts[i], u = new SpeechSynthesisUtterance(t);
+      const [w, t, li] = parts[i], u = new SpeechSynthesisUtterance(t);
+      if (onLine && (i === 0 || parts[i - 1][2] !== li)) onLine(li);
       u.lang = "ja-JP"; u.rate = S.tts.rate; u.pitch = w === "B" ? 1.35 : 0.85;
       const v = w === "B" ? this.voice2 : this.voice; if (v) u.voice = v;
       u.onend = () => next(i + 1);
@@ -526,9 +528,23 @@ function lecBlocks(id) {
   return [{ h: "はじめに", t: L.intro }, ...L.points.map((p, i) => ({ h: `ポイント${i + 1}　${p.h}`, t: p.t, say: `ポイント${i + 1}。${p.h}。${p.t}` })), { h: "まとめ", t: L.summary }];
 }
 // 会話の吹き出し（A=進行役 🎙️ / B=相方 🙋）と図。図の種類: rel(だれが誰に) steps(順番) vs(正しい/ひっかけ) nums(覚える数字) table(表)
-function blockBody(b) {
+// cur = 今読んでいる吹き出しの番号（このかたまり以外は -1）。色を付けて、その行へ自動でスクロール
+function blockBody(b, cur = -1) {
   if (!b.lines) return `<div style="font-size:15px;line-height:1.85;margin-top:3px">${emph(b.t)}</div>`;
-  return `<div class="talk">${b.lines.map(([w, t]) => `<div class="tl ${w}"><span class="who">${w === "A" ? "🎙️" : "🙋"}</span><span class="say">${emph(t)}</span></div>`).join("")}</div>${b.zu ? zuHTML(b.zu) : ""}`;
+  return `<div class="talk">${b.lines.map(([w, t], i) => `<div class="tl ${w}${i === cur ? " now" : ""}"${i === cur ? ' id="lecLine"' : ""}><span class="who">${w === "A" ? "🎙️" : "🙋"}</span><span class="say">${emph(t)}</span></div>`).join("")}</div>${b.zu ? zuHTML(b.zu) : ""}`;
+}
+// 音声のいま再生している吹き出し：作る時に記録した開始秒(lec_lines)。無い音声は、かたまりの中を文字数で割り振った目安
+function apLineIndex(sec, bi) {
+  const a = AP.el, e = AUD[sec], bl = lecBlocks(sec), b = bl[bi]; if (!a || !e || !b || !b.lines) return -1;
+  const t = a.currentTime;
+  if (e.lec_lines) {
+    const off = bl.slice(0, bi).reduce((n, x) => n + (x.lines ? x.lines.length : 0), 0);
+    let li = 0; for (let i = 0; i < b.lines.length; i++) if (e.lec_lines[off + i] !== undefined && t >= e.lec_lines[off + i] - 0.05) li = i; return li;
+  }
+  const mk = e.lec_marks; if (!mk) return -1;
+  const st = mk[bi + 1], en = mk[bi + 2] ?? a.duration, lens = b.lines.map(l => l[1].length + 6), tot = lens.reduce((x, y) => x + y, 0);
+  let acc = 0; const pos = (t - st) / Math.max(1, en - st) * tot;
+  for (let i = 0; i < lens.length; i++) { acc += lens[i]; if (pos < acc) return i; } return lens.length - 1;
 }
 function zuHTML(z) {
   const node = n => `<div class="znode"><span class="ic">${esc(n.icon || "")}</span>${esc(n.label || "")}</div>`;
@@ -574,7 +590,7 @@ function lecPlay(announce) {
     if (LV.mix && secQs(id).length) { lecStartQ(id); return; }
     lecNextSec();
   };
-  if (b.lines) TTS.speakLines(head ? [["A", head], ...b.lines] : b.lines, after);
+  if (b.lines) TTS.speakLines(head ? [["A", head], ...b.lines] : b.lines, after, li => { LV.li = head ? li - 1 : li; render(); lecScroll(); });
   else TTS.speak(head + (b.say || b.t), after);
 }
 function lecNextSec() {
@@ -611,7 +627,7 @@ function lecQStep() {
     TTS.speak(aSpeech(q, null), () => { if (!LV?.playing || LV.q !== Qs) return; lecTimer = setTimeout(() => { if (!LV?.playing || LV.q !== Qs) return; Qs.i++; Qs.phase = "q"; lecQStep(); }, 1000); });
   }
 }
-function lecScroll() { setTimeout(() => document.getElementById("lecCur")?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }
+function lecScroll() { setTimeout(() => (document.getElementById("lecLine") || document.getElementById("lecCur"))?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }
 function lecToggle() { if (!LV) return; if (LV.audio) { apToggle(); return; } if (LV.done) { LV.si = 0; LV.bi = 0; LV.done = false; LV.q = null; } LV.playing = !LV.playing; if (LV.playing) { keepAwake(true); lecPlay(LV.bi === 0); } else { clearTimeout(lecTimer); TTS.stop(); render(); } }
 function lecJump(bi) { if (!LV) return; if (LV.audio) { apSeekBlock(bi); return; } clearTimeout(lecTimer); LV.q = null; TTS.stop(); LV.bi = bi; LV.done = false; LV.playing = TTS.ok; if (LV.playing) { keepAwake(true); lecPlay(false); } else render(); }
 function lecMove(d) {
@@ -645,7 +661,7 @@ function Lecture() {
   <div class="card"><div class="small">教科書 p.${x?.page || ""}〜 ・ 🎧 このSectionは今回で${heardN(id) + (LV.heardNow?.includes(id) ? 0 : 1)}回目</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
     ${bl.map((b, i) => `<div ${i === LV.bi && !Qs ? 'id="lecCur"' : ""} onclick="lecJump(${i})" style="cursor:pointer;border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${i === LV.bi ? "background:var(--brandbg)" : ""}">
       <div style="font-weight:700;font-size:14px;color:${i === LV.bi ? "var(--brand)" : "var(--ink)"}">${esc(b.h)}</div>
-      ${blockBody(b)}</div>`).join("")}
+      ${blockBody(b, i === LV.bi && !Qs ? (LV.li ?? -1) : -1)}</div>`).join("")}
     <div class="small mt">文章をタップすると、そこから読み上げます。<b class="em">色付きの太字</b>が大事な所です。</div></div>
   <div class="player">
     <button onclick="lecMove(-1)" aria-label="前へ">⏮</button>
@@ -756,7 +772,8 @@ function apTick() {
   const fmt = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
   if (bar && a.duration) bar.style.width = (a.currentTime / a.duration * 100) + "%";
   if (tm && a.duration) tm.textContent = `${fmt(a.currentTime)} / ${fmt(a.duration)}`;
-  const pi = apPartIndex(); if (pi !== AP.lastBlock && view === "lecture" && document.visibilityState === "visible") { AP.lastBlock = pi; render(); lecScroll(); }
+  const pi = apPartIndex(), it2 = apItem(), li = it2 && it2.kind === "lec" ? apLineIndex(it2.sec, Math.max(0, pi - 1)) : -1, key = pi + ":" + li;
+  if (key !== AP.lastBlock && view === "lecture" && document.visibilityState === "visible") { AP.lastBlock = key; render(); lecScroll(); }
   apSavePos(false);
   if ("mediaSession" in navigator && navigator.mediaSession.setPositionState && a.duration) { try { navigator.mediaSession.setPositionState({ duration: a.duration, playbackRate: a.playbackRate, position: a.currentTime }); } catch (e) {} }
 }
@@ -781,11 +798,11 @@ function AudioLecture() {
   const items = LV.items, cur = `${LV.ii + 1}/${items.length}`;
   let body;
   if (it.kind === "lec") {
-    const bl = lecBlocks(id), bi = Math.max(0, pi - 1);
+    const bl = lecBlocks(id), bi = Math.max(0, pi - 1), li = apLineIndex(id, bi);
     body = `<div class="card"><div class="small">教科書 p.${x?.page || ""}〜 ・ 🎧 このSectionは今回で${heardN(id) + (LV.heardNow?.includes(id) ? 0 : 1)}回目</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
       ${bl.map((b, i) => `<div ${i === bi ? 'id="lecCur"' : ""} onclick="lecJump(${i})" style="cursor:pointer;border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${i === bi ? "background:var(--brandbg)" : ""}">
         <div style="font-weight:700;font-size:14px;color:${i === bi ? "var(--brand)" : "var(--ink)"}">${esc(b.h)}</div>
-        ${blockBody(b)}</div>`).join("")}
+        ${blockBody(b, i === bi ? li : -1)}</div>`).join("")}
       <div class="small mt">文章をタップすると、そのあたりから再生します（位置は目安です）。<b class="em">色付きの太字</b>が大事な所です。</div></div>`;
   } else {
     const ids = AUD[id]?.q_ids || [], qi = Math.floor((pi - 1) / 2), ans = (pi - 1) % 2 === 1;
