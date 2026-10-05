@@ -21,6 +21,33 @@
   --ok:#4cc38a;--okbg:#12291e;--ng:#f07167;--ngbg:#2e1513;--warn:#f0b04a;--warnbg:#2b2210;--track:#2a2e2b;
   --a:#6aa8f0;--b:#b48ae8;--c:#f0a45c;--d:#4cc38a;--e:#ea7fae;
 }}
+
+/* 会話形式の講義（ラジオ風 2人）と図 */
+.talk{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.tl{display:flex;gap:8px;align-items:flex-start}.tl.B{flex-direction:row-reverse}
+.tl .who{flex:0 0 30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:16px;background:var(--brandbg)}
+.tl.B .who{background:var(--warnbg)}
+.tl .say{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:7px 11px;font-size:15px;line-height:1.75;min-width:0;flex:0 1 auto;max-width:calc(100% - 40px);overflow-wrap:anywhere}
+.tl.B .say{background:var(--warnbg);border-color:transparent}
+.zu{border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:10px;background:var(--bg)}
+.zu .zt{font-size:13px;font-weight:800;color:var(--brand);margin-bottom:8px}
+.zrel{display:flex;flex-direction:column;gap:8px}
+.zedge{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px}
+.znode{display:flex;flex-direction:column;align-items:center;text-align:center;font-size:12px;font-weight:700;gap:2px}
+.znode .ic{font-size:30px;line-height:1.1}
+.zarrow{display:flex;flex-direction:column;align-items:center;font-size:11px;color:var(--sub);min-width:84px;text-align:center}
+.zarrow i{display:block;width:100%;height:2px;background:var(--brand);position:relative;margin-top:3px}.zarrow i:after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left:8px solid var(--brand)}
+.zsteps{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch}
+.zstep{flex:1 1 90px;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;text-align:center;font-size:12px;position:relative}
+.zstep .ic{font-size:22px}.zstep b{display:block;font-size:13px}.zstep small{color:var(--sub);display:block}
+.zvs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.zvs>div{background:var(--card);border-radius:10px;padding:8px;font-size:13px;border:2px solid var(--ok)}.zvs>div.r{border-color:var(--ng)}
+.zvs b{display:block;margin-bottom:4px}.zvs ul{margin:0;padding-left:1.1em}
+.znums{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:6px}
+.znums div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;text-align:center;font-size:12px}
+.znums b{display:block;font-size:20px;color:var(--brand)}
+.ztbl{overflow-x:auto}.ztbl table{border-collapse:collapse;width:100%;font-size:13px}.ztbl th,.ztbl td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left}
+.ztbl th{color:var(--sub);font-size:12px}.ztbl .mo{color:var(--ok);font-weight:900;font-size:16px}.ztbl .mx{color:var(--ng);font-weight:900;font-size:16px}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif;-webkit-text-size-adjust:100%}
 body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
@@ -118,7 +145,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-03-v3.1";
+const APP_VERSION = "2026-10-05-v3.2";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -170,8 +197,10 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000));
 
 // ---------- 問題 ----------
-let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], LEC = {}, AUD = {};
+let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], LEC = {}, AUD = {}, TALK = {};
 const LEC_FILES = ["lec_1a", "lec_1b", "lec_2", "lec_3", "lec_4", "lec_5"];
+// 2026-10-05 下田さん「会話形式で・図やイラストでイメージしやすく」→ 講義をラジオ風の2人の会話＋図に（data/talk_*.json）。無いSectionは今までの講義のまま
+const TALK_FILES = ["talk_1a", "talk_1b", "talk_2", "talk_3", "talk_4", "talk_5"];
 const DATA_FILES = ["A", "B", "C", "D", "E", "X1", "X2", "X3", "X4", ...Array.from({ length: 11 }, (_, i) => "Y" + String(i + 1).padStart(2, "0"))];
 async function loadQuestions() {
   const get = f => fetch(f, { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
@@ -179,6 +208,8 @@ async function loadQuestions() {
   PAST = past && past.years ? past : null;
   const lecs = await Promise.all(LEC_FILES.map(f => fetch(`data/${f}.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}))));
   LEC = Object.assign({}, ...lecs);
+  const talks = await Promise.all(TALK_FILES.map(f => fetch(`data/${f}.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}))));
+  TALK = Object.assign({}, ...talks);
   NUMS = Array.isArray(nums) ? nums : [];
   AUD = await fetch("audio/index.json", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
   CHAPS = chaps;
@@ -467,16 +498,37 @@ function ListenCard() {
 let LV = null;
 // 講義を「かたまり」に分ける：はじめに → ポイント1..n → まとめ
 function lecBlocks(id) {
+  const T = TALK[id];
+  if (T && T.blocks) { const last = T.blocks.length - 1;
+    return T.blocks.map((b, i) => ({ h: i === 0 ? "はじめに" : i === last ? "まとめ" : `ポイント${i}　${b.h}`, t: b.lines.map(l => l[1]).join(""), lines: b.lines, zu: b.zu, say: b.lines.map(l => l[1]).join("。") })); }
   const L = LEC[id]; if (!L) return [];
   return [{ h: "はじめに", t: L.intro }, ...L.points.map((p, i) => ({ h: `ポイント${i + 1}　${p.h}`, t: p.t, say: `ポイント${i + 1}。${p.h}。${p.t}` })), { h: "まとめ", t: L.summary }];
 }
+// 会話の吹き出し（A=進行役 🎙️ / B=相方 🙋）と図。図の種類: rel(だれが誰に) steps(順番) vs(正しい/ひっかけ) nums(覚える数字) table(表)
+function blockBody(b) {
+  if (!b.lines) return `<div style="font-size:15px;line-height:1.85;margin-top:3px">${emph(b.t)}</div>`;
+  return `<div class="talk">${b.lines.map(([w, t]) => `<div class="tl ${w}"><span class="who">${w === "A" ? "🎙️" : "🙋"}</span><span class="say">${emph(t)}</span></div>`).join("")}</div>${b.zu ? zuHTML(b.zu) : ""}`;
+}
+function zuHTML(z) {
+  const node = n => `<div class="znode"><span class="ic">${esc(n.icon || "")}</span>${esc(n.label || "")}</div>`;
+  const mark = c => c === "○" || c === "◯" ? '<span class="mo">○</span>' : c === "×" ? '<span class="mx">×</span>' : esc(c);
+  let body = "";
+  if (z.type === "rel") body = `<div class="zrel">${(z.edges || []).map(e => `<div class="zedge">${node(e.from)}<div class="zarrow">${esc(e.label || "")}<i></i></div>${node(e.to)}</div>`).join("")}</div>`;
+  else if (z.type === "steps") body = `<div class="zsteps">${(z.items || []).map((x, i) => `<div class="zstep"><span class="ic">${esc(x.icon || String(i + 1))}</span><b>${esc(x.label)}</b>${x.note ? `<small>${esc(x.note)}</small>` : ""}</div>`).join("")}</div>`;
+  else if (z.type === "vs") body = `<div class="zvs">${[["l", z.left], ["r", z.right]].map(([k, v]) => v ? `<div class="${k}"><b>${esc(v.icon || "")} ${esc(v.label || "")}</b><ul>${(v.points || []).map(p => `<li>${esc(p)}</li>`).join("")}</ul></div>` : "").join("")}</div>`;
+  else if (z.type === "nums") body = `<div class="znums">${(z.items || []).map(x => `<div><b>${esc(x.n)}</b>${esc(x.label)}</div>`).join("")}</div>`;
+  else if (z.type === "table") body = `<div class="ztbl"><table>${(z.rows || []).map((r, i) => `<tr>${r.map(c => i ? `<td>${mark(c)}</td>` : `<th>${esc(c)}</th>`).join("")}</tr>`).join("")}</table></div>`;
+  return body ? `<div class="zu"><div class="zt">📊 ${esc(z.title || "図で見る")}</div>${body}</div>` : "";
+}
+// 音声ファイルがその講義の今の中身と合っているか（会話形式にした講義は、2人の声で作り直した音声だけ使う。作り直し中はスマホの読み上げ）
+const hasLecAudio = id => !!AUD[id]?.lec && (!TALK[id] || !!AUD[id].lec_voice?.startsWith("talk"));
 function startLecture(ids, opt = {}) {
   ids = ids.filter(id => LEC[id]);
   if (!ids.length) { alertBox("このSectionの講義はまだありません。"); return; }
   if (!TTS.ok) { alertBox("このスマホ（ブラウザ）は読み上げに対応していません。文章は画面で読めます。"); }
   // 複数Sectionを通しで聞くときだけ「まとめて聞く」（続きの保存・問題はさみ）
   const bundle = ids.length > 1;
-  if (ids.every(id => AUD[id]?.lec)) { apStart(ids, { ...opt, bundle }); return; }
+  if (ids.every(hasLecAudio)) { apStart(ids, { ...opt, bundle }); return; }
   LV = { ids, si: opt.si || 0, bi: opt.bi || 0, playing: TTS.ok, done: false, label: opt.label || "", bundle, mix: bundle && (opt.mix ?? S.tts.lecMix), q: null, thenToday: !!opt.thenToday };
   view = "lecture"; render(); window.scrollTo(0, 0);
   if (TTS.ok) { keepAwake(true); lecPlay(true); }
@@ -568,7 +620,7 @@ function Lecture() {
   <div class="card"><div class="small">教科書 p.${x?.page || ""}〜 ・ 🎧 このSectionは今回で${heardN(id) + (LV.heardNow?.includes(id) ? 0 : 1)}回目</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
     ${bl.map((b, i) => `<div ${i === LV.bi && !Qs ? 'id="lecCur"' : ""} onclick="lecJump(${i})" style="cursor:pointer;border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${i === LV.bi ? "background:var(--brandbg)" : ""}">
       <div style="font-weight:700;font-size:14px;color:${i === LV.bi ? "var(--brand)" : "var(--ink)"}">${esc(b.h)}</div>
-      <div style="font-size:15px;line-height:1.85;margin-top:3px">${emph(b.t)}</div></div>`).join("")}
+      ${blockBody(b)}</div>`).join("")}
     <div class="small mt">文章をタップすると、そこから読み上げます。<b class="em">色付きの太字</b>が大事な所です。</div></div>
   <div class="player">
     <button onclick="lecMove(-1)" aria-label="前へ">⏮</button>
@@ -662,11 +714,14 @@ function apParts(it) {
 }
 function apPartIndex() {
   const a = AP.el, it = apItem(); if (!a || !it || !a.duration) return 0;
+  const mk = it.kind === "lec" && AUD[it.sec]?.lec_marks;
+  if (mk) { let k = 0; for (let i = 0; i < mk.length; i++) if (a.currentTime >= mk[i] - 0.05) k = i; return k; }
   const P = apParts(it), tot = P.reduce((x, y) => x + y, 0), pos = a.currentTime / a.duration * tot;
   let acc = 0; for (let i = 0; i < P.length; i++) { acc += P[i]; if (pos < acc) return i; } return P.length - 1;
 }
 function apSeekBlock(bi) {
   const a = apEl(), it = apItem(); if (!it || it.kind !== "lec" || !a.duration) return;
+  const mk = AUD[it.sec]?.lec_marks; if (mk && mk[bi + 1] !== undefined) { a.currentTime = mk[bi + 1]; if (a.paused) a.play().catch(() => {}); return; }
   const P = apParts(it), tot = P.reduce((x, y) => x + y, 0), before = P.slice(0, bi + 1).reduce((x, y) => x + y, 0);
   a.currentTime = before / tot * a.duration; if (a.paused) a.play().catch(() => {});
 }
@@ -705,7 +760,7 @@ function AudioLecture() {
     body = `<div class="card"><div class="small">教科書 p.${x?.page || ""}〜 ・ 🎧 このSectionは今回で${heardN(id) + (LV.heardNow?.includes(id) ? 0 : 1)}回目</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
       ${bl.map((b, i) => `<div ${i === bi ? 'id="lecCur"' : ""} onclick="lecJump(${i})" style="cursor:pointer;border-radius:10px;padding:9px 10px;margin:0 -6px 4px;${i === bi ? "background:var(--brandbg)" : ""}">
         <div style="font-weight:700;font-size:14px;color:${i === bi ? "var(--brand)" : "var(--ink)"}">${esc(b.h)}</div>
-        <div style="font-size:15px;line-height:1.85;margin-top:3px">${emph(b.t)}</div></div>`).join("")}
+        ${blockBody(b)}</div>`).join("")}
       <div class="small mt">文章をタップすると、そのあたりから再生します（位置は目安です）。<b class="em">色付きの太字</b>が大事な所です。</div></div>`;
   } else {
     const ids = AUD[id]?.q_ids || [], qi = Math.floor((pi - 1) / 2), ans = (pi - 1) % 2 === 1;
@@ -732,7 +787,7 @@ function AudioLecture() {
     ${n ? `<button class="btn" onclick="lecQuiz('${id}')">✏️ このSectionの問題を解く（10問・苦手優先）</button>` : ""}
     <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
     <div class="small mt">🔒 画面を消しても、ほかのアプリを使っていても再生が続きます（ロック画面のボタンでも操作できます）。この画面を離れても止まりません。</div>
-    <div class="small mt">音声：VOICEVOX:No.7</div></div>
+    <div class="small mt">音声：${AUD[id]?.lec_voice?.startsWith("talk") ? "VOICEVOX:青山龍星、VOICEVOX:四国めたん" : "VOICEVOX:No.7"}</div></div>
   ${LV.thenToday ? `<div class="card mt" style="${LV.done ? "background:var(--okbg)" : ""}">${LV.done ? `<b>今日の範囲を聞きました ✓</b><div class="small">${(LV.heardNow || []).map(id => `${id}（${heardN(id)}回目）`).join("・")}<br>忘れないうちに、今日の問題を解きましょう。</div>` : `<div class="small">聞き終わると、そのまま今日の問題（${todayPlan().due.length + todayPlan().newLeft.length}問）が始まります。</div>`}
     <div class="mt"><button class="btn" onclick="todayAfterLecture()">✏️ 今日の問題を解く${LV.done ? "" : "（講義をやめて）"}</button></div></div>` : ""}
   <div class="center"><button class="linkbtn" onclick="stopLecture();go('book')">講義をやめる</button></div>`;
@@ -1262,7 +1317,7 @@ function Stats() {
     <details class="st mt"><summary class="small">ファイルが使えない時：文字でコピー／貼り付け</summary>
       <div class="row mt" style="gap:8px"><button class="btn sec" onclick="backup()">コピー</button><button class="btn ghost" onclick="restore()">戻す</button></div>
       <textarea id="bk" class="mt" placeholder="ここに貼り付けて「戻す」"></textarea></details></div>
-  <div class="ver">${APP_VERSION}・問題 ${Q.length}問${Object.keys(AUD).length ? "・講義音声 VOICEVOX:No.7" : ""}</div>`;
+  <div class="ver">${APP_VERSION}・問題 ${Q.length}問${Object.keys(AUD).length ? "・講義音声 VOICEVOX:青山龍星・四国めたん・No.7" : ""}</div>`;
 }
 const backupText = () => JSON.stringify({ app: "chinkan", v: 1, at: new Date().toISOString(), data: S });
 function markBackup() { S.lastBackup = today(); save(); }
@@ -1412,7 +1467,7 @@ function Numbers() {
   await loadQuestions();
   if (S._toPd200) { delete S._toPd200; setPerDay(200); }
   if (S.readPlan && !S.readPlan.sync) S.readPlan = null;
-  if (S.lecPos && S.lecPos.at >= addDays(today(), -7) && S.lecPos.ids?.every(id => AUD[id]?.lec)) {
+  if (S.lecPos && S.lecPos.at >= addDays(today(), -7) && S.lecPos.ids?.every(hasLecAudio)) {
     const P = S.lecPos; apStart(P.ids, { ii: P.ii, si: P.si, t: P.t, label: P.label, mix: P.mix, thenToday: P.thenToday, bundle: P.ids.length > 1, autoplay: false });
   } // 今日読む所を「今日解く範囲」に合わせて組み直す // 今日の分を200問に組み直す（解いた分はそのまま）
   if (S.sess && S.sess.date === today() && S.sess.i < S.sess.ids.length && S.sess.ids.every(id => QM[id])) { sess = { ...S.sess }; view = "study"; }
