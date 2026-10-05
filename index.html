@@ -145,7 +145,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-05-v3.3";
+const APP_VERSION = "2026-10-05-v3.4";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -520,7 +520,7 @@ let LV = null;
 // 講義を「かたまり」に分ける：はじめに → ポイント1..n → まとめ
 function lecBlocks(id) {
   const T = TALK[id];
-  if (T && T.blocks) { const last = T.blocks.length - 1;
+  if (useTalk(id)) { const last = T.blocks.length - 1;
     return T.blocks.map((b, i) => ({ h: i === 0 ? "はじめに" : i === last ? "まとめ" : `ポイント${i}　${b.h}`, t: b.lines.map(l => l[1]).join(""), lines: b.lines, zu: b.zu, say: b.lines.map(l => l[1]).join("。") })); }
   const L = LEC[id]; if (!L) return [];
   return [{ h: "はじめに", t: L.intro }, ...L.points.map((p, i) => ({ h: `ポイント${i + 1}　${p.h}`, t: p.t, say: `ポイント${i + 1}。${p.h}。${p.t}` })), { h: "まとめ", t: L.summary }];
@@ -542,7 +542,9 @@ function zuHTML(z) {
   return body ? `<div class="zu"><div class="zt">📊 ${esc(z.title || "図で見る")}</div>${body}</div>` : "";
 }
 // 音声ファイルがその講義の今の中身と合っているか（会話形式にした講義は、2人の声で作り直した音声だけ使う。作り直し中はスマホの読み上げ）
-const hasLecAudio = id => !!AUD[id]?.lec && (!TALK[id] || !!AUD[id].lec_voice?.startsWith("talk"));
+// 2026-10-05 下田さん「機械的な声だと入ってこない」→ 2人の声がまだ無いSectionは、前の講義の音声(VOICEVOX 1人)と前の講義の文章で流す。機械の読み上げには落とさない
+const hasLecAudio = id => !!AUD[id]?.lec;
+const useTalk = id => !!TALK[id]?.blocks && (!AUD[id]?.lec || !!AUD[id].lec_voice?.startsWith("talk"));
 function startLecture(ids, opt = {}) {
   ids = ids.filter(id => LEC[id]);
   if (!ids.length) { alertBox("このSectionの講義はまだありません。"); return; }
@@ -810,7 +812,7 @@ function AudioLecture() {
     ${n ? `<button class="btn" onclick="lecQuiz('${id}')">✏️ このSectionの問題を解く（10問・苦手優先）</button>` : ""}
     <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
     <div class="small mt">🔒 画面を消しても、ほかのアプリを使っていても再生が続きます（ロック画面のボタンでも操作できます）。この画面を離れても止まりません。</div>
-    <div class="small mt">音声：${AUD[id]?.lec_voice?.startsWith("talk") ? "VOICEVOX:青山龍星、VOICEVOX:四国めたん" : "VOICEVOX:No.7"}</div></div>
+    <div class="small mt">音声：${AUD[id]?.lec_voice?.startsWith("talk") ? "VOICEVOX:青山龍星、VOICEVOX:四国めたん" : "VOICEVOX:No.7"}</div>${TALK[id] && !useTalk(id) ? `<div class="small mt">🎙️ このSectionの「2人の会話」版は音声を作っている最中です。できしだい自動で切り替わります（今は前の講義を流しています）。</div>` : ""}</div>
   ${LV.thenToday ? `<div class="card mt" style="${LV.done ? "background:var(--okbg)" : ""}">${LV.done ? `<b>今日の範囲を聞きました ✓</b><div class="small">${(LV.heardNow || []).map(id => `${id}（${heardN(id)}回目）`).join("・")}<br>忘れないうちに、今日の問題を解きましょう。</div>` : `<div class="small">聞き終わると、そのまま今日の問題（${todayPlan().due.length + todayPlan().newLeft.length}問）が始まります。</div>`}
     <div class="mt"><button class="btn" onclick="todayAfterLecture()">✏️ 今日の問題を解く${LV.done ? "" : "（講義をやめて）"}</button></div></div>` : ""}
   <div class="center"><button class="linkbtn" onclick="stopLecture();go('book')">講義をやめる</button></div>`;
