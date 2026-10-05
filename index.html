@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-05-v3.5";
+const APP_VERSION = "2026-10-06-v3.6";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -473,10 +473,14 @@ function setThink(t) { S.tts.think = t; save(); render(); }
 async function keepAwake(on) {
   try {
     if (on && "wakeLock" in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener?.("release", () => { wakeLock = null; }); }
-    if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    if (!on && wakeLock && !ALWAYS_AWAKE) { await wakeLock.release(); wakeLock = null; }
   } catch (e) {}
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && LS?.playing) keepAwake(true); });
+// 2026-10-06 下田さん「アプリを開いている間は画面が暗くならないように」→ 開いている間はずっと画面をつけたまま
+// （画面を切り替えたり閉じたりするとスマホが自動で解除するので、戻ってきた時と最初のタップでかけ直す）
+const ALWAYS_AWAKE = true;
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && (ALWAYS_AWAKE || LS?.playing)) keepAwake(true); });
+if (ALWAYS_AWAKE) { keepAwake(true); document.addEventListener("pointerdown", () => { if (!wakeLock) keepAwake(true); }, { passive: true }); }
 function Listen() {
   if (!LS) { view = "study"; return Study(); }
   const done = LS.i >= LS.ids.length, q = !done && QM[LS.ids[LS.i]];
