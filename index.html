@@ -156,7 +156,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v6.0";
+const APP_VERSION = "2026-10-06-v6.1";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -590,7 +590,8 @@ const TTS = {
   stop() { this.token++; if (this.ok) speechSynthesis.cancel(); },
 };
 if (TTS.ok) { TTS.pickVoice(); speechSynthesis.onvoiceschanged = () => TTS.pickVoice(); }
-const qSpeech = q => q.q;
+// 問題を読む時は頭に「問題」と付けて、解説との区切りを耳でわかるように（2026-10-06 下田さん）
+const qSpeech = q => `${sess && sess.i > 0 ? "次の問題です。" : "問題です。"}${q.q}`;
 const aSpeech = (q, ok) => `${ok == null ? "" : ok ? "正解。" : "不正解。"}答えは、${q.a ? "マル" : "バツ"}。${q.exp}`;
 function sayQ() { const q = QM[sess.ids[sess.i]]; TTS.speak(sess.ans === null ? qSpeech(q) : aSpeech(q, sess.ans === q.a)); }
 function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else TTS.stop(); render(); }
