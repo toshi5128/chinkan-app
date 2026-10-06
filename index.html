@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v4.8";
+const APP_VERSION = "2026-10-06-v4.9";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1179,7 +1179,8 @@ function saveSess() {
   S.sess = sess && sess.i < sess.ids.length ? { ...sess, date: today() } : null; save();
 }
 function endSess() { sess = null; S.sess = null; save(); }
-function startSession(ids, label) {
+function startSession(ids, label) { studyMenu = false; return startSession_(ids, label); }
+function startSession_(ids, label) {
   if (AP.el && !AP.el.paused) AP.el.pause();
   if (!ids.length) { alertBox("該当する問題がありません。"); return; }
   sess = { ids, i: 0, label, ans: null, ok: 0, done: 0, requeued: {} }; saveSess();
@@ -1250,8 +1251,12 @@ function startSpecial(kind) {
   let qs = kind === "star" ? Q.filter(q => card(q.id)?.star) : Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; });
   startSession(shuffle(qs).slice(0, 40).map(q => q.id), kind === "star" ? "★マーク" : "間違えた問題");
 }
+let studyMenu = false;
+function openStudyMenu() { TTS.stop(); clearTimeout(autoTimer); autoTimer = null; studyMenu = true; render(); window.scrollTo(0, 0); }
+function backToSess() { studyMenu = false; render(); window.scrollTo(0, 0); }
 function Study() {
-  if (!sess) return StudyMenu();
+  if (!sess || studyMenu) return (sess && sess.i < sess.ids.length ? `<div class="card" style="border:2px solid var(--brand)"><div class="row" style="gap:8px"><span class="grow"><b>解いている途中の問題があります</b><div class="small">${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}問目</div></span>
+    <button class="btn" style="width:auto;padding:9px 14px" onclick="backToSess()">▶ 続きから</button></div></div>` : "") + StudyMenu();
   if (sess.i >= sess.ids.length) {
     const rate = sess.done ? Math.round(sess.ok / sess.done * 100) : 0;
     return `<div class="card center"><h2>おつかれさまでした</h2>
@@ -1265,6 +1270,7 @@ function Study() {
   const answered = sess.ans !== null, ok = answered && sess.ans === q.a, sx = SECM[q.sec];
   const range = sess.label === "今日の分" ? todayRangeSecs() : [];
   return `
+  <div class="row" style="margin:2px 0 6px"><button class="spk" onclick="openStudyMenu()">≡ メニュー（範囲を選ぶ）</button><span class="grow"></span></div>
   <div class="prog"><i style="width:${sess.i / sess.ids.length * 100}%"></i></div>
   ${range.length ? `<div class="small" style="margin:6px 2px 0">📅 今日の範囲：<b>${range.join("・")}</b>（ここから新しい問題を出しています。ほかは復習の問題）</div>` : ""}
   <div class="small" style="margin:4px 2px 6px">📖 この問題は <b>Section ${esc(q.sec || "")} ${esc(sx?.title || "")}</b>${sx ? `（教科書 p.${sx.page}）` : ""}${range.length && !range.includes(q.sec) ? ` <span class="chip">復習</span>` : ""}</div>
