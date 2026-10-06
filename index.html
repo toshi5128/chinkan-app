@@ -14,13 +14,20 @@
 :root{
   --bg:#f5f6f3;--card:#fff;--ink:#1c1f1d;--sub:#5d655f;--line:#e3e6e1;--brand:#156552;--brandbg:#e3f1ec;
   --ok:#1b8a5a;--okbg:#e6f4ec;--ng:#c8372d;--ngbg:#fdecea;--warn:#a86400;--warnbg:#fff3df;--track:#eceee9;
-  --a:#2a78d6;--b:#8a4fd1;--c:#d9822b;--d:#1b8a5a;--e:#c2417a;
+  --a:#2a78d6;--b:#8a4fd1;--c:#d9822b;--d:#1b8a5a;--e:#c2417a;--hero:#156552;--heroink:#156552;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#141615;--card:#1d201e;--ink:#eef1ee;--sub:#a3aca5;--line:#2e332f;--brand:#4cc3a0;--brandbg:#15302a;
   --ok:#4cc38a;--okbg:#12291e;--ng:#f07167;--ngbg:#2e1513;--warn:#f0b04a;--warnbg:#2b2210;--track:#2a2e2b;
-  --a:#6aa8f0;--b:#b48ae8;--c:#f0a45c;--d:#4cc38a;--e:#ea7fae;
+  --a:#6aa8f0;--b:#b48ae8;--c:#f0a45c;--d:#4cc38a;--e:#ea7fae;--hero:#1f6b56;--heroink:#1f6b56;
 }}
+:root[data-theme="dark"]{
+  --bg:#141615;--card:#1d201e;--ink:#eef1ee;--sub:#a3aca5;--line:#2e332f;--brand:#4cc3a0;--brandbg:#15302a;
+  --ok:#4cc38a;--okbg:#12291e;--ng:#f07167;--ngbg:#2e1513;--warn:#f0b04a;--warnbg:#2b2210;--track:#2a2e2b;
+  --a:#6aa8f0;--b:#b48ae8;--c:#f0a45c;--d:#4cc38a;--e:#ea7fae;--hero:#1f6b56;--heroink:#1f6b56;
+}
+:root[data-theme="dark"]{color-scheme:dark}:root[data-theme="light"]{color-scheme:light}
+.thm{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:4px 10px;font-size:15px;line-height:1}
 
 /* 会話形式の講義（ラジオ風 2人）と図 */
 .talk{display:flex;flex-direction:column;gap:6px;margin-top:6px}
@@ -142,13 +149,14 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 </style>
 </head>
 <body>
+<script>try { const t = localStorage.getItem("chinkan.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <header class="top"><img src="icon-192.png" alt=""><h1>賃管特訓</h1><span class="small" id="hdrDays"></span></header>
 <main id="app"><div class="card small">問題を読み込み中…</div></main>
 <nav class="tabs" id="tabs"></nav>
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v5.7";
+const APP_VERSION = "2026-10-06-v5.9";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -217,7 +225,7 @@ async function cloudRestore() {
 }
 function CloudCard() {
   return `<div class="card"><h2>☁️ 記録の自動バックアップ</h2>
-    <div class="small">勉強の記録は、解くたびに自動でクラウドに控えています${S.cloudAt ? `（最終 ${new Date(S.cloudAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}）` : ""}。毎朝の「今日の指示」の通知も、この控えを見て作っています。</div>
+    <div class="small">勉強の記録は、解くたびに自動でクラウドに控えています${S.cloudAt ? `（最終 ${new Date(S.cloudAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}）` : ""}。スマホが壊れても記録は消えません。</div>
     <div class="small mt">機種変更のときは、新しいスマホでこの<b>引き継ぎコード</b>を入れると続きから使えます。</div>
     <div class="mt" style="font-family:monospace;font-size:12px;word-break:break-all;background:var(--bg);padding:8px;border-radius:8px">${esc(S.syncKey)}</div>
     <details class="mt"><summary class="small">別のスマホの記録を引き継ぐ</summary><input id="syncIn" placeholder="引き継ぎコード" style="width:100%;padding:10px;margin-top:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)"><button class="btn sec mt" onclick="cloudRestore()">この記録で続きから</button></details></div>`;
@@ -347,22 +355,35 @@ const TABS = [
   ["study", "一問一答", '<circle cx="8" cy="12" r="4"/><path d="M15 8l6 8M21 8l-6 8"/>'],
   ["mock", "模試", '<path d="M9 4h6l1 2h3v15H5V6h3z"/><path d="M9 12l2 2 4-4"/>'],
   ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
+  ["settings", "設定", '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'],
 ];
 const PARENT = { past: "mock", numbers: "book", listen: "study", lecture: "book" };
 function renderTabs() {
   document.getElementById("tabs").innerHTML = TABS.map(([k, l, d]) =>
     `<button class="${(PARENT[view] || view) === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
   document.getElementById("hdrDays").textContent = `本番まで ${daysLeft()}日`;
+  themeBtn();
 }
 function go(v) {
   if (v !== view) { TTS.stop(); if (view === "listen") stopListen(); if (view === "lecture" && !(LV && LV.audio)) stopLecture(); }
   view = v; render(); window.scrollTo(0, 0);
 }
+// 見た目：自動（スマホの設定に合わせる）→ ライト → ダーク の順に切り替え（2026-10-06 下田さん「ライトとダークを切り替えたい」）
+function curTheme() { try { return localStorage.getItem("chinkan.theme") || "auto"; } catch (e) { return "auto"; } }
+function themeBtn() { const b = document.getElementById("thmBtn"); if (b) b.textContent = { auto: "🌗 自動", light: "☀️ ライト", dark: "🌙 ダーク" }[curTheme()]; }
+function cycleTheme(to) {
+  const next = to || { auto: "light", light: "dark", dark: "auto" }[curTheme()];
+  try { localStorage.setItem("chinkan.theme", next); } catch (e) {}
+  if (next === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = next;
+  const dark = next === "dark" || (next === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#141615" : "#156552");
+  themeBtn(); if (view === "settings") render();
+}
 function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : Stats());
+  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "settings" ? Settings() : Stats());
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -434,13 +455,13 @@ function StageBanner() {
   const st = stageInfo(), names = ["", "1周目", "2周目", "苦手つぶし", "本番の形", "仕上げ"];
   const jump = S.stageSeen && S.stageSeen < st.no; // 段階が進んだ瞬間だけ「終わりました」を出す
   if (jump) setTimeout(() => { S.stageSeen = st.no; save(); }, 0); else if (!S.stageSeen) { S.stageSeen = st.no; setTimeout(save, 0); }
-  return `<div class="card" style="background:var(--brand);color:#fff;border:0">
+  return `<div class="card" style="background:var(--hero);color:#fff;border:0">
     ${jump ? `<div style="font-weight:800;font-size:16px;margin-bottom:6px">🎉 ${names[st.no - 1]}が終わりました！ 次はこれです</div>` : ""}
-    <div style="display:flex;gap:4px;margin-bottom:8px">${names.slice(1).map((n, i) => `<span style="flex:1;text-align:center;font-size:11px;padding:3px 0;border-radius:6px;${i + 1 === st.no ? "background:#fff;color:var(--brand);font-weight:800" : i + 1 < st.no ? "background:rgba(255,255,255,.35)" : "background:rgba(255,255,255,.12)"}">${i + 1 < st.no ? "✓" : ""}${n}</span>`).join("")}</div>
+    <div style="display:flex;gap:4px;margin-bottom:8px">${names.slice(1).map((n, i) => `<span style="flex:1;text-align:center;font-size:11px;padding:3px 0;border-radius:6px;${i + 1 === st.no ? "background:#fff;color:var(--heroink);font-weight:800" : i + 1 < st.no ? "background:rgba(255,255,255,.35)" : "background:rgba(255,255,255,.12)"}">${i + 1 < st.no ? "✓" : ""}${n}</span>`).join("")}</div>
     <div style="font-size:12px;opacity:.85">いまやること（段階 ${st.no}/5）</div>
     <div style="font-weight:800;font-size:18px;margin:2px 0 4px">${st.title}</div>
     <div style="font-size:13px;opacity:.95">${st.sub}</div>
-    <button class="btn mt" style="background:#fff;color:var(--brand)" onclick="${st.btn}">▶ ${st.label}</button></div>`;
+    <button class="btn mt" style="background:#fff;color:var(--heroink)" onclick="${st.btn}">▶ ${st.label}</button></div>`;
 }
 
 // 分野ごとの作戦表（本番の問題数・今の予想・目標・あと何点）
@@ -1730,6 +1751,33 @@ function CoachCard() {
     ${next < 0 ? `<div class="res ok mt"><b>今日の分は全部できました 🎉</b><br>余裕があれば「おかわり」や個数ドリルをもう1回。</div><div class="btns mt"><button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button></div>` : ""}</div>`;
 }
 
+// ---------- 設定 ----------
+function Settings() {
+  const sw = (on, js) => `<button class="spk ${on ? "on" : ""}" onclick="${js};save();render()">${on ? "ON" : "OFF"}</button>`;
+  const row = (label, ctl, note = "") => `<div style="border-top:1px solid var(--line);padding:10px 0"><div class="row" style="gap:8px"><span class="grow">${label}</span>${ctl}</div>${note ? `<div class="small">${note}</div>` : ""}</div>`;
+  const t = curTheme();
+  return `
+  <div class="card"><h2>🎨 見た目</h2>
+    <div class="seg">${[["auto", "🌗 自動"], ["light", "☀️ ライト"], ["dark", "🌙 ダーク"]].map(([k, l]) => `<button class="${t === k ? "on" : ""}" onclick="cycleTheme('${k}')">${l}</button>`).join("")}</div>
+    <div class="small mt">自動＝スマホの設定（昼はライト・夜はダーク等）に合わせます。</div></div>
+  <div class="card"><h2>🔊 読み上げ</h2>
+    <div class="small">読む速さ（講義・問題・解説すべて）</div><div class="mt">${RateSeg()}</div>
+    ${TTS.ok ? `<div class="mt"><button class="btn ghost" onclick="TTS.speak('この速さで読み上げます。管理戸数が二百戸以上の賃貸住宅管理業者は、登録が必要です。')">🔊 試しに聞く</button></div>` : ""}
+    ${row("問題が出たら自動で読む・答えたら解説を読む", sw(S.tts.auto, "S.tts.auto=!S.tts.auto"))}
+    <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">聞き流しの考える時間（問題のあと、答えを読むまで）</div><div class="seg mt">${[2, 4, 7, 10].map(x => `<button class="${S.tts.think === x ? "on" : ""}" onclick="setThink(${x})">${x}秒</button>`).join("")}</div></div></div>
+  <div class="card"><h2>✏️ 一問一答</h2>
+    ${row("正解なら自動で次の問題へ", sw(S.autoNext, "S.autoNext=!S.autoNext"), "間違えた時は止まって、解説と教科書の該当部分が出ます。")}
+    <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">1日の新しい問題数（今日の分）</div><div class="mt">${PerDaySeg()}</div></div>
+    ${row("新しい問題を章ごとの日替わりにする", sw(S.rotate !== false, "S.rotate=S.rotate===false"), "第1章→第2章→…と毎日入れ替え。明日から反映。")}</div>
+  <div class="card"><h2>🎧 講義</h2>
+    ${row("講義を聞き終わったら自動で問題へ", sw(S.tts.lecQuiz, "S.tts.lecQuiz=!S.tts.lecQuiz"))}
+    ${row("まとめて聞く時、Sectionごとに確認問題を5問はさむ", sw(S.tts.lecMix, "S.tts.lecMix=!S.tts.lecMix"))}</div>
+  ${CloudCard()}
+  <div class="card"><h2>💾 バックアップ（ファイル）</h2><div class="small">クラウドとは別に、記録をファイルで保存・戻すこともできます。</div>
+    <div class="btns mt"><button class="btn ghost" onclick="go('stats')">記録タブのバックアップへ</button></div></div>
+  <div class="center small">${APP_VERSION}</div>`;
+}
+
 // ---------- 記録 ----------
 function Stats() {
   const days = []; for (let i = 13; i >= 0; i--) days.push(addDays(today(), -i));
@@ -1737,7 +1785,6 @@ function Stats() {
   let streak = 0; for (let d = today(); S.log[d]?.n; d = addDays(d, -1)) streak++;
   const total = Object.values(S.log).reduce((s, l) => s + l.n, 0);
   return `
-  ${CloudCard()}
   <div class="card"><h2>毎日の学習量（14日）</h2>
     <div class="row small"><span class="grow">連続 <b class="num">${streak}</b>日</span><span>累計 ${total}問</span></div>
     <div class="days">${days.map(d => { const n = S.log[d]?.n || 0; return `<div class="col ${d === today() ? "today" : ""}"><b>${n || ""}</b><i style="height:${n / max * 78}%"></i></div>`; }).join("")}</div>
