@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v4.2";
+const APP_VERSION = "2026-10-06-v4.3";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -186,6 +186,7 @@ function load() {
   s.autoNext = s.autoNext ?? true; // 正解なら自動で次へ   // 講義を最後まで聞いた回数：Section → {n, last}
   s.lecPos = s.lecPos || null; // まとめて聞くの続き（どの一覧の、どこまで） // 読み上げの設定
   s.cur = s.cur || null;     // 受験中の模試
+  s.rotate = s.rotate ?? true; // 新しい問題を章ごとの日替わりにする
   s.done = s.done || {};     // 日付 → {count, mock, radio, nums}（今日の指示の✓に使う）
   s.syncKey = s.syncKey || (crypto.randomUUID ? crypto.randomUUID() : Array.from({ length: 32 }, () => "0123456789abcdef"[Math.random() * 16 | 0]).join(""));
   return s;
@@ -295,7 +296,18 @@ function todayPlan() {
     const quota = newQuota();
     // 教科書で読み終えたSectionの問題から、次に教科書の順（今日読む所が続く）
     const rank = q => (S.read[q.sec] ? 0 : 1000) + (SECM[q.sec]?.order ?? 999);
-    const ids = Q.filter(q => !card(q.id)).sort((a, b) => rank(a) - rank(b)).slice(0, quota).map(q => q.id);
+    let pool = Q.filter(q => !card(q.id));
+    // 2026-10-06 下田さん「管理業法ばかり。日替わりで分野を回したい」→ 新しい問題は章ごとの日替わり（S.rotate、既定ON）。
+    // その日の章を教科書の順に出し、足りなければ次の章で埋める。講義は全Sectionあるので、教科書を順に読み終えていなくても回せる
+    if (S.rotate !== false) {
+      const chs = [...new Set(SECS.map(x => x.ch))].filter(ch => pool.some(q => SECM[q.sec]?.ch === ch));
+      if (chs.length) {
+        const k = Math.floor((new Date(t + "T00:00:00") - new Date("2026-10-06T00:00:00")) / 86400000);
+        const start = ((k % chs.length) + chs.length) % chs.length, order = [...chs.slice(start), ...chs.slice(0, start)];
+        pool = pool.sort((a, b) => order.indexOf(SECM[a.sec]?.ch) - order.indexOf(SECM[b.sec]?.ch) || rank(a) - rank(b));
+      }
+    } else pool = pool.sort((a, b) => rank(a) - rank(b));
+    const ids = pool.slice(0, quota).map(q => q.id);
     S.plan = { date: t, newIds: ids };
     save();
   }
@@ -377,7 +389,8 @@ function Home() {
       : `<div class="res ok"><b class="t">今日の分は完了です 🎉</b><br>今日 ${L.n}問・正答率 ${L.n ? Math.round(L.c / L.n * 100) : 0}%。</div>
         <div class="btns mt"><button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button></div>`}
     <details class="mt"><summary class="small">1日の新しい問題数：${S.newPerDay ? S.newPerDay + "問" : `おまかせ（約${autoQuota()}問）`}</summary><div class="mt">${PerDaySeg()}</div>
-      <div class="small mt">おまかせ＝10/25までに全問を一周できる数。増やすほど復習の数も増えます（間違えた問題は翌日、正解は3日後にまた出ます）。</div></details>
+      <div class="small mt">おまかせ＝10/25までに全問を一周できる数。増やすほど復習の数も増えます（間違えた問題は翌日、正解は3日後にまた出ます）。</div>
+      <div class="row mt"><span class="grow small">新しい問題を<b>章ごとの日替わり</b>にする（第1章→第2章→…と毎日入れ替え。明日から反映）</span><button class="spk ${S.rotate !== false ? "on" : ""}" onclick="S.rotate=S.rotate===false;save();render()">${S.rotate !== false ? "ON" : "OFF"}</button></div></details>
   </div>
   <div class="card">
     <h2>分野ごとの仕上がり</h2>
