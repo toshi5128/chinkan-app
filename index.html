@@ -156,7 +156,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v6.4";
+const APP_VERSION = "2026-10-06-v6.5";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1438,8 +1438,8 @@ function playRef(sec, bi) {
   }
   if (b?.lines) TTS.speakLines(b.lines, () => refMark(-1), li => refMark(li)); else if (b) TTS.speak(b.t);
 }
-let autoTimer = null;
-function cancelAuto() { clearTimeout(autoTimer); autoTimer = null; TTS.stop(); render(); }
+let autoTimer = null, autoHard = null;
+function cancelAuto() { clearTimeout(autoTimer); clearTimeout(autoHard); autoTimer = null; TTS.stop(); render(); }
 function answer(v) {
   const q = QM[sess.ids[sess.i]]; const ok = v === q.a;
   sess.ans = v; sess.done++; if (ok) sess.ok++;
@@ -1453,7 +1453,14 @@ function answer(v) {
   const at = sess.i, goNext = () => { autoTimer = null; if (sess && sess.i === at && sess.ans !== null) nextQ(); };
   if (ok && S.autoNext) {
     // 読み終えた瞬間に次を読み始めるとスマホが無視することがあるので、少し間を空けてから次の問題へ
-    if (S.tts.auto && TTS.ok) { autoTimer = "reading"; render(); TTS.speak(aSpeech(q, ok), () => { if (autoTimer === "reading") { autoTimer = setTimeout(goNext, 600); } }); return; }
+    if (S.tts.auto && TTS.ok) {
+      autoTimer = "reading"; render();
+      const txt = aSpeech(q, ok);
+      TTS.speak(txt, () => { if (autoTimer === "reading") { autoTimer = setTimeout(goNext, 600); } });
+      // 保険：スマホが「読み終わり」を一切知らせてこなくても、読み終わるはずの時間（＋余裕）が来たら必ず次へ
+      clearTimeout(autoHard); autoHard = setTimeout(() => { if (autoTimer === "reading" && sess && sess.i === at) { autoTimer = null; nextQ(); } }, (txt.length / (5 * (S.tts.rate || 1)) + 4) * 1000);
+      return;
+    }
     autoTimer = setTimeout(goNext, 1300);
   }
   render();
@@ -1468,7 +1475,7 @@ function luck() {
   nextQ();
 }
 function toggleStar(id) { const c = S.cards[id]; if (!c) return; c.star = !c.star; save(); render(); }
-function nextQ() { clipStop(); if (autoTimer !== "reading") clearTimeout(autoTimer); autoTimer = null; sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
+function nextQ() { clipStop(); clearTimeout(autoHard); if (autoTimer !== "reading") clearTimeout(autoTimer); autoTimer = null; sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
 function StudyMenu() {
   const p = todayPlan();
   const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
