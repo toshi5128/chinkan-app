@@ -156,7 +156,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v6.5";
+const APP_VERSION = "2026-10-06-v6.6";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -193,7 +193,8 @@ function load() {
   if (!s.pd200) { s.pd200 = 1; s._toPd200 = s.newPerDay !== 200; s.newPerDay = 200; }
   s.tts = Object.assign({ auto: true, rate: 1.2, think: 4, lecQuiz: true, lecMix: true }, s.tts || {});
   s.heard = s.heard || {};
-  s.autoNext = s.autoNext ?? true; // 正解なら自動で次へ   // 講義を最後まで聞いた回数：Section → {n, last}
+  s.autoNext = s.autoNext ?? true;
+  if (!s.an65) { s.an65 = 1; s.autoNext = true; } // 2026-10-06 下田さんの端末でOFFになっていた → 一度だけONに戻す // 正解なら自動で次へ   // 講義を最後まで聞いた回数：Section → {n, last}
   s.lecPos = s.lecPos || null; // まとめて聞くの続き（どの一覧の、どこまで） // 読み上げの設定
   s.cur = s.cur || null;     // 受験中の模試
   s.rotate = s.rotate ?? true; // 新しい問題を章ごとの日替わりにする
@@ -1361,7 +1362,7 @@ function Study() {
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
-    <div class="row" style="justify-content:flex-end;margin-bottom:4px"><button class="spk ${S.autoNext ? "on" : ""}" onclick="S.autoNext=!S.autoNext;save();render()">正解なら自動で次へ ${S.autoNext ? "ON" : "OFF"}</button></div>
+    <div class="small" style="text-align:right;margin-bottom:4px">${S.autoNext ? "正解なら自動で次へ：ON" : "正解なら自動で次へ：OFF（設定タブで変更）"}</div>
     <div class="qtext">${esc(q.q)}</div>
     <div class="ox">
       <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
