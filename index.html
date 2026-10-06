@@ -156,7 +156,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v6.3";
+const APP_VERSION = "2026-10-06-v6.4";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -552,7 +552,6 @@ const TTS = {
   // 長文は途中で切れる端末があるので、文ごとに区切って順番に読む
   speak(text, onend) {
     if (!this.ok) { onend && onend(); return; }
-    const busy = speechSynthesis.speaking || speechSynthesis.pending; // 直前の読み上げを止めた直後に読むと、スマホが無視することがある
     this.stop();
     if (!this.voice) this.pickVoice();
     const my = ++this.token;
@@ -571,12 +570,11 @@ const TTS = {
       speechSynthesis.speak(u);
       clearTimeout(this.wd); this.wd = setTimeout(() => { if (my === this.token && !speechSynthesis.speaking) go(); else if (my === this.token) this.wd = setTimeout(() => { if (my === this.token) go(); }, 4000); }, (u.text.length / (7 * (S.tts.rate || 1)) + 1.5) * 1000);
     };
-    if (busy) setTimeout(() => next(0), 200); else next(0);
+    const wait = Math.max(0, 300 - (Date.now() - (this.cancelAt || 0))); if (wait) setTimeout(() => next(0), wait); else next(0);
   },
   // 会話の講義：進行役(A)は低め、相方(B)は高め＋別の声で、1行ずつ順に読む
   speakLines(lines, onend, onLine) {
     if (!this.ok) { onend && onend(); return; }
-    const busy = speechSynthesis.speaking || speechSynthesis.pending; // 直前の読み上げを止めた直後に読むと、スマホが無視することがある
     this.stop();
     if (!this.voice) this.pickVoice();
     const my = ++this.token;
@@ -597,9 +595,10 @@ const TTS = {
       speechSynthesis.speak(u);
       clearTimeout(this.wd); this.wd = setTimeout(() => { if (my === this.token && !speechSynthesis.speaking) go(); else if (my === this.token) this.wd = setTimeout(() => { if (my === this.token) go(); }, 4000); }, (u.text.length / (7 * (S.tts.rate || 1)) + 1.5) * 1000);
     };
-    if (busy) setTimeout(() => next(0), 200); else next(0);
+    const wait = Math.max(0, 300 - (Date.now() - (this.cancelAt || 0))); if (wait) setTimeout(() => next(0), wait); else next(0);
   },
-  stop() { this.token++; clearTimeout(this.wd); if (this.ok) speechSynthesis.cancel(); },
+  // 読んでいない時は cancel を出さない。cancel した直後の speak はスマホが捨てることがあるので、その時刻を覚えておく
+  stop() { this.token++; clearTimeout(this.wd); if (this.ok && (speechSynthesis.speaking || speechSynthesis.pending)) { speechSynthesis.cancel(); this.cancelAt = Date.now(); } },
 };
 if (TTS.ok) { TTS.pickVoice(); speechSynthesis.onvoiceschanged = () => TTS.pickVoice(); }
 // 問題を読む時は頭に「問題」と付けて、解説との区切りを耳でわかるように（2026-10-06 下田さん）
@@ -1469,7 +1468,7 @@ function luck() {
   nextQ();
 }
 function toggleStar(id) { const c = S.cards[id]; if (!c) return; c.star = !c.star; save(); render(); }
-function nextQ() { clipStop(); if (autoTimer !== "reading") clearTimeout(autoTimer); autoTimer = null; TTS.stop(); sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
+function nextQ() { clipStop(); if (autoTimer !== "reading") clearTimeout(autoTimer); autoTimer = null; sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
 function StudyMenu() {
   const p = todayPlan();
   const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
