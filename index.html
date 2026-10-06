@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v4.6";
+const APP_VERSION = "2026-10-06-v4.7";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1189,6 +1189,11 @@ function startSession(ids, label) {
 function startToday() { const p = todayPlan(); startSession([...p.due, ...p.newLeft], "今日の分"); }
 // ---------- 範囲を選んで解く（2026-10-06 下田さん「出題範囲を自分で選べるように」） ----------
 // 章・Sectionを選ぶ → どの問題（全部/未挑戦/苦手/★）→ 何問 → 順番。選んだ範囲は次に開いた時も残る
+const ACC_MIN = 4;
+const accColor = a => a == null ? "var(--sub)" : a < 0.7 ? "var(--ng)" : a < 0.85 ? "var(--warn)" : "var(--ok)";
+const accText = (c, w) => c + w >= ACC_MIN ? Math.round(c / (c + w) * 100) + "%" : "—";
+function secAccMap() { const m = {}; for (const x of secStats()) m[x.id] = x; return m; }
+function pickWeak() { const P = pickState(); P.secs = secStats().filter(x => x.c + x.w >= ACC_MIN && x.acc < 0.85).map(x => x.id); P.mode = "weak"; save(); render(); }
 function pickState() { return S.pick || (S.pick = { secs: [], open: 1, mode: "all", n: 30, order: "rand" }); }
 function pickQs() {
   const P = pickState(), set = new Set(P.secs);
@@ -1209,16 +1214,21 @@ function startPick() {
   startSession(qs.slice(0, P.n || qs.length).map(q => q.id), secs.length <= 3 ? `範囲 ${secs.join("・")}` : `範囲 ${secs.length}Section`);
 }
 function PickCard() {
-  const P = pickState(), chs = [...new Set(SECS.map(x => x.ch))], n = pickQs().length;
+  const P = pickState(), chs = [...new Set(SECS.map(x => x.ch))], n = pickQs().length, SA = secAccMap();
   const seg = (k, opts) => `<div class="seg mt">${opts.map(([v, l]) => `<button class="${P[k] === v ? "on" : ""}" onclick="pickSet('${k}',${JSON.stringify(v).replace(/"/g, "'")})">${l}</button>`).join("")}</div>`;
   return `<div class="card"><h2>🎯 範囲を選んで解く</h2>
     <div class="small">章を開いてSectionを選びます（章の「全部」で章ごと選べます）。</div>
     ${chs.map(ch => { const list = SECS.filter(x => x.ch === ch), sel = list.filter(x => P.secs.includes(x.id)).length, open = P.open === ch;
+      const cc = list.reduce((n, x) => n + (SA[x.id]?.c || 0), 0), cw = list.reduce((n, x) => n + (SA[x.id]?.w || 0), 0);
       return `<div style="border-top:1px solid var(--line);padding:8px 0">
         <div class="row" style="gap:6px"><button class="linkbtn grow" style="text-align:left;text-decoration:none;color:var(--ink);font-weight:700" onclick="pickSet('open',${open ? 0 : ch})">${open ? "▼" : "▶"} 第${ch}章 <span style="font-weight:400;font-size:13px">${esc(CHAPS.find(c => c.ch === ch)?.title || "")}</span> <span class="small">${sel ? `${sel}/${list.length} 選択中` : ""}</span></button>
+          <b class="num" style="font-size:13px;color:${accColor(cc + cw >= ACC_MIN ? cc / (cc + cw) : null)}">${accText(cc, cw)}</b>
           <button class="spk ${sel === list.length ? "on" : ""}" onclick="pickCh(${ch},${sel !== list.length})">${sel === list.length ? "全部✓" : "全部"}</button></div>
         ${open ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${list.map(x => { const on = P.secs.includes(x.id);
-          return `<button class="spk ${on ? "on" : ""}" style="text-align:left" onclick="pickToggle('${x.id}')">${x.id} ${esc(x.title.length > 12 ? x.title.slice(0, 12) + "…" : x.title)}</button>`; }).join("")}</div>` : ""}</div>`; }).join("")}
+          const a = SA[x.id], t = accText(a?.c || 0, a?.w || 0), col = accColor(a && a.c + a.w >= ACC_MIN ? a.acc : null);
+          return `<button class="spk ${on ? "on" : ""}" style="text-align:left" onclick="pickToggle('${x.id}')">${x.id} ${esc(x.title.length > 11 ? x.title.slice(0, 11) + "…" : x.title)} <b style="color:${on ? "#fff" : col}">${t}</b></button>`; }).join("")}</div>` : ""}</div>`; }).join("")}
+    <div class="small mt">数字＝そのSectionの正答率（<span style="color:var(--ng)">赤＝苦手</span>・<span style="color:var(--warn)">黄＝もう少し</span>・<span style="color:var(--ok)">緑＝できている</span>・—＝まだ少ない）</div>
+    <div class="mt"><button class="btn ghost" style="padding:9px" onclick="pickWeak()">🔴 苦手なSection（85%未満）をまとめて選ぶ</button></div>
     <div class="small mt">どの問題</div>${seg("mode", [["all", "全部"], ["new", "未挑戦"], ["weak", "苦手"], ["star", "★"]])}
     <div class="small mt">何問</div>${seg("n", [[10, "10問"], [30, "30問"], [50, "50問"], [0, "全部"]])}
     <div class="small mt">順番</div>${seg("order", [["rand", "ランダム"], ["book", "教科書の順"]])}
@@ -1351,7 +1361,7 @@ function StudyMenu() {
   const star = Q.filter(q => card(q.id)?.star).length;
   return `
   ${PickCard()}
-  ${WeakCard(3)}
+  ${WeakMap()}
   <div class="card"><h2>今日の分</h2>${TodayProgress()}
     <div class="btns mt">${p.due.length + p.newLeft.length ? `${TodayListenBtn()}<button class="btn" onclick="startToday()">▶ すぐ解く</button>` : `<button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}</div>
     <div class="small mt">1日の新しい問題数</div><div class="mt">${PerDaySeg()}</div></div>
@@ -1689,6 +1699,19 @@ function restoreFile(e) {
 function secStats() {
   return SECS.map(x => { let c = 0, w = 0, seen = 0; for (const q of secQs(x.id)) { const k = card(q.id); if (!k) continue; seen++; c += k.c; w += k.w; }
     return { ...x, c, w, seen, acc: c + w ? c / (c + w) : null }; });
+}
+function WeakMap() {
+  const st = secStats(), done = st.filter(x => x.c + x.w >= ACC_MIN).sort((a, b) => a.acc - b.acc), few = st.length - done.length;
+  if (!done.length) return `<div class="card"><h2>📍 苦手マップ</h2><div class="small">各Sectionを4回以上解くと、正答率の低い順にここへ並びます。</div></div>`;
+  const all = st.reduce((o, x) => { o.c += x.c; o.w += x.w; return o; }, { c: 0, w: 0 });
+  return `<div class="card"><h2>📍 苦手マップ</h2>
+    <div class="row small"><span class="grow">全体の正答率</span><b class="num" style="font-size:18px;color:${accColor(all.c / (all.c + all.w))}">${Math.round(all.c / (all.c + all.w) * 100)}%</b></div>
+    <div class="small">正答率の低い順。上にあるほど点の伸びしろです${few ? `（まだ少ないSection ${few}個は除外）` : ""}。</div>
+    ${done.slice(0, S.weakAll ? done.length : 8).map(x => `<div style="border-top:1px solid var(--line);padding:8px 0">
+      <div class="row" style="gap:8px"><span class="grow" style="font-size:14px;min-width:0"><b class="num">${x.id}</b> ${esc(x.title)}</span><b class="num" style="color:${accColor(x.acc)}">${Math.round(x.acc * 100)}%</b></div>
+      <div class="row" style="gap:8px;margin-top:4px"><div class="bar grow" style="height:8px"><i style="width:${Math.round(x.acc * 100)}%;background:${accColor(x.acc)}"></i></div>
+        ${LEC[x.id] ? `<button class="spk" onclick="startLecture(['${x.id}'])">🎧</button>` : ""}<button class="spk on" onclick="startSec('${x.id}')">解く</button></div></div>`).join("")}
+    ${done.length > 8 ? `<div class="center"><button class="linkbtn" onclick="S.weakAll=!S.weakAll;save();render()">${S.weakAll ? "上位8つだけ表示" : `全部見る（${done.length}Section）`}</button></div>` : ""}</div>`;
 }
 function WeakCard(n) {
   const weak = secStats().filter(x => x.c + x.w >= 4 && x.acc < 0.8).sort((a, b) => a.acc - b.acc).slice(0, n);
