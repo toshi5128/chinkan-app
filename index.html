@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v4.4";
+const APP_VERSION = "2026-10-06-v4.5";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -379,16 +379,10 @@ function Home() {
   ${CoachCard()}
   ${GoalCard()}
   ${RoadCard()}
-  <details class="card"><summary style="font-weight:700;cursor:pointer">📊 くわしく見る（作戦表・分野ごとの仕上がり・模試の記録など）</summary>
-    <div class="mt">${PredictCard()}${daysLeft() <= 14 ? RadioCard() : ""}${ReadToday()}${TodaySteps()}
-  <div class="card">
-    <h2>今日の分（一問一答）</h2>
-    ${TodayProgress()}
-    ${todo ? `
-      <div class="btns mt">${sess && sess.i < sess.ids.length ? `<button class="btn" onclick="go('study')">▶ 続きから（${sess.label === "今日の分" ? `新しい問題 ${p.newDone}/${p.newTotal}問まで解いた` : `${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}問目`}）</button>` : ""}${TodayListenBtn()}<button class="btn ${sess && sess.i < sess.ids.length ? "ghost" : ""}" onclick="startToday()">▶ ${sess && sess.i < sess.ids.length ? `今日の分を新しく始め直す（残り${todo}問）` : `すぐ解く（${todo}問）`}</button></div>`
-      : `<div class="res ok"><b class="t">今日の分は完了です 🎉</b><br>今日 ${L.n}問・正答率 ${L.n ? Math.round(L.c / L.n * 100) : 0}%。</div>
-        <div class="btns mt"><button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button></div>`}
-    <details class="mt"><summary class="small">1日の新しい問題数：${S.newPerDay ? S.newPerDay + "問" : `おまかせ（約${autoQuota()}問）`}</summary><div class="mt">${PerDaySeg()}</div>
+  <details class="card"><summary style="font-weight:700;cursor:pointer">📊 くわしく見る（分野別の作戦表・仕上がり・模試の記録・設定）</summary>
+    <div class="mt">${StrategyCard()}${daysLeft() <= 14 ? RadioCard() : ""}
+  <div class="card"><h2>⚙️ 新しい問題の出し方</h2>
+    <details open><summary class="small">1日の新しい問題数：${S.newPerDay ? S.newPerDay + "問" : `おまかせ（約${autoQuota()}問）`}</summary><div class="mt">${PerDaySeg()}</div>
       <div class="small mt">おまかせ＝10/25までに全問を一周できる数。増やすほど復習の数も増えます（間違えた問題は翌日、正解は3日後にまた出ます）。</div>
       <div class="row mt"><span class="grow small">新しい問題を<b>章ごとの日替わり</b>にする（第1章→第2章→…と毎日入れ替え。明日から反映）</span><button class="spk ${S.rotate !== false ? "on" : ""}" onclick="S.rotate=S.rotate===false;save();render()">${S.rotate !== false ? "ON" : "OFF"}</button></div></details>
   </div>
@@ -407,6 +401,18 @@ function Home() {
       : `<div class="small">本番と同じ4択50問・120分。まだ受けていません。一周の半分くらいまで進んだら一度受けてみましょう。</div>`}
     <div class="mt"><button class="btn sec" onclick="go('mock')">模試・過去問へ</button></div>
   </div></div></details>`;
+}
+
+// 分野ごとの作戦表（本番の問題数・今の予想・目標・あと何点）
+function StrategyCard() {
+  const P = predict();
+  if (P.seenAll < 100) return "";
+  return `<div class="card"><h2>🎯 分野ごとの作戦表</h2><div class="small">目標 ${PASS_LINE + 2}点（合格点＋2点の安全圏）を、本番の問題数で分野に割り振った表です。「あと」が赤い分野から点を取りに行きます。</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">
+      <tr style="color:var(--sub)"><td>分野</td><td class="num">本番</td><td class="num">今の予想</td><td class="num">目標</td><td class="num">あと</td><td class="num">正答率</td></tr>
+      ${Object.entries(AREAS).map(([a, A]) => { const goal = Math.ceil(A.mock * (PASS_LINE + 2) / 50), now = P.by[a].pts, gap = goal - now, acc = P.by[a].acc;
+        return `<tr style="border-top:1px solid var(--line)"><td><span class="dot" style="background:${A.color}"></span>${A.short}</td><td class="num">${A.mock}問</td><td class="num">${now.toFixed(1)}</td><td class="num">${goal}</td><td class="num" style="color:${gap > 0.5 ? "var(--ng)" : "var(--ok)"};font-weight:700">${gap > 0.5 ? "+" + gap.toFixed(1) : "✓"}</td><td class="num">${acc == null ? "—" : Math.round(acc * 100) + "%"}</td></tr>`; }).join("")}
+    </table></div>`;
 }
 
 // ---------- ② 合格まであと何点・足りないもの ----------
