@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v4.5";
+const APP_VERSION = "2026-10-06-v4.6";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1187,6 +1187,45 @@ function startSession(ids, label) {
   if (S.tts.auto) sayQ();
 }
 function startToday() { const p = todayPlan(); startSession([...p.due, ...p.newLeft], "今日の分"); }
+// ---------- 範囲を選んで解く（2026-10-06 下田さん「出題範囲を自分で選べるように」） ----------
+// 章・Sectionを選ぶ → どの問題（全部/未挑戦/苦手/★）→ 何問 → 順番。選んだ範囲は次に開いた時も残る
+function pickState() { return S.pick || (S.pick = { secs: [], open: 1, mode: "all", n: 30, order: "rand" }); }
+function pickQs() {
+  const P = pickState(), set = new Set(P.secs);
+  let qs = Q.filter(q => set.has(q.sec));
+  if (P.mode === "new") qs = qs.filter(q => !card(q.id));
+  if (P.mode === "weak") qs = qs.filter(q => { const c = card(q.id); return c && (c.box <= 2 || c.w > 0); });
+  if (P.mode === "star") qs = qs.filter(q => card(q.id)?.star);
+  return qs;
+}
+function pickToggle(id) { const P = pickState(); P.secs = P.secs.includes(id) ? P.secs.filter(x => x !== id) : [...P.secs, id]; save(); render(); }
+function pickCh(ch, on) { const P = pickState(), ids = SECS.filter(x => x.ch === ch).map(x => x.id); P.secs = on ? [...new Set([...P.secs, ...ids])] : P.secs.filter(x => !ids.includes(x)); save(); render(); }
+function pickSet(k, v) { pickState()[k] = v; save(); render(); }
+function startPick() {
+  const P = pickState(); let qs = pickQs();
+  if (!qs.length) { alertBox("選んだ範囲に、その条件の問題がありません。"); return; }
+  qs = P.order === "book" ? qs.sort((a, b) => (SECM[a.sec]?.order ?? 0) - (SECM[b.sec]?.order ?? 0) || a.id.localeCompare(b.id)) : shuffle(qs);
+  const secs = [...new Set(qs.map(q => q.sec))];
+  startSession(qs.slice(0, P.n || qs.length).map(q => q.id), secs.length <= 3 ? `範囲 ${secs.join("・")}` : `範囲 ${secs.length}Section`);
+}
+function PickCard() {
+  const P = pickState(), chs = [...new Set(SECS.map(x => x.ch))], n = pickQs().length;
+  const seg = (k, opts) => `<div class="seg mt">${opts.map(([v, l]) => `<button class="${P[k] === v ? "on" : ""}" onclick="pickSet('${k}',${JSON.stringify(v).replace(/"/g, "'")})">${l}</button>`).join("")}</div>`;
+  return `<div class="card"><h2>🎯 範囲を選んで解く</h2>
+    <div class="small">章を開いてSectionを選びます（章の「全部」で章ごと選べます）。</div>
+    ${chs.map(ch => { const list = SECS.filter(x => x.ch === ch), sel = list.filter(x => P.secs.includes(x.id)).length, open = P.open === ch;
+      return `<div style="border-top:1px solid var(--line);padding:8px 0">
+        <div class="row" style="gap:6px"><button class="linkbtn grow" style="text-align:left;text-decoration:none;color:var(--ink);font-weight:700" onclick="pickSet('open',${open ? 0 : ch})">${open ? "▼" : "▶"} 第${ch}章 <span style="font-weight:400;font-size:13px">${esc(CHAPS.find(c => c.ch === ch)?.title || "")}</span> <span class="small">${sel ? `${sel}/${list.length} 選択中` : ""}</span></button>
+          <button class="spk ${sel === list.length ? "on" : ""}" onclick="pickCh(${ch},${sel !== list.length})">${sel === list.length ? "全部✓" : "全部"}</button></div>
+        ${open ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${list.map(x => { const on = P.secs.includes(x.id);
+          return `<button class="spk ${on ? "on" : ""}" style="text-align:left" onclick="pickToggle('${x.id}')">${x.id} ${esc(x.title.length > 12 ? x.title.slice(0, 12) + "…" : x.title)}</button>`; }).join("")}</div>` : ""}</div>`; }).join("")}
+    <div class="small mt">どの問題</div>${seg("mode", [["all", "全部"], ["new", "未挑戦"], ["weak", "苦手"], ["star", "★"]])}
+    <div class="small mt">何問</div>${seg("n", [[10, "10問"], [30, "30問"], [50, "50問"], [0, "全部"]])}
+    <div class="small mt">順番</div>${seg("order", [["rand", "ランダム"], ["book", "教科書の順"]])}
+    <div class="btns mt"><button class="btn" onclick="startPick()" ${n ? "" : "disabled"}>▶ 解く（${P.n ? Math.min(P.n, n) : n}問${P.n && n > P.n ? ` / 該当${n}問` : ""}）</button>
+    ${P.secs.length ? `<button class="linkbtn" onclick="pickSet('secs',[])">選んだ範囲をすべて外す</button>` : ""}</div></div>`;
+}
+
 function startArea(a, mode) {
   let qs = Q.filter(q => q.area === a);
   if (mode === "weak") qs = qs.filter(q => { const c = card(q.id); return c && (c.box <= 2 || c.w > 0); });
@@ -1311,6 +1350,7 @@ function StudyMenu() {
   const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
   const star = Q.filter(q => card(q.id)?.star).length;
   return `
+  ${PickCard()}
   ${WeakCard(3)}
   <div class="card"><h2>今日の分</h2>${TodayProgress()}
     <div class="btns mt">${p.due.length + p.newLeft.length ? `${TodayListenBtn()}<button class="btn" onclick="startToday()">▶ すぐ解く</button>` : `<button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}</div>
