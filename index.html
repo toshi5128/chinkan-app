@@ -156,7 +156,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v6.1";
+const APP_VERSION = "2026-10-06-v6.3";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -552,6 +552,7 @@ const TTS = {
   // 長文は途中で切れる端末があるので、文ごとに区切って順番に読む
   speak(text, onend) {
     if (!this.ok) { onend && onend(); return; }
+    const busy = speechSynthesis.speaking || speechSynthesis.pending; // 直前の読み上げを止めた直後に読むと、スマホが無視することがある
     this.stop();
     if (!this.voice) this.pickVoice();
     const my = ++this.token;
@@ -561,15 +562,21 @@ const TTS = {
       if (i >= parts.length) { onend && onend(); return; }
       const u = new SpeechSynthesisUtterance(parts[i]);
       u.lang = "ja-JP"; u.rate = S.tts.rate; if (this.voice) u.voice = this.voice;
-      u.onend = () => next(i + 1);
-      u.onerror = e => { if (e.error !== "interrupted" && e.error !== "canceled") next(i + 1); };
+      // スマホ(Chrome)は、読み上げ中の文をアプリが持っていないと「読み終わり」の合図を落とすことがある → 持っておく。
+      // それでも合図が来ない時のために、読み終わる時間を見積もって自動で次へ（2026-10-06 下田さん「解説のあと次の問題を読まない」）
+      let fin = false; const go = () => { if (fin) return; fin = true; clearTimeout(this.wd); next(i + 1); };
+      this.cur = u;
+      u.onend = go;
+      u.onerror = e => { if (e.error !== "interrupted" && e.error !== "canceled") go(); };
       speechSynthesis.speak(u);
+      clearTimeout(this.wd); this.wd = setTimeout(() => { if (my === this.token && !speechSynthesis.speaking) go(); else if (my === this.token) this.wd = setTimeout(() => { if (my === this.token) go(); }, 4000); }, (u.text.length / (7 * (S.tts.rate || 1)) + 1.5) * 1000);
     };
-    next(0);
+    if (busy) setTimeout(() => next(0), 200); else next(0);
   },
   // 会話の講義：進行役(A)は低め、相方(B)は高め＋別の声で、1行ずつ順に読む
   speakLines(lines, onend, onLine) {
     if (!this.ok) { onend && onend(); return; }
+    const busy = speechSynthesis.speaking || speechSynthesis.pending; // 直前の読み上げを止めた直後に読むと、スマホが無視することがある
     this.stop();
     if (!this.voice) this.pickVoice();
     const my = ++this.token;
@@ -581,13 +588,18 @@ const TTS = {
       if (onLine && (i === 0 || parts[i - 1][2] !== li)) onLine(li);
       u.lang = "ja-JP"; u.rate = S.tts.rate; u.pitch = w === "B" ? 1.35 : 0.85;
       const v = w === "B" ? this.voice2 : this.voice; if (v) u.voice = v;
-      u.onend = () => next(i + 1);
-      u.onerror = e => { if (e.error !== "interrupted" && e.error !== "canceled") next(i + 1); };
+      // スマホ(Chrome)は、読み上げ中の文をアプリが持っていないと「読み終わり」の合図を落とすことがある → 持っておく。
+      // それでも合図が来ない時のために、読み終わる時間を見積もって自動で次へ（2026-10-06 下田さん「解説のあと次の問題を読まない」）
+      let fin = false; const go = () => { if (fin) return; fin = true; clearTimeout(this.wd); next(i + 1); };
+      this.cur = u;
+      u.onend = go;
+      u.onerror = e => { if (e.error !== "interrupted" && e.error !== "canceled") go(); };
       speechSynthesis.speak(u);
+      clearTimeout(this.wd); this.wd = setTimeout(() => { if (my === this.token && !speechSynthesis.speaking) go(); else if (my === this.token) this.wd = setTimeout(() => { if (my === this.token) go(); }, 4000); }, (u.text.length / (7 * (S.tts.rate || 1)) + 1.5) * 1000);
     };
-    next(0);
+    if (busy) setTimeout(() => next(0), 200); else next(0);
   },
-  stop() { this.token++; if (this.ok) speechSynthesis.cancel(); },
+  stop() { this.token++; clearTimeout(this.wd); if (this.ok) speechSynthesis.cancel(); },
 };
 if (TTS.ok) { TTS.pickVoice(); speechSynthesis.onvoiceschanged = () => TTS.pickVoice(); }
 // 問題を読む時は頭に「問題」と付けて、解説との区切りを耳でわかるように（2026-10-06 下田さん）
@@ -1441,7 +1453,8 @@ function answer(v) {
   // 正解なら：自動読み上げONのときは解説を最後まで読んでから、自動で次の問題へ（2026-10-06 下田さん「次を押さずに自動で次の問題を読み出して」）
   const at = sess.i, goNext = () => { autoTimer = null; if (sess && sess.i === at && sess.ans !== null) nextQ(); };
   if (ok && S.autoNext) {
-    if (S.tts.auto && TTS.ok) { autoTimer = "reading"; render(); TTS.speak(aSpeech(q, ok), () => { if (autoTimer === "reading") goNext(); }); return; }
+    // 読み終えた瞬間に次を読み始めるとスマホが無視することがあるので、少し間を空けてから次の問題へ
+    if (S.tts.auto && TTS.ok) { autoTimer = "reading"; render(); TTS.speak(aSpeech(q, ok), () => { if (autoTimer === "reading") { autoTimer = setTimeout(goNext, 600); } }); return; }
     autoTimer = setTimeout(goNext, 1300);
   }
   render();
@@ -1456,7 +1469,7 @@ function luck() {
   nextQ();
 }
 function toggleStar(id) { const c = S.cards[id]; if (!c) return; c.star = !c.star; save(); render(); }
-function nextQ() { clipStop(); if (autoTimer !== "reading") clearTimeout(autoTimer); autoTimer = null; sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
+function nextQ() { clipStop(); if (autoTimer !== "reading") clearTimeout(autoTimer); autoTimer = null; TTS.stop(); sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
 function StudyMenu() {
   const p = todayPlan();
   const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
