@@ -36,6 +36,7 @@
 .tl.B .who{background:var(--warnbg)}
 .tl .say{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:7px 11px;font-size:15px;line-height:1.75;min-width:0;flex:0 1 auto;max-width:calc(100% - 40px);overflow-wrap:anywhere}
 .tl.B .say{background:var(--warnbg);border-color:transparent}
+.ankirow.now{background:var(--brandbg);border-radius:8px;outline:2px solid var(--brand)}
 .tl.now .say{outline:3px solid var(--brand);outline-offset:1px;font-weight:600}.tl.now .who{transform:scale(1.15);box-shadow:0 0 0 2px var(--brand)}
 .zu{border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:10px;background:var(--bg)}
 .zu .zt{font-size:13px;font-weight:800;color:var(--brand);margin-bottom:8px}
@@ -156,7 +157,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v6.7";
+const APP_VERSION = "2026-10-07-v6.8";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -193,6 +194,7 @@ function load() {
   if (!s.pd200) { s.pd200 = 1; s._toPd200 = s.newPerDay !== 200; s.newPerDay = 200; }
   s.tts = Object.assign({ auto: true, rate: 1.2, think: 4, lecQuiz: true, lecMix: true }, s.tts || {});
   s.heard = s.heard || {};
+  s.anki = s.anki || {}; // 暗記まとめで「覚えた」にした項目：テーマ|問い → 1
   s.autoNext = s.autoNext ?? true;
   if (!s.an65) { s.an65 = 1; s.autoNext = true; } // 2026-10-06 下田さんの端末でOFFになっていた → 一度だけONに戻す // 正解なら自動で次へ   // 講義を最後まで聞いた回数：Section → {n, last}
   s.lecPos = s.lecPos || null; // まとめて聞くの続き（どの一覧の、どこまで） // 読み上げの設定
@@ -240,7 +242,7 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000));
 
 // ---------- 問題 ----------
-let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], LEC = {}, AUD = {}, TALK = {};
+let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], ANKI = [], LEC = {}, AUD = {}, TALK = {};
 const LEC_FILES = ["lec_1a", "lec_1b", "lec_2", "lec_3", "lec_4", "lec_5"];
 // 2026-10-05 下田さん「会話形式で・図やイラストでイメージしやすく」→ 講義をラジオ風の2人の会話＋図に（data/talk_*.json）。無いSectionは今までの講義のまま
 const TALK_FILES = ["talk_1a", "talk_1b", "talk_2", "talk_3", "talk_4", "talk_5"];
@@ -254,6 +256,7 @@ async function loadQuestions() {
   const talks = await Promise.all(TALK_FILES.map(f => fetch(`data/${f}.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}))));
   TALK = Object.assign({}, ...talks);
   NUMS = Array.isArray(nums) ? nums : [];
+  ANKI = await fetch("data/anki.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   AUD = await fetch("audio/index.json", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
   CHAPS = chaps;
   SECS = chaps.flatMap(c => c.secs.map(([id, title, page]) => ({ id, title, page, ch: c.ch })));
@@ -358,7 +361,7 @@ const TABS = [
   ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
   ["settings", "設定", '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'],
 ];
-const PARENT = { past: "mock", numbers: "book", listen: "study", lecture: "book" };
+const PARENT = { past: "mock", numbers: "book", anki: "book", listen: "study", lecture: "book" };
 function renderTabs() {
   document.getElementById("tabs").innerHTML = TABS.map(([k, l, d]) =>
     `<button class="${(PARENT[view] || view) === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
@@ -384,7 +387,7 @@ function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "settings" ? Settings() : Stats());
+  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "settings" ? Settings() : Stats());
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -1237,6 +1240,7 @@ function Book() {
     <div class="row small"><span class="grow">🎧最後まで聞いた Section ${SECS.filter(x => heardN(x.id)).length}/${SECS.length}</span><span class="num">${readPg}/${allPg}ページ</span></div>
     <div class="bar mt"><i style="width:${allPg ? readPg / allPg * 100 : 0}%;background:var(--brand)"></i></div>
     <div class="small mt">左の□は自動です。🎧の講義を最後まで聞くと「1」、2回目を最後まで聞くと「2」…と増えます。「解く」でそのSectionの問題だけを出します。</div>
+    ${ANKI.length ? `<div class="mt"><button class="btn" onclick="go('anki')">🧠 暗記まとめ（罰則・期間・数字・「〜つ」もの）</button></div>` : ""}
     ${NUMS.length ? `<div class="mt"><button class="btn sec" onclick="go('numbers')">🔢 数字まとめ（${NUMS.length}項目）</button></div>` : ""}</div>
   ${BundleCard()}
   ${CHAPS.map(c => { const secs = SECS.filter(x => x.ch === c.ch), r = secs.filter(x => S.read[x.id]).length, open = cur === c.ch;
@@ -1988,6 +1992,63 @@ function Numbers() {
       <div style="font-size:15px;margin-top:2px;color:${shown ? "var(--brand)" : "var(--sub)"}">${shown ? esc(x.num) : "（タップで表示）"}</div>
       ${shown && x.tip ? `<div class="small">💡 ${esc(x.tip)}</div>` : ""}</div>`; }).join("") || `<div class="small">この章の数字はまだありません。</div>`}</div>
   <div class="center"><button class="linkbtn" onclick="go('book')">◀ 教科書に戻る</button></div>`;
+}
+
+// ---------- 暗記まとめ ----------
+// 2026-10-07 下田さん「罰則の罰金とか暗記系がまったくだめ。暗記しないといけないものをまとめて教科書に入れて」
+// テーマ別（罰則は罰則だけ・期間は期間だけ）に1か所へ集める。答えを隠して自分テスト→「覚えた」で外していく
+let ankiCh = 0, ankiOpen = null, ankiHide = true, ankiShow = {}, ankiOnlyLeft = false;
+const ankiKey = (t, r) => t.theme + "|" + r.q;
+const ANKI_KIND = { penalty: "⚖️", period: "⏱", number: "🔢", list: "📋", compare: "↔️", other: "📌" };
+function ankiDone(t) { return t.rows.filter(r => S.anki[ankiKey(t, r)]).length; }
+function ankiMark(ti, ri) { const t = ANKI[ti], k = ankiKey(t, t.rows[ri]); if (S.anki[k]) delete S.anki[k]; else S.anki[k] = 1; save(); render(); }
+function ankiRows(t) { return t.rows.map((r, ri) => ({ r, ri })).filter(x => !ankiOnlyLeft || !S.anki[ankiKey(t, x.r)]); }
+function ankiMarkNow(ri) {
+  document.querySelectorAll(".ankirow").forEach(el => { const on = +el.dataset.ri === ri; el.classList.toggle("now", on); if (on) el.scrollIntoView({ block: "center", behavior: "smooth" }); });
+}
+function ankiSay(ti) {
+  const t = ANKI[ti], list = ankiRows(t);
+  if (!list.length) return;
+  keepAwake(true);
+  const lines = list.flatMap(({ r }) => [["A", r.q + "。"], ["B", r.a + "。"]]);
+  TTS.speakLines([["A", t.theme + "。"], ...lines], () => ankiMarkNow(-1), li => { if (li > 0) ankiMarkNow(list[Math.floor((li - 1) / 2)].ri); });
+}
+function Anki() {
+  if (!ANKI.length) return `<div class="card">暗記まとめは準備中です。</div>`;
+  { const dd = S.done[today()] || (S.done[today()] = {}); if (!dd.anki) { dd.anki = true; setTimeout(save, 0); } }
+  if (ankiOpen != null && ANKI[ankiOpen]) return AnkiTheme(ankiOpen);
+  const all = ANKI.reduce((n, t) => n + t.rows.length, 0), done = ANKI.reduce((n, t) => n + ankiDone(t), 0);
+  const list = ANKI.map((t, ti) => ({ t, ti })).filter(x => !ankiCh || x.t.ch === ankiCh);
+  return `<div class="card"><h2>🧠 暗記まとめ</h2>
+    <div class="small">罰則・期間・数字・「〜つある」ものを、テーマごとに1か所に集めました。答えを隠して言えるか試し、言えたものは「覚えた」で外していきます。</div>
+    <div class="row mt small"><span class="grow">覚えた</span><b class="num">${done}/${all}</b></div>
+    <div class="bar mt"><i style="width:${all ? done / all * 100 : 0}%;background:var(--ok)"></i></div>
+    <div class="row mt" style="gap:6px;flex-wrap:wrap">${[[0, "全部"], ...CHAPS.map(c => [c.ch, "CH" + c.ch])].map(([v, l]) => `<button class="chip" style="border:0;padding:6px 12px;font-size:13px;${ankiCh === v ? "background:var(--brand);color:#fff" : ""}" onclick="ankiCh=${v};render()">${l}</button>`).join("")}</div></div>
+  <div class="card">${list.map(({ t, ti }, i) => { const d = ankiDone(t), n = t.rows.length;
+    return `<button onclick="ankiOpen=${ti};ankiShow={};render();scrollTo(0,0)" style="display:block;width:100%;text-align:left;border:0;border-top:${i ? "1px solid var(--line)" : "0"};background:none;padding:11px 0;color:inherit">
+      <div class="row" style="gap:8px"><span style="font-size:18px">${ANKI_KIND[t.kind] || "📌"}</span><span class="grow" style="font-weight:700;font-size:15px">${esc(t.theme)}</span>
+        <span class="small num" style="color:${d === n ? "var(--ok)" : "var(--sub)"}">${d === n ? "✓ " : ""}${d}/${n}</span><span class="small">›</span></div>
+      <div class="small" style="margin-left:26px">CH${t.ch}${t.intro ? "・" + esc(t.intro) : ""}</div></button>`; }).join("")}</div>
+  <div class="center"><button class="linkbtn" onclick="go('book')">◀ 教科書に戻る</button></div>`;
+}
+function AnkiTheme(ti) {
+  const t = ANKI[ti], list = ankiRows(t), d = ankiDone(t);
+  return `<div class="card"><div class="row"><button class="linkbtn" onclick="ankiOpen=null;TTS.stop();render()">◀ テーマ一覧</button><span class="grow"></span><span class="small num">覚えた ${d}/${t.rows.length}</span></div>
+    <h2 style="margin-top:6px">${ANKI_KIND[t.kind] || "📌"} ${esc(t.theme)}</h2>
+    ${t.intro ? `<div class="small">${esc(t.intro)}</div>` : ""}
+    ${t.goro ? `<div class="mt" style="padding:8px 10px;border-radius:8px;background:var(--track);font-size:14px">💡 覚え方：${esc(t.goro)}</div>` : ""}
+    <div class="seg mt"><button class="${ankiHide ? "on" : ""}" onclick="ankiHide=true;ankiShow={};render()">答えを隠す（テスト）</button><button class="${!ankiHide ? "on" : ""}" onclick="ankiHide=false;render()">全部見る</button></div>
+    <div class="row mt" style="gap:8px">${TTS.ok ? `<button class="btn sec" style="flex:1" onclick="ankiSay(${ti})">🎧 通しで聞く</button>` : ""}
+      <button class="btn ghost" style="flex:1" onclick="ankiOnlyLeft=!ankiOnlyLeft;render()">${ankiOnlyLeft ? "全部を表示" : "まだの分だけ"}</button></div></div>
+  <div class="card">${list.map(({ r, ri }, i) => { const shown = !ankiHide || ankiShow[ri], ok = S.anki[ankiKey(t, r)];
+    return `<div class="ankirow" data-ri="${ri}" style="border-top:${i ? "1px solid var(--line)" : "0"};padding:10px 4px">
+      <div onclick="ankiShow[${ri}]=!ankiShow[${ri}];render()" style="cursor:pointer">
+        <div style="font-weight:700;font-size:15px">${esc(r.q)}</div>
+        <div style="font-size:15.5px;margin-top:3px;font-weight:700;color:${shown ? "var(--brand)" : "var(--sub)"}">${shown ? esc(r.a) : "（タップで答え）"}</div>
+        ${shown && r.tip ? `<div class="small" style="margin-top:2px">⚠ ${esc(r.tip)}</div>` : ""}</div>
+      <div class="row" style="gap:8px;margin-top:6px"><span class="small grow">${esc(r.sec)} ${esc(SECM[r.sec]?.title || "")}</span>
+        <button class="spk ${ok ? "on" : ""}" onclick="ankiMark(${ti},${ri})">${ok ? "✓ 覚えた" : "覚えた"}</button></div></div>`; }).join("") || `<div class="small">このテーマは全部覚えました。「全部を表示」で見直せます。</div>`}</div>
+  <div class="center"><button class="linkbtn" onclick="ankiOpen=null;TTS.stop();render()">◀ テーマ一覧に戻る</button></div>`;
 }
 
 // ---------- 起動 ----------
