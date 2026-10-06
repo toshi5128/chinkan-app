@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v4.9";
+const APP_VERSION = "2026-10-06-v5.0";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -376,7 +376,6 @@ function Home() {
   return `
   <div class="card" style="padding:14px 16px"><div class="row" style="align-items:baseline;gap:8px">
     <span class="small grow">本番 11/15（日）13:00 まで</span><b class="num" style="font-size:34px;color:var(--brand)">${dl}</b><span>日</span></div></div>
-  ${CoachCard()}
   ${GoalCard()}
   ${RoadCard()}
   <details class="card"><summary style="font-weight:700;cursor:pointer">📊 くわしく見る（分野別の作戦表・仕上がり・模試の記録・設定）</summary>
@@ -421,8 +420,6 @@ function gapList() {
   const by = Object.entries(P.by).filter(([, b]) => b.cov >= 0.3 && b.acc != null).sort((x, y) => y[1].gain - x[1].gain);
   if (unseen > 0) out.push({ t: `まだ解いていない問題が ${unseen}問`, s: "一度も見ていない論点は、本番でほぼ取れません。毎日の新しい問題で潰していきます。", btn: "startToday()", l: "今日の分を解く" });
   if (by[0] && by[0][1].gain >= 0.8) out.push({ t: `${AREAS[by[0][0]].name}の伸びしろ（正答率 ${Math.round(by[0][1].acc * 100)}%）`, s: `ここを9割台にすると約+${by[0][1].gain.toFixed(1)}点。間違えた問題から解き直します。`, btn: `startArea('${by[0][0]}','weak')`, l: "苦手を解く" });
-  const cnt = Object.values(S.done).filter(d => d.count).length;
-  if (cnt < 5) out.push({ t: `個数問題の練習がまだ ${cnt}回`, s: "本番の約2割は「いくつ正しいか」の問題。4つ全部を判断する練習が要ります。", btn: "startCountDrill()", l: "個数ドリル" });
   const full = S.mocks.filter(m => m.n >= 40);
   if (!full.length) out.push({ t: "本番形式（50問・120分）をまだ解いていない", s: "時間配分は体で覚えるしかありません。日曜13:00に通しで解きます。", btn: "startMock(50)", l: "模試を始める" });
   if (today() > readEnd() && S.pastLog.length < 5) out.push({ t: `公式の過去問がまだ ${new Set(S.pastLog.map(l => l.year)).size}/5年分`, s: "本番の問題の「くせ」に慣れる一番の方法です。", btn: "go('mock')", l: "過去問へ" });
@@ -1371,6 +1368,7 @@ function StudyMenu() {
   const star = Q.filter(q => card(q.id)?.star).length;
   return `
   ${PickCard()}
+  ${CountCard()}
   ${WeakMap()}
   <div class="card"><h2>今日の分</h2>${TodayProgress()}
     <div class="btns mt">${p.due.length + p.newLeft.length ? `${TodayListenBtn()}<button class="btn" onclick="startToday()">▶ すぐ解く</button>` : `<button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}</div>
@@ -1517,6 +1515,7 @@ function finishMock(timeUp) {
 function MockMenu() {
   const hist = S.mocks.slice(-8).reverse();
   return `
+  ${CountCard()}
   ${PastMenu()}
   <div class="card"><h2>本番形式の模試（アプリのオリジナル）</h2>
     <div class="small">4択50問・120分。本番の分野の比率に合わせて、毎回ちがう組み合わせで出題します。「正しいものはいくつあるか」の個数問題、組合せ問題も入ります。<br>間違えた問題の4つの文は、翌日の一問一答の復習に自動で入ります。</div>
@@ -1558,14 +1557,31 @@ function MockTime(m) {
 }
 
 // ---------- 個数問題ドリル（「正しいものはいくつ」と組合せだけ。間違えた文を優先） ----------
+// 2026-10-06 下田さん「個数問題ドリルはやりたい時にやるので切り離して」→ 一問一答タブと模試タブに独立したメニュー
+function cdState() { return S.cd || (S.cd = { range: "all", n: 10 }); }
 function startCountDrill() {
-  const seen = Q.filter(q => card(q.id)), weak = seen.filter(q => card(q.id).w > 0 && card(q.id).box <= 2);
-  const base = seen.length >= 40 ? [...weak, ...shuffle(seen).slice(0, 200)] : Q;
+  const C = cdState(), n = C.n || 10;
+  const inPick = new Set(pickState().secs);
+  const scope = C.range === "pick" && inPick.size ? Q.filter(q => inPick.has(q.sec)) : Q;
+  const seen = scope.filter(q => card(q.id)), weak = seen.filter(q => card(q.id).w > 0 && card(q.id).box <= 2);
+  const base = C.range === "weak" ? (weak.length >= 16 ? [...weak, ...shuffle(seen).slice(0, 60)] : [...weak, ...shuffle(seen).slice(0, 200)])
+    : seen.length >= 40 ? [...weak, ...shuffle(seen).slice(0, 200)] : scope;
+  const pool = base.length >= 16 ? base : scope; // 解いた問題がまだ少ない時は範囲全体から
   const used = new Set(), items = [];
-  for (let i = 0; items.length < 10 && i < 40; i++) { const it = makeItem(null, i % 3 === 2 ? "combo" : "count", used, base); if (it) items.push(it); }
+  for (let i = 0; items.length < n && i < n * 4; i++) { const it = makeItem(null, i % 3 === 2 ? "combo" : "count", used, pool); if (it) items.push(it); }
   if (items.length < 5) { alertBox("問題がまだ少ないため、個数ドリルを作れません。"); return; }
-  S.cur = { items, pick: items.map(() => null), flag: items.map(() => false), i: 0, start: Date.now(), done: false, limit: 1200, kind: "count" };
+  S.cur = { items, pick: items.map(() => null), flag: items.map(() => false), i: 0, start: Date.now(), done: false, limit: n * 120, kind: "count" };
   save(); go("mock");
+}
+
+function CountCard() {
+  const C = cdState(), runs = Object.values(S.done).filter(d => d.count).length, hasPick = pickState().secs.length > 0;
+  const seg = (k, opts) => `<div class="seg mt">${opts.map(([v, l]) => `<button class="${C[k] === v ? "on" : ""}" onclick="cdState()['${k}']=${JSON.stringify(v).replace(/"/g, "'")};save();render()">${l}</button>`).join("")}</div>`;
+  return `<div class="card"><h2>🔢 個数問題ドリル</h2>
+    <div class="small">「正しいものはいくつあるか」と組合せの問題だけを出します。4つの文を全部判断する練習です（1問2分）。${runs ? `これまで${runs}日やりました。` : ""}</div>
+    <div class="small mt">範囲</div>${seg("range", [["all", "全範囲"], ...(hasPick ? [["pick", "範囲選びで選んだ所"]] : []), ["weak", "間違えた文を多めに"]])}
+    <div class="small mt">問数</div>${seg("n", [[10, "10問・20分"], [20, "20問・40分"]])}
+    <div class="btns mt"><button class="btn" onclick="startCountDrill()">▶ 個数ドリルを始める</button></div></div>`;
 }
 
 // ---------- 総まとめラジオ（各章の「まとめ」の会話だけをつなぐ。直前の1週間用） ----------
