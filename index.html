@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v4.0";
+const APP_VERSION = "2026-10-06-v4.1";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -352,31 +352,23 @@ function render() {
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
 // ---------- ホーム ----------
+// 2026-10-06 下田さん「ごちゃごちゃして、今日なにをすべきか・何が足りないか・どうすれば合格できるかが分からない」
+// → ホームは3つだけ：①今日やること（次の1つを大きく） ②合格まであと何点・足りないもの ③合格までの道。細かいデータは「くわしく見る」に畳む
 function Home() {
   const p = todayPlan(), L = S.log[today()] || { n: 0, c: 0 };
   const todo = p.due.length + p.newLeft.length;
   const seen = Object.keys(S.cards).filter(id => QM[id]).length;
   const lastMock = S.mocks.filter(m => m.n >= 40).slice(-1)[0];
   const lastPast = S.pastLog.slice(-1)[0];
-  const answered = Object.values(S.log).reduce((s, l) => s + l.n, 0);
-  const needBackup = answered >= 30 && (!S.lastBackup || addDays(S.lastBackup, 7) <= today());
   const dl = daysLeft();
-  const phase = dl <= LAST_WEEK ? "仕上げ期：新しいことはしない。模試と、間違えた問題・★マークの総ざらいだけ。"
-    : today() > readEnd() ? `過去問期：<a href="${PAST_URL}" target="_blank" rel="noopener">公式の過去問</a>を時間を計って1年分ずつ。間違えた所は教科書に戻って読み直し。今日の分も続けます。`
-    : `教科書期（〜${mdj(readEnd())}ごろ）：今日の範囲を読む・聞く → すぐ解く、の繰り返し。1周目は覚えなくてOK。一周したら過去問へ。`;
   return `
-  <div class="card">
-    <div class="small">令和8年11月15日（日）13:00 本番まで</div>
-    <div class="hero"><b class="num">${dl}</b><span>日</span></div>
-    <div class="small mt">${phase}</div>
-  </div>
-  ${needBackup ? `<div class="card" style="background:var(--warnbg)"><b>記録のバックアップを取りましょう</b><div class="small">${S.lastBackup ? `前回 ${S.lastBackup.slice(5).replace("-", "/")}` : "まだ一度も取っていません"}。スマホの故障や機種変更で記録が消えないように、週1回保存しておくと安心です。</div>
-    <div class="mt"><button class="btn sec" onclick="go('stats')">記録タブで保存する</button></div></div>` : ""}
+  <div class="card" style="padding:14px 16px"><div class="row" style="align-items:baseline;gap:8px">
+    <span class="small grow">本番 11/15（日）13:00 まで</span><b class="num" style="font-size:34px;color:var(--brand)">${dl}</b><span>日</span></div></div>
   ${CoachCard()}
-  ${TodaySteps()}
-  ${PredictCard()}
-  ${daysLeft() <= 14 ? RadioCard() : ""}
-  ${ReadToday()}
+  ${GoalCard()}
+  ${RoadCard()}
+  <details class="card"><summary style="font-weight:700;cursor:pointer">📊 くわしく見る（作戦表・分野ごとの仕上がり・模試の記録など）</summary>
+    <div class="mt">${PredictCard()}${daysLeft() <= 14 ? RadioCard() : ""}${ReadToday()}${TodaySteps()}
   <div class="card">
     <h2>今日の分（一問一答）</h2>
     ${TodayProgress()}
@@ -401,7 +393,59 @@ function Home() {
       : lastPast ? ""
       : `<div class="small">本番と同じ4択50問・120分。まだ受けていません。一周の半分くらいまで進んだら一度受けてみましょう。</div>`}
     <div class="mt"><button class="btn sec" onclick="go('mock')">模試・過去問へ</button></div>
-  </div>`;
+  </div></div></details>`;
+}
+
+// ---------- ② 合格まであと何点・足りないもの ----------
+function gapList() {
+  const P = predict(), out = [], unseen = Q.length - Object.keys(S.cards).filter(id => QM[id]).length;
+  const by = Object.entries(P.by).filter(([, b]) => b.cov >= 0.3 && b.acc != null).sort((x, y) => y[1].gain - x[1].gain);
+  if (unseen > 0) out.push({ t: `まだ解いていない問題が ${unseen}問`, s: "一度も見ていない論点は、本番でほぼ取れません。毎日の新しい問題で潰していきます。", btn: "startToday()", l: "今日の分を解く" });
+  if (by[0] && by[0][1].gain >= 0.8) out.push({ t: `${AREAS[by[0][0]].name}の伸びしろ（正答率 ${Math.round(by[0][1].acc * 100)}%）`, s: `ここを9割台にすると約+${by[0][1].gain.toFixed(1)}点。間違えた問題から解き直します。`, btn: `startArea('${by[0][0]}','weak')`, l: "苦手を解く" });
+  const cnt = Object.values(S.done).filter(d => d.count).length;
+  if (cnt < 5) out.push({ t: `個数問題の練習がまだ ${cnt}回`, s: "本番の約2割は「いくつ正しいか」の問題。4つ全部を判断する練習が要ります。", btn: "startCountDrill()", l: "個数ドリル" });
+  const full = S.mocks.filter(m => m.n >= 40);
+  if (!full.length) out.push({ t: "本番形式（50問・120分）をまだ解いていない", s: "時間配分は体で覚えるしかありません。日曜13:00に通しで解きます。", btn: "startMock(50)", l: "模試を始める" });
+  if (today() > readEnd() && S.pastLog.length < 5) out.push({ t: `公式の過去問がまだ ${new Set(S.pastLog.map(l => l.year)).size}/5年分`, s: "本番の問題の「くせ」に慣れる一番の方法です。", btn: "go('mock')", l: "過去問へ" });
+  return out.slice(0, 3);
+}
+function GoalCard() {
+  const P = predict(), score = Math.round(P.total), safe = PASS_LINE + 2, left = Math.max(0, PASS_LINE - score), few = P.seenAll < 100;
+  const gaps = gapList(), pct = x => Math.min(100, x / 50 * 100);
+  return `<div class="card"><h2>🎯 ${few ? "合格までの距離" : left ? `合格まであと <span style="color:var(--ng)">${left}点</span>` : P.seenAll < Q.length ? "このペースなら合格ライン" : "合格ラインに届いています"}</h2>
+    ${few ? `<div class="small">100問ほど解くと、今の実力で本番何点取れそうかを出します（今 ${P.seenAll}問）。</div>` : `
+    <div class="row" style="align-items:baseline;gap:6px"><span class="small grow">今の正解率のまま全範囲を仕上げたら</span><b class="num" style="font-size:32px;color:${left ? "var(--ng)" : "var(--ok)"}">${score}</b><span>/ 50点</span></div>
+    <div style="position:relative;height:14px;border-radius:7px;background:var(--track);margin:26px 0 22px">
+      <i style="position:absolute;left:0;top:0;bottom:0;width:${pct(score)}%;border-radius:7px;background:${left ? "var(--ng)" : "var(--ok)"}"></i>
+      <span style="position:absolute;left:${pct(PASS_LINE)}%;top:-3px;bottom:-3px;width:2px;background:var(--ink)"></span>
+      <span class="small" style="position:absolute;left:${pct(PASS_LINE)}%;top:16px;transform:translateX(-50%);white-space:nowrap">合格 ${PASS_LINE}</span>
+      <span style="position:absolute;left:${pct(safe)}%;top:-3px;bottom:-3px;width:2px;background:var(--ok)"></span>
+      <span class="small" style="position:absolute;left:${pct(safe)}%;top:-20px;transform:translateX(-50%);white-space:nowrap;color:var(--ok)">安全 ${safe}</span></div>
+    ${P.seenAll < Q.length ? `<div class="small">※まだ解いていない問題も、今の正解率で取れる前提の数字です。今日いきなり本番を受けたら約${Math.round(P.raw)}点。</div>` : ""}`}
+    <div style="font-weight:700;margin-top:6px">${gaps.length ? "足りていないもの" : "足りていないものはありません"}</div>
+    ${gaps.length ? gaps.map((g, i) => `<div class="row" style="border-top:1px solid var(--line);padding:9px 0;gap:10px;align-items:flex-start">
+      <b style="flex:none;color:var(--ng)">${i + 1}</b><div class="grow"><div style="font-weight:700;font-size:15px">${esc(g.t)}</div><div class="small">${esc(g.s)}</div></div>
+      <button class="btn sec" style="width:auto;padding:7px 10px;font-size:13px;flex:none" onclick="${g.btn}">${g.l}</button></div>`).join("")
+      : `<div class="small">このまま毎日の指示を続けて、合格点の上に余裕を作りましょう。</div>`}</div>`;
+}
+
+// ---------- ③ 合格までの道（今どこにいて、何がそろえば合格圏か） ----------
+function RoadCard() {
+  const d = today(), re = readEnd(), dl = daysLeft();
+  const phases = [["教科書", `〜${mdj(re)}`, d <= re], ["過去問", "〜11/7", d > re && dl > LAST_WEEK], ["仕上げ", "11/8〜", dl <= LAST_WEEK && dl > 0], ["本番", "11/15", dl === 0]];
+  const P = predict(), seen = Object.keys(S.cards).filter(id => QM[id]).length;
+  const pastOkN = new Set(S.pastLog.filter(l => l.score >= l.pass).map(l => l.year)).size;
+  const reh = S.mocks.filter(m => m.n >= 40 && m.score >= PASS_LINE + 2).length;
+  const chk = [
+    ["全問に一度挑戦する", `${seen}/${Q.length}問`, seen >= Q.length],
+    ["○×の正解率 9割", P.seenAll ? `今 ${Math.round(P.overall * 100)}%` : "まだ記録なし", P.seenAll >= 100 && P.overall >= 0.9],
+    ["過去問5年分すべて合格点", `${pastOkN}/5年`, pastOkN >= 5],
+    [`本番形式で${PASS_LINE + 2}点以上を2回`, `${reh}/2回`, reh >= 2],
+  ];
+  return `<div class="card"><h2>🗺 合格までの道</h2>
+    <div class="row" style="gap:4px;margin:4px 0 10px">${phases.map(([n, t, on]) => `<div style="flex:1;text-align:center;padding:6px 2px;border-radius:8px;${on ? "background:var(--brand);color:#fff;font-weight:700" : "background:var(--track)"}"><div style="font-size:13px">${n}</div><div style="font-size:11px;opacity:.85">${t}</div></div>`).join("")}</div>
+    <div class="small">この4つがそろえば、まず合格できる水準です。</div>
+    ${chk.map(([t, v, ok]) => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:10px"><span style="flex:none;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;${ok ? "background:var(--ok);color:#fff" : "border:2px solid var(--line)"}">${ok ? "✓" : ""}</span><span class="grow" style="font-size:14px">${t}</span><span class="small num">${v}</span></div>`).join("")}</div>`;
 }
 
 // ---------- 読み上げ ----------
@@ -1460,13 +1504,20 @@ function coachPlan() {
   return { phase, msg, items };
 }
 function CoachCard() {
-  const c = coachPlan(), done = c.items.filter(x => x.done).length;
-  return `<div class="card" style="border:2px solid var(--brand)"><div class="row"><h2 class="grow" style="margin:0">📅 今日の指示</h2><span class="small">${c.phase}・${done}/${c.items.length}</span></div>
+  const c = coachPlan(), done = c.items.filter(x => x.done).length, next = c.items.findIndex(x => !x.done);
+  const inSess = sess && sess.i < sess.ids.length;
+  const btnOf = x => x.btn === "startToday()" && inSess ? "go('study')" : x.btn;
+  const p = todayPlan();
+  return `<div class="card" style="border:2px solid var(--brand)"><div class="row"><h2 class="grow" style="margin:0">📅 今日やること</h2><span class="small">${c.phase}・<b>${done}/${c.items.length}</b> 完了</span></div>
     <div class="small mt" style="color:var(--ink)">${esc(c.msg)}</div>
-    ${c.items.map(x => `<div class="row" style="border-top:1px solid var(--line);padding:9px 0;gap:10px;align-items:flex-start">
-      <span style="flex:none;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;${x.done ? "background:var(--ok);color:#fff" : "border:2px solid var(--line)"}">${x.done ? "✓" : ""}</span>
-      <div class="grow"><div style="font-weight:700;${x.done ? "color:var(--sub);text-decoration:line-through" : ""}">${esc(x.title)}</div><div class="small">${esc(x.sub)}</div></div>
-      ${x.btn && !x.done ? `<button class="btn sec" style="width:auto;padding:7px 12px;font-size:13px;flex:none" onclick="${x.btn}">${x.label}</button>` : ""}</div>`).join("")}</div>`;
+    ${c.items.map((x, i) => { const now = i === next;
+      return `<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;gap:10px;align-items:flex-start;${now ? "" : x.done ? "opacity:.55" : ""}">
+      <span style="flex:none;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;${x.done ? "background:var(--ok);color:#fff" : now ? "background:var(--brand);color:#fff" : "border:2px solid var(--line)"}">${x.done ? "✓" : i + 1}</span>
+      <div class="grow" style="min-width:0"><div style="font-weight:700;${x.done ? "text-decoration:line-through" : ""}">${esc(x.title)}</div><div class="small">${esc(x.sub)}</div>
+        ${x.btn === "startToday()" && !x.done && p.newTotal ? `<div class="bar mt" style="height:8px"><i style="width:${Math.round(p.newDone / p.newTotal * 100)}%;background:var(--brand)"></i></div>` : ""}
+        ${now && x.btn ? `<button class="btn mt" onclick="${btnOf(x)}">▶ ${x.btn === "startToday()" && inSess ? "続きから" : x.label}</button>` : ""}</div>
+      ${!now && !x.done && x.btn ? `<button class="btn ghost" style="width:auto;padding:6px 10px;font-size:12px;flex:none" onclick="${btnOf(x)}">${x.label}</button>` : ""}</div>`; }).join("")}
+    ${next < 0 ? `<div class="res ok mt"><b>今日の分は全部できました 🎉</b><br>余裕があれば「おかわり」や個数ドリルをもう1回。</div><div class="btns mt"><button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button></div>` : ""}</div>`;
 }
 
 // ---------- 記録 ----------
