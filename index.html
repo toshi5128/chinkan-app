@@ -148,7 +148,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v5.5";
+const APP_VERSION = "2026-10-06-v5.6";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1330,25 +1330,41 @@ function StudyRef(q) {
   return `<div class="card" style="border:2px solid var(--warn)"><div class="row"><b class="grow">📖 教科書のこの部分（Section ${esc(q.sec)}）</b>
       <button class="spk on" onclick="playRef('${q.sec}',${bi})">🔊 この部分を聞く</button></div>
     <div style="font-weight:700;font-size:14px;color:var(--brand);margin-top:6px">${esc(b.h)}</div>
-    <div style="max-height:42vh;overflow-y:auto;margin-top:4px;padding-right:4px">${blockBody(b)}</div>
+    <div id="refBox" style="max-height:42vh;overflow-y:auto;margin-top:4px;padding-right:4px">${blockBody(b)}</div>
     <div class="small mt">↑ 中をスクロールできます。下に問題と解説があります。</div>
     <div class="row mt" style="gap:6px"><button class="btn ghost" style="padding:8px;font-size:13px" onclick="TTS.stop();clipStop();startLecture(['${q.sec}'])">このSectionの講義を最初から</button></div></div>`;
 }
 // 講義の音声から、そのかたまりの所だけを再生（音声が無ければ読み上げ）
 let clipEl = null, clipEnd = 0;
 function clipStop() { if (clipEl) clipEl.pause(); }
+// 2026-10-06 下田さん「この部分を聞くで、読んでいる吹き出しがわかるように」→ 今話している吹き出しに枠を付け、枠の中で自動スクロール
+function refMark(li) {
+  const box = document.getElementById("refBox"); if (!box) return;
+  box.querySelectorAll(".tl").forEach((el, i) => { el.classList.toggle("now", i === li); if (i === li) box.scrollTo({ top: el.offsetTop - box.offsetTop - box.clientHeight / 3, behavior: "smooth" }); });
+}
 function playRef(sec, bi) {
   TTS.stop(); clipStop();
   const e = AUD[sec], mk = e?.lec_marks, b = lecBlocks(sec)[bi];
+  if (!document.getElementById("refBox")) { sess.refOpen = sess.ids[sess.i]; render(); }
   if (useTalk(sec) && hasLecAudio(sec) && mk && mk[bi + 1] !== undefined) {
     if (LV && LV.audio) apStop();
     clipEl = clipEl || new Audio();
     clipEl.src = apSrc({ sec, kind: "lec" }); clipEnd = mk[bi + 2] ?? 1e9; clipEl.playbackRate = S.tts.rate;
-    clipEl.onloadedmetadata = () => { clipEl.currentTime = mk[bi + 1]; clipEl.play().catch(() => {}); };
-    clipEl.ontimeupdate = () => { if (clipEl.currentTime >= clipEnd) clipEl.pause(); };
+    const bl = lecBlocks(sec), off = bl.slice(0, bi).reduce((n, x) => n + (x.lines ? x.lines.length : 0), 0);
+    const st = mk[bi + 1], lens = (b.lines || []).map(l => l[1].length + 6), tot = lens.reduce((x, y) => x + y, 0) || 1;
+    let last = -1;
+    clipEl.onloadedmetadata = () => { clipEl.currentTime = st; clipEl.play().catch(() => {}); };
+    clipEl.ontimeupdate = () => {
+      const t = clipEl.currentTime;
+      if (t >= clipEnd) { clipEl.pause(); refMark(-1); return; }
+      let li = 0;
+      if (e.lec_lines) { for (let i = 0; i < lens.length; i++) if (e.lec_lines[off + i] !== undefined && t >= e.lec_lines[off + i] - 0.05) li = i; }
+      else { let acc = 0; const pos = (t - st) / Math.max(1, clipEnd - st) * tot; li = lens.length - 1; for (let i = 0; i < lens.length; i++) { acc += lens[i]; if (pos < acc) { li = i; break; } } }
+      if (li !== last) { last = li; refMark(li); }
+    };
     return;
   }
-  if (b?.lines) TTS.speakLines(b.lines, () => {}); else if (b) TTS.speak(b.t);
+  if (b?.lines) TTS.speakLines(b.lines, () => refMark(-1), li => refMark(li)); else if (b) TTS.speak(b.t);
 }
 let autoTimer = null;
 function cancelAuto() { clearTimeout(autoTimer); autoTimer = null; render(); }
