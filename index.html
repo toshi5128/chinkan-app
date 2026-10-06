@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v5.1";
+const APP_VERSION = "2026-10-06-v5.2";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -418,7 +418,7 @@ function StrategyCard() {
 function gapList() {
   const P = predict(), out = [], unseen = Q.length - Object.keys(S.cards).filter(id => QM[id]).length;
   const by = Object.entries(P.by).filter(([, b]) => b.cov >= 0.3 && b.acc != null).sort((x, y) => y[1].gain - x[1].gain);
-  if (unseen > 0) out.push({ t: `まだ解いていない問題が ${unseen}問`, s: "一度も見ていない論点は、本番でほぼ取れません。毎日の新しい問題で潰していきます。", btn: "startToday()", l: "今日の分を解く" });
+  if (unseen > 0) out.push({ t: `まだ解いていない問題が ${unseen}問`, s: "一度も見ていない論点は、本番でほぼ取れません。どの章・Sectionに残っているかを見て、解きたい所を選べます。", btn: "openPickUnseen()", l: "選んで解く" });
   if (by[0] && by[0][1].gain >= 0.8) out.push({ t: `${AREAS[by[0][0]].name}の伸びしろ（正答率 ${Math.round(by[0][1].acc * 100)}%）`, s: `ここを9割台にすると約+${by[0][1].gain.toFixed(1)}点。間違えた問題から解き直します。`, btn: `startArea('${by[0][0]}','weak')`, l: "苦手を解く" });
   const full = S.mocks.filter(m => m.n >= 40);
   if (!full.length) out.push({ t: "本番形式（50問・120分）をまだ解いていない", s: "時間配分は体で覚えるしかありません。日曜13:00に通しで解きます。", btn: "startMock(50)", l: "模試を始める" });
@@ -1193,6 +1193,11 @@ const accText = (c, w) => c + w >= ACC_MIN ? Math.round(c / (c + w) * 100) + "%"
 function secAccMap() { const m = {}; for (const x of secStats()) m[x.id] = x; return m; }
 // まだ解いていない問題がある所を全部選んで「未挑戦」に（2026-10-06 下田さん「まだ解いてない問題を出すのも」）
 function pickUnseen() { const P = pickState(); P.secs = SECS.filter(x => secQs(x.id).some(q => !card(q.id))).map(x => x.id); P.mode = "new"; P.order = "book"; save(); render(); }
+function openPickUnseen() {
+  const P = pickState(); P.mode = "new"; P.secs = []; P.order = "book";
+  P.open = SECS.find(x => secQs(x.id).some(q => !card(q.id)))?.ch || 1;
+  save(); view = "study"; studyMenu = true; render(); window.scrollTo(0, 0);
+}
 function pickWeak() { const P = pickState(); P.secs = secStats().filter(x => x.c + x.w >= ACC_MIN && x.acc < 0.85).map(x => x.id); P.mode = "weak"; save(); render(); }
 function pickState() { return S.pick || (S.pick = { secs: [], open: 1, mode: "all", n: 30, order: "rand" }); }
 function pickQs() {
@@ -1226,9 +1231,9 @@ function PickCard() {
           <b class="num" style="font-size:13px;color:${accColor(cc + cw >= ACC_MIN ? cc / (cc + cw) : null)}">${accText(cc, cw)}</b>
           <button class="spk ${sel === list.length ? "on" : ""}" onclick="pickCh(${ch},${sel !== list.length})">${sel === list.length ? "全部✓" : "全部"}</button></div>
         ${open ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${list.map(x => { const on = P.secs.includes(x.id);
-          const a = SA[x.id], t = accText(a?.c || 0, a?.w || 0), col = accColor(a && a.c + a.w >= ACC_MIN ? a.acc : null);
-          return `<button class="spk ${on ? "on" : ""}" style="text-align:left" onclick="pickToggle('${x.id}')">${x.id} ${esc(x.title.length > 11 ? x.title.slice(0, 11) + "…" : x.title)} <b style="color:${on ? "#fff" : col}">${t}</b></button>`; }).join("")}</div>` : ""}</div>`; }).join("")}
-    <div class="small mt">数字＝そのSectionの正答率（<span style="color:var(--ng)">赤＝苦手</span>・<span style="color:var(--warn)">黄＝もう少し</span>・<span style="color:var(--ok)">緑＝できている</span>・—＝まだ少ない）</div>
+          const a = SA[x.id], t = accText(a?.c || 0, a?.w || 0), col = accColor(a && a.c + a.w >= ACC_MIN ? a.acc : null), u = secQs(x.id).filter(q => !card(q.id)).length;
+          return `<button class="spk ${on ? "on" : ""}" style="text-align:left" onclick="pickToggle('${x.id}')">${x.id} ${esc(x.title.length > 11 ? x.title.slice(0, 11) + "…" : x.title)} <b style="color:${on ? "#fff" : col}">${t}</b>${u ? ` <span style="font-size:11px;${P.mode === "new" ? "font-weight:800;" : ""}color:${on ? "#fff" : "var(--brand)"}">未${u}</span>` : ""}</button>`; }).join("")}</div>` : ""}</div>`; }).join("")}
+    <div class="small mt">「未○」＝まだ解いていない問題の数。数字＝そのSectionの正答率（<span style="color:var(--ng)">赤＝苦手</span>・<span style="color:var(--warn)">黄＝もう少し</span>・<span style="color:var(--ok)">緑＝できている</span>・—＝まだ少ない）</div>
     <div class="row mt" style="gap:6px"><button class="btn ghost" style="padding:9px;font-size:13px" onclick="pickUnseen()">🆕 まだ解いていない問題（${Q.filter(q => !card(q.id)).length}問）</button>
       <button class="btn ghost" style="padding:9px;font-size:13px" onclick="pickWeak()">🔴 苦手なSection（85%未満）</button></div>
     <div class="small mt">どの問題</div>${seg("mode", [["all", "全部"], ["new", "未挑戦"], ["weak", "苦手"], ["star", "★"]])}
