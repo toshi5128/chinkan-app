@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v5.2";
+const APP_VERSION = "2026-10-06-v5.3";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1139,7 +1139,7 @@ function SecRow(x) {
   const seen = qs.filter(q => card(q.id)).length;
   return `<div style="border-top:1px solid var(--line);padding:9px 0">
     <div class="row" style="align-items:flex-start">
-      ${(() => { const h = heardN(x.id); return `<span title="講義を最後まで聞いた回数（自動）" style="border:2px solid ${h || r ? "var(--ok)" : "var(--sub)"};background:${h || r ? "var(--ok)" : "transparent"};color:#fff;border-radius:7px;min-width:26px;height:26px;padding:0 4px;flex:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-right:8px">${h ? h : r ? "✓" : ""}</span>`; })()}
+      ${(() => { const h = heardN(x.id); return `<span title="講義を最後まで聞いた回数（自動）" style="border:2px solid ${h ? "var(--ok)" : "var(--sub)"};background:${h ? "var(--ok)" : "transparent"};color:#fff;border-radius:7px;min-width:26px;height:26px;padding:0 4px;flex:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-right:8px">${h || ""}</span>`; })()}
       <div class="grow"><div style="font-size:14.5px;line-height:1.5"><b class="num">${x.id}</b> ${esc(x.title)}</div>
         <div class="small">p.${x.page}〜（${x.pages}ページ）${n ? `・問題 ${seen}/${n}` : ""}${LEC[x.id] ? `・<span style="${heardToday(x.id) ? "color:var(--ok);font-weight:700" : ""}">${heardTag(x.id)}</span>` : ""}</div></div>
       ${LEC[x.id] ? `<button class="btn ghost" style="width:auto;padding:7px 10px;font-size:13px;flex:none" onclick="startLecture(['${x.id}'])" aria-label="講義を聞く">🎧</button>` : ""}
@@ -1159,7 +1159,7 @@ function Book() {
   const cur = openCh ?? (SECS.find(x => !S.read[x.id])?.ch || 1);
   return `
   <div class="card"><h2>${esc(BOOK)}</h2>
-    <div class="row small"><span class="grow">読んだ Section ${readN}/${SECS.length}・🎧聞いた ${SECS.filter(x => heardN(x.id)).length}/${SECS.length}</span><span class="num">${readPg}/${allPg}ページ</span></div>
+    <div class="row small"><span class="grow">🎧最後まで聞いた Section ${SECS.filter(x => heardN(x.id)).length}/${SECS.length}</span><span class="num">${readPg}/${allPg}ページ</span></div>
     <div class="bar mt"><i style="width:${allPg ? readPg / allPg * 100 : 0}%;background:var(--brand)"></i></div>
     <div class="small mt">左の□は自動です。🎧の講義を最後まで聞くと「1」、2回目を最後まで聞くと「2」…と増えます。「解く」でそのSectionの問題だけを出します。</div>
     ${NUMS.length ? `<div class="mt"><button class="btn sec" onclick="go('numbers')">🔢 数字まとめ（${NUMS.length}項目）</button></div>` : ""}</div>
