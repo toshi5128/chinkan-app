@@ -615,7 +615,7 @@ function playStep() {
   const q = QM[LS.ids[LS.i]];
   render();
   if (LS.phase === "q") {
-    TTS.speak(`第${LS.i + 1}問。${qSpeech(q)}`, () => { if (!LS?.playing) return; thinkTimer = setTimeout(() => { if (!LS?.playing) return; LS.phase = "a"; playStep(); }, S.tts.think * 1000); });
+    TTS.speak(`第${LS.i + 1}問。${q.q}`, () => { if (!LS?.playing) return; thinkTimer = setTimeout(() => { if (!LS?.playing) return; LS.phase = "a"; playStep(); }, S.tts.think * 1000); });
   } else {
     TTS.speak(aSpeech(q, null), () => { if (!LS?.playing) return; thinkTimer = setTimeout(() => { if (!LS?.playing) return; LS.i++; LS.phase = "q"; playStep(); }, 1200); });
   }
