@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v4.1";
+const APP_VERSION = "2026-10-06-v4.2";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1190,9 +1190,13 @@ function Study() {
         <button class="btn ghost" onclick="go('home')">ホームへ</button><button class="btn ghost" onclick="endSess();render()">ほかの問題を解く</button></div></div>`;
   }
   const q = QM[sess.ids[sess.i]], c = card(q.id), A = AREAS[q.area];
-  const answered = sess.ans !== null, ok = answered && sess.ans === q.a;
+  const answered = sess.ans !== null, ok = answered && sess.ans === q.a, sx = SECM[q.sec];
+  const range = sess.label === "今日の分" ? todayRangeSecs() : [];
   return `
   <div class="prog"><i style="width:${sess.i / sess.ids.length * 100}%"></i></div>
+  ${range.length ? `<div class="small" style="margin:6px 2px 0">📅 今日の範囲：<b>${range.join("・")}</b>（ここから新しい問題を出しています。ほかは復習の問題）</div>` : ""}
+  <div class="small" style="margin:4px 2px 6px">📖 この問題は <b>Section ${esc(q.sec || "")} ${esc(sx?.title || "")}</b>${sx ? `（教科書 p.${sx.page}）` : ""}${range.length && !range.includes(q.sec) ? ` <span class="chip">復習</span>` : ""}</div>
+  ${answered && !ok ? StudyRef(q) : ""}
   <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}${(() => { const tp = todayPlan(); return tp.newTotal ? `<span style="margin-left:8px;color:var(--brand);font-weight:700">今日 ${tp.newDone}/${tp.newTotal}</span>` : ""; })()}</span>
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
@@ -1215,6 +1219,40 @@ function Study() {
   </div>
   <div class="center"><button class="linkbtn" onclick="sess.ids=sess.ids.slice(0,sess.i);saveSess();render()">ここでやめる</button></div>
   <div class="center small">他の画面に行っても、アプリを閉じても、この問題から続きができます。</div><div></div>`;
+}
+// ---------- 間違えた時：その問題に関係する教科書（講義）の部分を問題の上に出して、すぐ聞けるようにする ----------
+// 問題文と解説に出てくる言葉（漢字・カタカナ2文字以上）が、講義のどのかたまりに一番多く出るかで選ぶ
+function relatedBlock(q) {
+  const bl = lecBlocks(q.sec); if (!bl.length) return -1;
+  const words = [...new Set(((q.q || "") + (q.exp || "")).match(/[一-龯々ァ-ヶー]{2,}/g) || [])];
+  let best = -1, bestScore = 0;
+  bl.forEach((b, i) => { const t = b.t || ""; const sc = words.reduce((n, w) => n + (t.includes(w) ? w.length : 0), 0) * (i === 0 || i === bl.length - 1 ? 0.6 : 1); if (sc > bestScore) { bestScore = sc; best = i; } });
+  return best < 0 ? 1 : best;
+}
+function StudyRef(q) {
+  const bl = lecBlocks(q.sec), bi = relatedBlock(q), b = bl[bi]; if (!b) return "";
+  return `<div class="card" style="border:2px solid var(--warn)"><div class="row"><b class="grow">📖 教科書のこの部分（Section ${esc(q.sec)}）</b>
+      <button class="spk on" onclick="playRef('${q.sec}',${bi})">🔊 この部分を聞く</button></div>
+    <div style="font-weight:700;font-size:14px;color:var(--brand);margin-top:6px">${esc(b.h)}</div>
+    <div style="max-height:42vh;overflow-y:auto;margin-top:4px;padding-right:4px">${blockBody(b)}</div>
+    <div class="small mt">↑ 中をスクロールできます。下に問題と解説があります。</div>
+    <div class="row mt" style="gap:6px"><button class="btn ghost" style="padding:8px;font-size:13px" onclick="TTS.stop();clipStop();startLecture(['${q.sec}'])">このSectionの講義を最初から</button></div></div>`;
+}
+// 講義の音声から、そのかたまりの所だけを再生（音声が無ければ読み上げ）
+let clipEl = null, clipEnd = 0;
+function clipStop() { if (clipEl) clipEl.pause(); }
+function playRef(sec, bi) {
+  TTS.stop(); clipStop();
+  const e = AUD[sec], mk = e?.lec_marks, b = lecBlocks(sec)[bi];
+  if (useTalk(sec) && hasLecAudio(sec) && mk && mk[bi + 1] !== undefined) {
+    if (LV && LV.audio) apStop();
+    clipEl = clipEl || new Audio();
+    clipEl.src = apSrc({ sec, kind: "lec" }); clipEnd = mk[bi + 2] ?? 1e9; clipEl.playbackRate = S.tts.rate;
+    clipEl.onloadedmetadata = () => { clipEl.currentTime = mk[bi + 1]; clipEl.play().catch(() => {}); };
+    clipEl.ontimeupdate = () => { if (clipEl.currentTime >= clipEnd) clipEl.pause(); };
+    return;
+  }
+  if (b?.lines) TTS.speakLines(b.lines, () => {}); else if (b) TTS.speak(b.t);
 }
 let autoTimer = null;
 function cancelAuto() { clearTimeout(autoTimer); autoTimer = null; render(); }
@@ -1240,7 +1278,7 @@ function luck() {
   nextQ();
 }
 function toggleStar(id) { const c = S.cards[id]; if (!c) return; c.star = !c.star; save(); render(); }
-function nextQ() { clearTimeout(autoTimer); autoTimer = null; sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
+function nextQ() { clipStop(); clearTimeout(autoTimer); autoTimer = null; sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
 function StudyMenu() {
   const p = todayPlan();
   const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
