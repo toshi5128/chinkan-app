@@ -148,7 +148,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v5.6";
+const APP_VERSION = "2026-10-06-v5.7";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -319,6 +319,7 @@ function todayPlan() {
 }
 
 function record(id, ok) {
+  if (S.r2left && S.r2left.includes(id)) S.r2left = S.r2left.filter(x => x !== id); // 2周目の解き直し済み
   const t = today();
   const c = S.cards[id] || { box: 0, c: 0, w: 0 };
   if (ok) { c.box = Math.min(5, Math.max(c.box, 1) + 1); c.c++; }
@@ -378,6 +379,7 @@ function Home() {
   return `
   <div class="card" style="padding:14px 16px"><div class="row" style="align-items:baseline;gap:8px">
     <span class="small grow">本番 11/15（日）13:00 まで</span><b class="num" style="font-size:34px;color:var(--brand)">${dl}</b><span>日</span></div></div>
+  ${StageBanner()}
   ${GoalCard()}
   ${RoadCard()}
   <details class="card"><summary style="font-weight:700;cursor:pointer">📊 くわしく見る（分野別の作戦表・仕上がり・模試の記録・設定）</summary>
@@ -402,6 +404,43 @@ function Home() {
       : `<div class="small">本番と同じ4択50問・120分。まだ受けていません。一周の半分くらいまで進んだら一度受けてみましょう。</div>`}
     <div class="mt"><button class="btn sec" onclick="go('mock')">模試・過去問へ</button></div>
   </div></div></details>`;
+}
+
+// ---------- 今の段階と次にやること（2026-10-06 下田さん「1周終わったら次に何をやるか、2周目のあとも、バナーで出して」） ----------
+// 段階は記録から自動で判定：①全部通し → ②間違えた問題を全部解き直す → ③苦手を空っぽに → ④本番の形（過去問・個数） → ⑤仕上げ
+const WEAK_DONE = 30; // 苦手がこの数以下になったら③は完了
+function stageInfo() {
+  const unseen = Q.filter(q => !card(q.id)).length;
+  if (unseen > 0) { S.round1End = null; S.r2left = null; return { no: 1, title: "1周目：全部を通しで解く", sub: `残り ${unseen}問。解いていない問題がどこに何問あるか見て、選んで解けます。`, btn: "openPickUnseen()", label: "選んで解く", left: unseen }; }
+  // 1周目が終わった瞬間に「間違えたことがある問題」を控え、解き直すたびに消していく
+  if (!S.round1End || !S.r2left) { S.round1End = today(); S.r2left = Q.filter(q => card(q.id)?.w > 0).map(q => q.id); save(); }
+  const r2 = S.r2left.filter(id => QM[id]).map(id => QM[id]);
+  if (r2.length) return { no: 2, title: "2周目：間違えた問題を全部解き直す", sub: `1周目で間違えた問題のうち、まだ解き直していない ${r2.length}問。間違えたら教科書のその部分を聞きましょう。`, btn: "startRound2()", label: "解き直す", left: r2.length };
+  const weak = Q.filter(q => { const c = card(q.id); return c && (c.box <= 2 || c.w > c.c); }).length;
+  if (weak > WEAK_DONE) return { no: 3, title: "3周目以降：「苦手」を空っぽにする", sub: `まだ覚えきれていない問題 ${weak}問。正解が続いた問題は自動で外れるので、${WEAK_DONE}問以下になるまで繰り返します。`, btn: "startWeakAll()", label: "苦手を解く", left: weak };
+  const pastDone = new Set(S.pastLog.map(l => l.year)).size;
+  if (pastDone < 5 || Object.values(S.done).filter(d => d.count).length < 3) return { no: 4, title: "本番の形に慣れる", sub: `公式の過去問 ${pastDone}/5年分（時間を計って50問）と、個数問題ドリル。間違えた問題のSectionを聞き直します。`, btn: "go('mock')", label: "模試タブへ", left: 5 - pastDone };
+  return { no: 5, title: "仕上げ：新しいことはしない", sub: "数字まとめ、「間違えた」をもう1周、総まとめラジオ。本番形式で40点以上を2回出せれば合格圏です。", btn: "go('numbers')", label: "数字まとめ", left: 0 };
+}
+function startRound2() {
+  const ids = (S.r2left || []).filter(id => QM[id]).sort((a, b) => (SECM[QM[a].sec]?.order ?? 0) - (SECM[QM[b].sec]?.order ?? 0));
+  startSession(ids, "2周目（間違えた問題）");
+}
+function startWeakAll() {
+  const ids = shuffle(Q.filter(q => { const c = card(q.id); return c && (c.box <= 2 || c.w > c.c); })).slice(0, 100).map(q => q.id);
+  startSession(ids, "苦手を空っぽに");
+}
+function StageBanner() {
+  const st = stageInfo(), names = ["", "1周目", "2周目", "苦手つぶし", "本番の形", "仕上げ"];
+  const jump = S.stageSeen && S.stageSeen < st.no; // 段階が進んだ瞬間だけ「終わりました」を出す
+  if (jump) setTimeout(() => { S.stageSeen = st.no; save(); }, 0); else if (!S.stageSeen) { S.stageSeen = st.no; setTimeout(save, 0); }
+  return `<div class="card" style="background:var(--brand);color:#fff;border:0">
+    ${jump ? `<div style="font-weight:800;font-size:16px;margin-bottom:6px">🎉 ${names[st.no - 1]}が終わりました！ 次はこれです</div>` : ""}
+    <div style="display:flex;gap:4px;margin-bottom:8px">${names.slice(1).map((n, i) => `<span style="flex:1;text-align:center;font-size:11px;padding:3px 0;border-radius:6px;${i + 1 === st.no ? "background:#fff;color:var(--brand);font-weight:800" : i + 1 < st.no ? "background:rgba(255,255,255,.35)" : "background:rgba(255,255,255,.12)"}">${i + 1 < st.no ? "✓" : ""}${n}</span>`).join("")}</div>
+    <div style="font-size:12px;opacity:.85">いまやること（段階 ${st.no}/5）</div>
+    <div style="font-weight:800;font-size:18px;margin:2px 0 4px">${st.title}</div>
+    <div style="font-size:13px;opacity:.95">${st.sub}</div>
+    <button class="btn mt" style="background:#fff;color:var(--brand)" onclick="${st.btn}">▶ ${st.label}</button></div>`;
 }
 
 // 分野ごとの作戦表（本番の問題数・今の予想・目標・あと何点）
@@ -1396,6 +1435,7 @@ function StudyMenu() {
   const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
   const star = Q.filter(q => card(q.id)?.star).length;
   return `
+  ${StageBanner()}
   ${PickCard()}
   ${CountCard()}
   ${WeakMap()}
