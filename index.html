@@ -146,7 +146,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-06-v4.3";
+const APP_VERSION = "2026-10-06-v4.4";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1209,7 +1209,7 @@ function Study() {
   <div class="prog"><i style="width:${sess.i / sess.ids.length * 100}%"></i></div>
   ${range.length ? `<div class="small" style="margin:6px 2px 0">📅 今日の範囲：<b>${range.join("・")}</b>（ここから新しい問題を出しています。ほかは復習の問題）</div>` : ""}
   <div class="small" style="margin:4px 2px 6px">📖 この問題は <b>Section ${esc(q.sec || "")} ${esc(sx?.title || "")}</b>${sx ? `（教科書 p.${sx.page}）` : ""}${range.length && !range.includes(q.sec) ? ` <span class="chip">復習</span>` : ""}</div>
-  ${answered && !ok ? StudyRef(q) : ""}
+  ${StudyRefBar(q, answered && !ok)}
   <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}${(() => { const tp = todayPlan(); return tp.newTotal ? `<span style="margin-left:8px;color:var(--brand);font-weight:700">今日 ${tp.newDone}/${tp.newTotal}</span>` : ""; })()}</span>
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
@@ -1241,6 +1241,14 @@ function relatedBlock(q) {
   let best = -1, bestScore = 0;
   bl.forEach((b, i) => { const t = b.t || ""; const sc = words.reduce((n, w) => n + (t.includes(w) ? w.length : 0), 0) * (i === 0 || i === bl.length - 1 ? 0.6 : 1); if (sc > bestScore) { bestScore = sc; best = i; } });
   return best < 0 ? 1 : best;
+}
+// 2026-10-06 下田さん「問題の上に教科書の該当部分をすぐ読み上げられるように」→ どの問題でも上にボタン。答える前は畳む（答えが見えないように）、間違えたら開く
+function StudyRefBar(q, wrong) {
+  const bl = lecBlocks(q.sec), bi = relatedBlock(q), b = bl[bi]; if (!b) return "";
+  const open = wrong || sess.refOpen === q.id;
+  if (open) return StudyRef(q);
+  return `<div class="card" style="padding:10px 12px"><div class="row" style="gap:8px"><span class="grow small">📖 教科書の該当部分：<b>${esc(b.h)}</b></span>
+    <button class="spk on" onclick="playRef('${q.sec}',${bi})">🔊 聞く</button><button class="spk" onclick="sess.refOpen='${q.id}';render()">📖 開く</button></div></div>`;
 }
 function StudyRef(q) {
   const bl = lecBlocks(q.sec), bi = relatedBlock(q), b = bl[bi]; if (!b) return "";
