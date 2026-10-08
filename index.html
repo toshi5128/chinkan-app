@@ -157,7 +157,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-07-v6.9";
+const APP_VERSION = "2026-10-09-v6.10";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -612,7 +612,7 @@ const aSpeech = (q, ok) => `${ok == null ? "" : ok ? "正解。" : "不正解。
 function sayQ() { const q = QM[sess.ids[sess.i]]; TTS.speak(sess.ans === null ? qSpeech(q) : aSpeech(q, sess.ans === q.a)); }
 function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else TTS.stop(); render(); }
 function setRate(r) { S.tts.rate = r; save(); if (AP.el) AP.el.playbackRate = r; render(); }
-const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
+const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6, 1.8, 2.0].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
 
 // ---------- 聞き流し（画面に触らずに、問題→考える時間→答えと解説→次へ） ----------
 let LS = null, wakeLock = null, thinkTimer = null;
@@ -1399,7 +1399,8 @@ function relatedBlock(q) {
 // 2026-10-06 下田さん「問題の上に教科書の該当部分をすぐ読み上げられるように」→ どの問題でも上にボタン。答える前は畳む（答えが見えないように）、間違えたら開く
 function StudyRefBar(q, wrong) {
   const bl = lecBlocks(q.sec), bi = relatedBlock(q), b = bl[bi]; if (!b) return "";
-  const open = wrong || sess.refOpen === q.id;
+  // 2026-10-09 下田さん「間違えた時に教科書の箇所を出すのはなくていい」→ 自動では開かない（必要なら「📖 開く」）
+  const open = sess.refOpen === q.id;
   if (open) return StudyRef(q);
   return `<div class="card" style="padding:10px 12px"><div class="row" style="gap:8px"><span class="grow small">📖 教科書の該当部分：<b>${esc(b.h)}</b></span>
     <button class="spk on" onclick="playRef('${q.sec}',${bi})">🔊 聞く</button><button class="spk" onclick="sess.refOpen='${q.id}';render()">📖 開く</button></div></div>`;
