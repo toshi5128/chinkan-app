@@ -157,7 +157,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-09-v6.10";
+const APP_VERSION = "2026-10-09-v6.11";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1799,7 +1799,7 @@ function Settings() {
     ${row("問題が出たら自動で読む・答えたら解説を読む", sw(S.tts.auto, "S.tts.auto=!S.tts.auto"))}
     <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">聞き流しの考える時間（問題のあと、答えを読むまで）</div><div class="seg mt">${[2, 4, 7, 10].map(x => `<button class="${S.tts.think === x ? "on" : ""}" onclick="setThink(${x})">${x}秒</button>`).join("")}</div></div></div>
   <div class="card"><h2>✏️ 一問一答</h2>
-    ${row("正解なら自動で次の問題へ", sw(S.autoNext, "S.autoNext=!S.autoNext"), "自動読み上げONなら、解説を最後まで読んでから次へ。間違えた時は止まって、解説と教科書の該当部分が出ます。")}
+    ${row("正解なら自動で次の問題へ", sw(S.autoNext, "S.autoNext=!S.autoNext"), "自動読み上げONなら、解説を最後まで読んでから次へ。間違えた時は止まって、解説が出ます（教科書は「📖 開く」で見られます）。")}
     <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">1日の新しい問題数（今日の分）</div><div class="mt">${PerDaySeg()}</div></div>
     ${row("新しい問題を章ごとの日替わりにする", sw(S.rotate !== false, "S.rotate=S.rotate===false"), "第1章→第2章→…と毎日入れ替え。明日から反映。")}</div>
   <div class="card"><h2>🎧 講義</h2>
