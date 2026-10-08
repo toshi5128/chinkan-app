@@ -157,7 +157,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-09-v6.11";
+const APP_VERSION = "2026-10-09-v6.12";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -369,7 +369,7 @@ function renderTabs() {
   document.getElementById("hdrDays").textContent = `本番まで ${daysLeft()}日`;
   themeBtn();
 }
-function go(v) {
+function go(v) { if (v === "lecture") lecFollowOff = 0;
   if (v !== view) { TTS.stop(); if (view === "listen") stopListen(); if (view === "lecture" && !(LV && LV.audio)) stopLecture(); }
   view = v; render(); window.scrollTo(0, 0);
 }
@@ -802,9 +802,24 @@ function lecQStep() {
     TTS.speak(aSpeech(q, null), () => { if (!LV?.playing || LV.q !== Qs) return; lecTimer = setTimeout(() => { if (!LV?.playing || LV.q !== Qs) return; Qs.i++; Qs.phase = "q"; lecQStep(); }, 1000); });
   }
 }
-function lecScroll() { setTimeout(() => (document.getElementById("lecLine") || document.getElementById("lecCur"))?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }
+// 2026-10-09 下田さん「一時停止しようと下までスクロールすると、吹き出しの追いかけが優先されて下まで行けない」
+//   → 指で画面を動かしたら追いかけを止める。下に「⏸ 一時停止」「📍 読んでいる所へ」の帯を出す（押すと追いかけ再開）
+let lecFollowOff = 0;
+["touchmove", "wheel"].forEach(ev => window.addEventListener(ev, () => {
+  if (view !== "lecture" || !LV) return;
+  const first = !lecFollowOff; lecFollowOff = Date.now(); if (first) render();
+}, { passive: true }));
+function lecFollow() { lecFollowOff = 0; render(); lecScroll(true); }
+function LecBar() {
+  if (!LV) return "";
+  const playing = LV.audio ? !!(AP.el && !AP.el.paused) : !!LV.playing;
+  return `<div style="height:70px"></div><div class="pickbar" style="display:flex;gap:8px">
+    <button class="btn" style="flex:1" onclick="lecToggle()">${playing ? "⏸ 一時停止" : "▶ 再生"}</button>
+    ${lecFollowOff ? `<button class="btn ghost" style="flex:1" onclick="lecFollow()">📍 読んでいる所へ</button>` : ""}</div>`;
+}
+function lecScroll(force) { if (lecFollowOff && !force) return; setTimeout(() => (document.getElementById("lecLine") || document.getElementById("lecCur"))?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }
 function lecToggle() { if (!LV) return; if (LV.audio) { apToggle(); return; } if (LV.done) { LV.si = 0; LV.bi = 0; LV.done = false; LV.q = null; } LV.playing = !LV.playing; if (LV.playing) { keepAwake(true); lecPlay(LV.bi === 0); } else { clearTimeout(lecTimer); TTS.stop(); render(); } }
-function lecJump(bi) { if (!LV) return; if (LV.audio) { apSeekBlock(bi); return; } clearTimeout(lecTimer); LV.q = null; TTS.stop(); LV.bi = bi; LV.done = false; LV.playing = TTS.ok; if (LV.playing) { keepAwake(true); lecPlay(false); } else render(); }
+function lecJump(bi) { if (!LV) return; lecFollowOff = 0; if (LV.audio) { apSeekBlock(bi); return; } clearTimeout(lecTimer); LV.q = null; TTS.stop(); LV.bi = bi; LV.done = false; LV.playing = TTS.ok; if (LV.playing) { keepAwake(true); lecPlay(false); } else render(); }
 function lecMove(d) {
   if (!LV) return; if (LV.audio) { apMove(d); return; }
   if (LV.q) { clearTimeout(lecTimer); TTS.stop(); if (d > 0) { LV.q = null; LV.playing = true; lecNextSec(); } else { LV.q = null; LV.playing = true; lecPlay(false); } return; }
@@ -849,7 +864,7 @@ function Lecture() {
     <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
     <div class="small mt">講義は、教科書の範囲に沿ってこのアプリ用に書いた要点です（教科書の文章そのものではありません）。細かい所は教科書で確かめてください。</div></div>
   ${LV.thenToday ? `<div class="card mt"><button class="btn" onclick="todayAfterLecture()">✏️ 今日の問題を解く${LV.done ? "" : "（講義をやめて）"}</button></div>` : ""}
-  <div class="center"><button class="linkbtn" onclick="go('book')">講義をやめる</button></div>`;
+  <div class="center"><button class="linkbtn" onclick="go('book')">講義をやめる</button></div>${LecBar()}`;
 }
 
 // ---------- 講義を聞いた回数 ----------
@@ -1007,7 +1022,7 @@ function AudioLecture() {
     <div class="small mt">音声：${AUD[id]?.lec_voice?.startsWith("talk") ? "VOICEVOX:青山龍星、VOICEVOX:四国めたん" : "VOICEVOX:No.7"}</div>${TALK[id] && !useTalk(id) ? `<div class="small mt">🎙️ このSectionの「2人の会話」版は音声を作っている最中です。できしだい自動で切り替わります（今は前の講義を流しています）。</div>` : ""}</div>
   ${LV.thenToday ? `<div class="card mt" style="${LV.done ? "background:var(--okbg)" : ""}">${LV.done ? `<b>今日の範囲を聞きました ✓</b><div class="small">${(LV.heardNow || []).map(id => `${id}（${heardN(id)}回目）`).join("・")}<br>忘れないうちに、今日の問題を解きましょう。</div>` : `<div class="small">聞き終わると、そのまま今日の問題（${todayPlan().due.length + todayPlan().newLeft.length}問）が始まります。</div>`}
     <div class="mt"><button class="btn" onclick="todayAfterLecture()">✏️ 今日の問題を解く${LV.done ? "" : "（講義をやめて）"}</button></div></div>` : ""}
-  <div class="center"><button class="linkbtn" onclick="stopLecture();go('book')">講義をやめる</button></div>`;
+  <div class="center"><button class="linkbtn" onclick="stopLecture();go('book')">講義をやめる</button></div>${LecBar()}`;
 }
 // ほかの画面にいる時の小さな再生バー
 const mmss = x => `${Math.floor(x / 60)}分${String(Math.floor(x % 60)).padStart(2, "0")}秒`;
