@@ -157,7 +157,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-09-v6.12";
+const APP_VERSION = "2026-10-10-v6.13";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1832,9 +1832,22 @@ function Stats() {
   const max = Math.max(10, ...days.map(d => S.log[d]?.n || 0));
   let streak = 0; for (let d = today(); S.log[d]?.n; d = addDays(d, -1)) streak++;
   const total = Object.values(S.log).reduce((s, l) => s + l.n, 0);
+  // 2026-10-10 下田さん「1日の平均問題数も出して」
+  const studied = Object.keys(S.log).filter(d => S.log[d]?.n > 0).sort();
+  const first = studied[0];
+  const sinceDays = first ? Math.round((new Date(today() + "T00:00:00") - new Date(first + "T00:00:00")) / 86400000) + 1 : 0;
+  const last7 = days.slice(-7).reduce((s2, d) => s2 + (S.log[d]?.n || 0), 0);
+  const avgStudy = studied.length ? Math.round(total / studied.length) : 0;
+  const avgAll = sinceDays ? Math.round(total / sinceDays) : 0;
+  const avg7 = Math.round(last7 / 7);
+  const unseen = Q.filter(q => !card(q.id)).length, dl = daysLeft();
+  const need = unseen && dl ? Math.ceil(unseen / dl) : 0;
+  const tile = (v, l) => `<div style="flex:1;min-width:0;text-align:center;background:var(--bg);border-radius:10px;padding:8px 4px"><div class="num" style="font-size:22px;font-weight:800">${v}</div><div class="small">${l}</div></div>`;
   return `
   <div class="card"><h2>毎日の学習量（14日）</h2>
     <div class="row small"><span class="grow">連続 <b class="num">${streak}</b>日</span><span>累計 ${total}問</span></div>
+    <div class="row mt" style="gap:6px">${tile(avg7, "直近7日の<br>1日平均")}${tile(avgStudy, "勉強した日の<br>1日平均")}${tile(avgAll, `始めてから<br>1日平均（${sinceDays}日）`)}</div>
+    ${need ? `<div class="small mt">まだ解いていない ${unseen}問を本番（あと${dl}日）までに1周するには、1日 <b class="num">${need}</b>問。${avg7 >= need ? "今のペースで間に合います ✓" : `今のペース（${avg7}問）だと足りないので、あと ${need - avg7}問ずつ増やすと間に合います`}</div>` : ""}
     <div class="days">${days.map(d => { const n = S.log[d]?.n || 0; return `<div class="col ${d === today() ? "today" : ""}"><b>${n || ""}</b><i style="height:${n / max * 78}%"></i></div>`; }).join("")}</div>
     <div class="dlab">${days.map(d => `<span>${+d.slice(8)}</span>`).join("")}</div>
     <table class="dtbl">${days.slice(-7).reverse().map(d => { const L = S.log[d], w = "日月火水木金土"[new Date(d + "T00:00:00").getDay()];
