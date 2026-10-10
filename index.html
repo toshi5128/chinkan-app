@@ -157,7 +157,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-10-v6.13";
+const APP_VERSION = "2026-10-10-v6.14";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1296,13 +1296,22 @@ function openPickUnseen() {
 }
 function pickWeak() { const P = pickState(); P.secs = secStats().filter(x => x.c + x.w >= ACC_MIN && x.acc < 0.85).map(x => x.id); P.mode = "weak"; save(); render(); }
 function pickState() { return S.pick || (S.pick = { secs: [], open: 1, mode: "all", n: 30, order: "rand" }); }
+// 2026-10-10 下田さん「1回間違えた・2回間違えた・3回間違えた問題で出せるように（復習用）」
+//   wn: 0=1回以上（全部） / 1=ちょうど1回 / 2=ちょうど2回 / 3=3回以上
+function wrongMatch(c, wn) {
+  const w = (c && c.w) || 0;
+  if (!w) return false;
+  if (!wn) return true;
+  return wn >= 3 ? w >= 3 : w === wn;
+}
+function pickWrongAll(wn) { const P = pickState(); P.secs = SECS.map(x => x.id); P.mode = "wrong"; P.wn = wn || 0; save(); render(); }
 function pickQs() {
   const P = pickState(), set = new Set(P.secs);
   let qs = Q.filter(q => set.has(q.sec));
   if (P.mode === "new") qs = qs.filter(q => !card(q.id));
   if (P.mode === "weak") qs = qs.filter(q => { const c = card(q.id); return c && (c.box <= 2 || c.w > 0); });
   if (P.mode === "star") qs = qs.filter(q => card(q.id)?.star);
-  if (P.mode === "wrong") qs = qs.filter(q => card(q.id)?.w > 0); // 2026-10-06 下田さん「過去に間違えた問題だけ出せるように」＝1回でも間違えたことがある問題
+  if (P.mode === "wrong") qs = qs.filter(q => wrongMatch(card(q.id), P.wn)); // 2026-10-06 下田さん「過去に間違えた問題だけ出せるように」＝1回でも間違えたことがある問題
   return qs;
 }
 function pickToggle(id) { const P = pickState(); P.secs = P.secs.includes(id) ? P.secs.filter(x => x !== id) : [...P.secs, id]; save(); render(); }
@@ -1333,7 +1342,13 @@ function PickCard() {
     <div class="small mt">「未○」＝まだ解いていない問題の数。数字＝そのSectionの正答率（<span style="color:var(--ng)">赤＝苦手</span>・<span style="color:var(--warn)">黄＝もう少し</span>・<span style="color:var(--ok)">緑＝できている</span>・—＝まだ少ない）</div>
     <div class="row mt" style="gap:6px"><button class="btn ghost" style="padding:9px;font-size:13px" onclick="pickUnseen()">🆕 まだ解いていない問題（${Q.filter(q => !card(q.id)).length}問）</button>
       <button class="btn ghost" style="padding:9px;font-size:13px" onclick="pickWeak()">🔴 苦手なSection（85%未満）</button></div>
+    ${(() => { const c3 = [1, 2, 3].map(wn => Q.filter(q => wrongMatch(card(q.id), wn)).length); return c3.some(Boolean) ? `<div class="small mt">❌ 間違えた回数で全範囲から選ぶ</div><div class="row mt" style="gap:6px">${[1, 2, 3].map((wn, i) => `<button class="btn ghost" style="padding:9px;font-size:13px" onclick="pickWrongAll(${wn})">${wn === 3 ? "3回以上" : wn + "回"}（${c3[i]}問）</button>`).join("")}</div>` : ""; })()}
     <div class="small mt">どの問題</div>${seg("mode", [["all", "全部"], ["new", "未挑戦"], ["wrong", "間違えた"], ["weak", "苦手"], ["star", "★"]])}
+    ${P.mode === "wrong" ? (() => {
+      const base = Q.filter(q => P.secs.includes(q.sec));
+      const cnt = (wn) => base.filter(q => wrongMatch(card(q.id), wn)).length;
+      return `<div class="small mt">何回間違えた問題？</div><div class="seg mt">${[[0, "1回以上（全部）"], [1, "1回"], [2, "2回"], [3, "3回以上"]].map(([v, l]) => `<button class="${(P.wn || 0) === v ? "on" : ""}" onclick="pickSet('wn',${v})">${l}<span class="small" style="color:inherit;opacity:.85">（${cnt(v)}）</span></button>`).join("")}</div>
+        <div class="small">回数は、これまでにその問題を間違えた合計の回数です。3回以上＝何度やっても間違える「本当の苦手」。</div>`; })() : ""}
     <div class="small">間違えた＝1回でも間違えたことがある問題／苦手＝まだ覚えきれていない問題（最近間違えた・正解が続いていない）</div>
     <div class="small mt">何問</div>${seg("n", [[10, "10問"], [30, "30問"], [50, "50問"], [0, "全部"]])}
     <div class="small mt">順番</div>${seg("order", [["rand", "ランダム"], ["book", "教科書の順"]])}
@@ -1341,7 +1356,7 @@ function PickCard() {
     ${P.secs.length ? `<button class="linkbtn" onclick="pickSet('secs',[])">選んだ範囲をすべて外す</button>` : ""}</div></div>
     ${P.secs.length ? `<div style="height:70px"></div><div class="pickbar"><div class="in">
       <div class="grow" style="min-width:0"><div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${P.secs.length <= 3 ? P.secs.join("・") : P.secs.length + "Section"} を選択中</div>
-        <div class="small">${{ all: "全部", new: "未挑戦", wrong: "間違えた", weak: "苦手", star: "★" }[P.mode]}・${P.n ? P.n + "問まで" : "全部"}・${P.order === "book" ? "教科書の順" : "ランダム"}（下で変更）</div></div>
+        <div class="small">${{ all: "全部", new: "未挑戦", wrong: "間違えた" + (P.wn ? (P.wn >= 3 ? "3回以上" : P.wn + "回") : ""), weak: "苦手", star: "★" }[P.mode]}・${P.n ? P.n + "問まで" : "全部"}・${P.order === "book" ? "教科書の順" : "ランダム"}（下で変更）</div></div>
       <button class="btn" style="width:auto;padding:12px 16px;flex:none" onclick="startPick()" ${n ? "" : "disabled"}>▶ ${n ? `${P.n ? Math.min(P.n, n) : n}問を解く` : "問題なし"}</button></div></div>` : ""}`;
 }
 
