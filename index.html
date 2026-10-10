@@ -92,6 +92,9 @@ nav.tabs svg{width:22px;height:22px}
 .qhead{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--sub);margin-bottom:8px}
 .chip{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:99px;background:var(--track);color:var(--sub)}
 .qtext{font-size:17px;line-height:1.75;margin:4px 0 14px;white-space:pre-wrap}
+.gw{text-decoration:underline dotted var(--brand);text-decoration-thickness:2px;text-underline-offset:4px;cursor:pointer}
+.glosspop{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.25);display:flex;align-items:flex-end}
+.glosspop .in{width:100%;background:var(--card);border-top:3px solid var(--brand);border-radius:16px 16px 0 0;padding:14px 16px calc(70px + env(safe-area-inset-bottom));box-shadow:0 -6px 20px rgba(0,0,0,.2)}
 .ox{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .ox button{border:2px solid var(--line);background:var(--card);border-radius:16px;padding:14px 0;font-size:40px;font-weight:800;line-height:1}
 .ox .o{color:var(--ok)}.ox .x{color:var(--ng)}
@@ -157,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-10-v6.14";
+const APP_VERSION = "2026-10-10-v6.15";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -256,6 +259,7 @@ async function loadQuestions() {
   const talks = await Promise.all(TALK_FILES.map(f => fetch(`data/${f}.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}))));
   TALK = Object.assign({}, ...talks);
   NUMS = Array.isArray(nums) ? nums : [];
+  glossInit(await fetch("data/glossary.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []));
   ANKI = await fetch("data/anki.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   CONF = await fetch("data/confuse.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   AUD = await fetch("audio/index.json", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
@@ -614,6 +618,39 @@ function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ()
 function setRate(r) { S.tts.rate = r; save(); if (AP.el) AP.el.playbackRate = r; render(); }
 const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6, 1.8, 2.0].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
 
+// ---------- 言葉の意味（2026-10-10 下田さん「問題文の分からない言葉を押したら意味を解説してほしい」） ----------
+//   data/glossary.json = [{term, yomi, mean, ex, aka[]}]。問題文・解説の中の言葉に点線を付け、押すと下に意味が出る
+let GLOSS = {}, GLOSS_RE = null;
+function glossInit(list) {
+  GLOSS = {};
+  const keys = [];
+  (Array.isArray(list) ? list : []).forEach(g => {
+    if (!g || !g.term || !g.mean) return;
+    [g.term, ...(g.aka || [])].forEach(k => { if (k && !GLOSS[k]) { GLOSS[k] = g; keys.push(k); } });
+  });
+  keys.sort((a, b) => b.length - a.length); // 長い言葉を先に（「賃貸住宅管理業者」を「管理業者」より先に）
+  GLOSS_RE = keys.length ? new RegExp(keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g") : null;
+}
+// 文章をエスケープしてから、意味のある言葉に印を付ける（同じ言葉は1回目だけ）
+function gl(text) {
+  const t = esc(text);
+  if (!GLOSS_RE || S.gloss === false) return t;
+  const seen = new Set();
+  return t.replace(GLOSS_RE, m => { if (seen.has(m)) return m; seen.add(m); return `<span class="gw" onclick="event.stopPropagation();glossShow('${m}')">${m}</span>`; });
+}
+function glossShow(k) {
+  const g = GLOSS[k]; if (!g) return;
+  document.getElementById("glossPop")?.remove();
+  const d = document.createElement("div");
+  d.id = "glossPop"; d.className = "glosspop";
+  d.innerHTML = `<div class="in"><div class="row" style="gap:8px;align-items:baseline"><b style="font-size:19px">${esc(g.term)}</b><span class="small grow">${esc(g.yomi || "")}</span>
+    <button class="spk" onclick="TTS.speak(${JSON.stringify(g.term + "。" + g.mean + (g.ex ? "。" + g.ex : "")).replace(/"/g, "&quot;")})">🔊</button><button class="spk" onclick="glossHide()">✕</button></div>
+    <div style="font-size:16px;line-height:1.7;margin-top:6px">${esc(g.mean)}</div>${g.ex ? `<div class="small" style="margin-top:6px;line-height:1.6">💡 ${esc(g.ex)}</div>` : ""}</div>`;
+  d.onclick = (e) => { if (e.target === d) glossHide(); };
+  document.body.appendChild(d);
+}
+function glossHide() { document.getElementById("glossPop")?.remove(); }
+
 // ---------- 聞き流し（画面に触らずに、問題→考える時間→答えと解説→次へ） ----------
 let LS = null, wakeLock = null, thinkTimer = null;
 function startListen(ids, label) {
@@ -660,8 +697,8 @@ function Listen() {
   ${done ? `<div class="card center"><h2>聞き流し おわり</h2><div class="small">${LS.ids.length}問を聞きました。耳で覚えたら、一問一答で本当に解けるか確かめましょう。</div></div>` : `
   <div class="card">
     <div class="small">${esc(SECM[q.sec]?.id || "")} ${esc(SECM[q.sec]?.title || "")}</div>
-    <div class="qtext">${esc(q.q)}</div>
-    ${LS.phase === "a" ? `<div class="res ${q.a ? "ok" : "ng"}">答えは <b>${q.a ? "○（正しい）" : "×（誤り）"}</b><br>${esc(q.exp)}</div>` : `<button class="btn ghost" onclick="listenReveal()">答えを先に聞く</button>`}
+    <div class="qtext">${gl(q.q)}</div>
+    ${LS.phase === "a" ? `<div class="res ${q.a ? "ok" : "ng"}">答えは <b>${q.a ? "○（正しい）" : "×（誤り）"}</b><br>${gl(q.exp)}</div>` : `<button class="btn ghost" onclick="listenReveal()">答えを先に聞く</button>`}
   </div>`}
   <div class="player">
     <button onclick="listenMove(-1)" aria-label="前の問題">⏮</button>
@@ -845,7 +882,7 @@ function Lecture() {
   const leftMin = LV.bundle ? Math.round(LV.ids.slice(LV.si).reduce((s2, k) => s2 + lecMin(k, LV.mix), 0)) : 0;
   return `<div class="qhead"><span>🎧 ${LV.bundle ? esc(LV.label || "まとめて聞く") : "講義"} ${LV.ids.length > 1 ? `${LV.si + 1}/${LV.ids.length}` : ""}</span><span>${LV.playing ? "再生中" : LV.done ? "おわり" : "一時停止"}${LV.bundle && !LV.done ? `・残り約${leftMin}分` : ""}</span></div>
   ${Qs ? `<div class="card" id="lecCur" style="border-color:var(--brand)"><div class="small">${esc(id)} 確認問題 ${Math.min(Qs.i + 1, Qs.ids.length)}/${Qs.ids.length}（聞き流し・記録には入りません）</div>
-    ${qq ? `<div class="qtext">${esc(qq.q)}</div>${Qs.phase === "a" ? `<div class="res ${qq.a ? "ok" : "ng"}">答えは <b>${qq.a ? "○（正しい）" : "×（誤り）"}</b><br>${esc(qq.exp)}</div>` : `<div class="small">考える時間のあと、答えを読み上げます。</div>`}` : `<div class="qtext">ここで確認問題です。</div>`}
+    ${qq ? `<div class="qtext">${gl(qq.q)}</div>${Qs.phase === "a" ? `<div class="res ${qq.a ? "ok" : "ng"}">答えは <b>${qq.a ? "○（正しい）" : "×（誤り）"}</b><br>${gl(qq.exp)}</div>` : `<div class="small">考える時間のあと、答えを読み上げます。</div>`}` : `<div class="qtext">ここで確認問題です。</div>`}
     <div class="mt"><button class="btn ghost" onclick="lecMove(1)">問題をとばして次のSectionへ ⏭</button></div></div>` : ""}
   ${LV.ids.length > 1 ? `<div class="seg" style="margin-bottom:10px">${LV.ids.map((s2, i) => `<button class="${i === LV.si ? "on" : ""}" onclick="lecGoSec(${i})">${s2}</button>`).join("")}</div>` : ""}
   <div class="card"><div class="small">教科書 p.${x?.page || ""}〜 ・ 🎧 このSectionは今回で${heardN(id) + (LV.heardNow?.includes(id) ? 0 : 1)}回目</div><h2 style="margin:2px 0 8px">${esc(id)} ${esc(x?.title || "")}</h2>
@@ -1399,12 +1436,12 @@ function Study() {
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
     <div class="small" style="text-align:right;margin-bottom:4px">${S.autoNext ? "正解なら自動で次へ：ON" : "正解なら自動で次へ：OFF（設定タブで変更）"}</div>
-    <div class="qtext">${esc(q.q)}</div>
+    <div class="qtext">${gl(q.q)}</div>
     <div class="ox">
       <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
       <button class="x ${answered && sess.ans === false ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(false)" aria-label="誤り">×</button>
     </div>
-    ${answered ? `<div class="res ${ok ? "ok" : "ng"}"><b class="t">${ok ? "正解" : "不正解"}</b>　答えは <b>${q.a ? "○（正しい）" : "×（誤り）"}</b><br>${esc(q.exp)}
+    ${answered ? `<div class="res ${ok ? "ok" : "ng"}"><b class="t">${ok ? "正解" : "不正解"}</b>　答えは <b>${q.a ? "○（正しい）" : "×（誤り）"}</b><br>${gl(q.exp)}
       ${q.ref ? `<div class="ref">根拠：${esc(q.ref)}</div>` : ""}</div>
       <div class="row mt">
         ${ok ? `<button class="linkbtn" onclick="luck()">まぐれだった</button>` : ""}
@@ -1616,7 +1653,7 @@ function Mock() {
   const it = m.items[m.i], stmts = it.ids.map(id => QM[id]);
   const answeredN = m.pick.filter(x => x !== null).length;
   const body = it.opts
-    ? `<div class="stmts">${stmts.map((q, k) => `<div><b>${KANA[k]}</b><span>${esc(q.q)}</span></div>`).join("")}</div>
+    ? `<div class="stmts">${stmts.map((q, k) => `<div><b>${KANA[k]}</b><span>${gl(q.q)}</span></div>`).join("")}</div>
        <div class="opts">${it.opts.map((o, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${o}</span></button>`).join("")}</div>`
     : `<div class="opts">${stmts.map((q, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${esc(q.q)}</span></button>`).join("")}</div>`;
   return `
@@ -1695,8 +1732,8 @@ function MockResult(m) {
     ${m.items.map((it, k) => { const ok = m.pick[k] === it.ans;
       const label = o => it.opts ? it.opts[o] : String(o + 1);
       return `<details class="st"><summary><span class="tag ${ok ? "ok" : "ng"}">${ok ? "正解" : "×"}</span> 問${k + 1} ${STEM[it.type]}<span class="small">（あなた：${m.pick[k] === null ? "未解答" : label(m.pick[k])}／正解：${label(it.ans)}）</span></summary>
-        ${it.ids.map((id, j) => { const q = QM[id]; return `<div style="margin:8px 0 0;font-size:14px;line-height:1.7"><b>${it.opts ? KANA[j] : j + 1}</b> ${esc(q.q)}<br>
-          <span class="tag ${q.a ? "ok" : "ng"}">${q.a ? "○ 正しい" : "× 誤り"}</span> <span class="small">${esc(q.exp)}</span></div>`; }).join("")}</details>`; }).join("")}
+        ${it.ids.map((id, j) => { const q = QM[id]; return `<div style="margin:8px 0 0;font-size:14px;line-height:1.7"><b>${it.opts ? KANA[j] : j + 1}</b> ${gl(q.q)}<br>
+          <span class="tag ${q.a ? "ok" : "ng"}">${q.a ? "○ 正しい" : "× 誤り"}</span> <span class="small">${gl(q.exp)}</span></div>`; }).join("")}</details>`; }).join("")}
     <div class="btns mt"><button class="btn" onclick="S.cur=null;save();go('home')">閉じる</button></div></div>`;
 }
 
@@ -1829,6 +1866,7 @@ function Settings() {
     ${row("問題が出たら自動で読む・答えたら解説を読む", sw(S.tts.auto, "S.tts.auto=!S.tts.auto"))}
     <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">聞き流しの考える時間（問題のあと、答えを読むまで）</div><div class="seg mt">${[2, 4, 7, 10].map(x => `<button class="${S.tts.think === x ? "on" : ""}" onclick="setThink(${x})">${x}秒</button>`).join("")}</div></div></div>
   <div class="card"><h2>✏️ 一問一答</h2>
+    ${row("問題文の言葉に意味を付ける（点線の言葉を押すと意味が出る）", sw(S.gloss !== false, "S.gloss=S.gloss===false"))}
     ${row("正解なら自動で次の問題へ", sw(S.autoNext, "S.autoNext=!S.autoNext"), "自動読み上げONなら、解説を最後まで読んでから次へ。間違えた時は止まって、解説が出ます（教科書は「📖 開く」で見られます）。")}
     <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">1日の新しい問題数（今日の分）</div><div class="mt">${PerDaySeg()}</div></div>
     ${row("新しい問題を章ごとの日替わりにする", sw(S.rotate !== false, "S.rotate=S.rotate===false"), "第1章→第2章→…と毎日入れ替え。明日から反映。")}</div>
