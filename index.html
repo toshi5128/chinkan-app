@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-10-v6.15";
+const APP_VERSION = "2026-10-18-v6.16";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -203,6 +203,10 @@ function load() {
   s.lecPos = s.lecPos || null; // まとめて聞くの続き（どの一覧の、どこまで） // 読み上げの設定
   s.cur = s.cur || null;     // 受験中の模試
   s.rotate = s.rotate ?? true; // 新しい問題を章ごとの日替わりにする
+  // 🆕 v6.16 解き直しの記録：前に間違えた問題を「別の日に」もう一度解いた最初の1回 → id → {d, ok}
+  //   この版より前の分は記録から推定（10/14以降に2回以上解いて最後に解いた日が10/14以降のもの）
+  s.redo = s.redo || {};
+  if (!s.redoSeed) { s.redoSeed = 1; for (const [id, c] of Object.entries(s.cards || {})) if (c.w > 0 && c.c + c.w >= 2 && c.last >= "2026-10-14" && !s.redo[id]) s.redo[id] = { d: c.last, ok: !!c.lastOk }; }
   s.done = s.done || {};     // 日付 → {count, mock, radio, nums}（今日の指示の✓に使う）
   s.syncKey = s.syncKey || (crypto.randomUUID ? crypto.randomUUID() : Array.from({ length: 32 }, () => "0123456789abcdef"[Math.random() * 16 | 0]).join(""));
   return s;
@@ -338,6 +342,9 @@ function todayPlan() {
 function record(id, ok) {
   if (S.r2left && S.r2left.includes(id)) S.r2left = S.r2left.filter(x => x !== id); // 2周目の解き直し済み
   const t = today();
+  // 前に間違えた問題を別の日に解いた最初の1回＝「解き直し」（同じ日の5問あとの再出題は数えない）
+  const prev = S.cards[id];
+  if (prev && prev.w > 0 && prev.last < t && !S.redo[id]) S.redo[id] = { d: t, ok };
   const c = S.cards[id] || { box: 0, c: 0, w: 0 };
   if (ok) { c.box = Math.min(5, Math.max(c.box, 1) + 1); c.c++; }
   else { c.box = 1; c.w++; }
@@ -410,6 +417,7 @@ function Home() {
   <div class="card" style="padding:14px 16px"><div class="row" style="align-items:baseline;gap:8px">
     <span class="small grow">本番 11/15（日）13:00 まで</span><b class="num" style="font-size:34px;color:var(--brand)">${dl}</b><span>日</span></div></div>
   ${StageBanner()}
+  ${RedoCard()}
   ${GoalCard()}
   ${RoadCard()}
   <details class="card"><summary style="font-weight:700;cursor:pointer">📊 くわしく見る（分野別の作戦表・仕上がり・模試の記録・設定）</summary>
@@ -444,8 +452,9 @@ function stageInfo() {
   if (unseen > 0) { S.round1End = null; S.r2left = null; return { no: 1, title: "1周目：全部を通しで解く", sub: `残り ${unseen}問。解いていない問題がどこに何問あるか見て、選んで解けます。`, btn: "openPickUnseen()", label: "選んで解く", left: unseen }; }
   // 1周目が終わった瞬間に「間違えたことがある問題」を控え、解き直すたびに消していく
   if (!S.round1End || !S.r2left) { S.round1End = today(); S.r2left = Q.filter(q => card(q.id)?.w > 0).map(q => q.id); save(); }
-  const r2 = S.r2left.filter(id => QM[id]).map(id => QM[id]);
-  if (r2.length) return { no: 2, title: "2周目：間違えた問題を全部解き直す", sub: `1周目で間違えた問題のうち、まだ解き直していない ${r2.length}問。間違えたら教科書のその部分を聞きましょう。`, btn: "startRound2()", label: "解き直す", left: r2.length };
+  // v6.16: 残りの数は「🔁 解き直し」カードと同じ数え方（前に間違えた問題で、別の日にまだ解き直していないもの）
+  const rs = redoStats();
+  if (rs.left) return { no: 2, title: "2周目：間違えた問題を全部解き直す", sub: `間違えたことがある問題のうち、まだ解き直していない ${rs.left}問。間違えたら教科書のその部分を聞きましょう。`, btn: "startRedo()", label: "解き直す", left: rs.left };
   const weak = Q.filter(q => { const c = card(q.id); return c && (c.box <= 2 || c.w > c.c); }).length;
   if (weak > WEAK_DONE) return { no: 3, title: "3周目以降：「苦手」を空っぽにする", sub: `まだ覚えきれていない問題 ${weak}問。正解が続いた問題は自動で外れるので、${WEAK_DONE}問以下になるまで繰り返します。`, btn: "startWeakAll()", label: "苦手を解く", left: weak };
   const pastDone = new Set(S.pastLog.map(l => l.year)).size;
@@ -460,6 +469,32 @@ function startWeakAll() {
   const ids = shuffle(Q.filter(q => { const c = card(q.id); return c && (c.box <= 2 || c.w > c.c); })).slice(0, 100).map(q => q.id);
   startSession(ids, "苦手を空っぽに");
 }
+// ---------- 🆕 v6.16 解き直しの成績（2026-10-18 下田さん「間違えた問題を解き直している今の正解率を出して」） ----------
+const R1_END = "2026-10-20", REDO_END = "2026-10-26", PAST_END = "2026-11-07", FINAL_END = "2026-11-14";
+const daysTo = d => Math.round((new Date(d + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000) + 1; // 今日を含めて残り何日
+function redoStats() {
+  const t = today(), tgt = Q.filter(q => card(q.id)?.w > 0).map(q => q.id);
+  const done = tgt.filter(id => S.redo[id]), ok = done.filter(id => S.redo[id].ok).length;
+  const td = done.filter(id => S.redo[id].d === t), tdOk = td.filter(id => S.redo[id].ok).length;
+  const still = tgt.filter(id => card(id).lastOk === false).length;
+  return { total: tgt.length, done: done.length, ok, acc: done.length ? ok / done.length : null, left: tgt.length - done.length, td: td.length, tdOk, still };
+}
+const bookOrder = (a, b) => (SECM[QM[a].sec]?.order ?? 0) - (SECM[QM[b].sec]?.order ?? 0);
+function startRedo() { startSession(Q.filter(q => card(q.id)?.w > 0 && !S.redo[q.id]).map(q => q.id).sort(bookOrder), "解き直し"); }
+function startStill() { startSession(Q.filter(q => card(q.id)?.w > 0 && card(q.id).lastOk === false).map(q => q.id).sort(bookOrder), "まだ間違えたまま"); }
+const pctColor = a => a == null ? "var(--sub)" : a >= 0.9 ? "var(--ok)" : a >= 0.8 ? "#d97706" : "var(--ng)";
+function RedoCard() {
+  const r = redoStats(); if (!r.total) return "";
+  const pace = r.left ? Math.ceil(r.left / Math.max(1, daysTo(REDO_END) > 0 ? daysTo(REDO_END) : daysTo(PAST_END))) : 0;
+  return `<div class="card"><h2>🔁 間違えた問題の解き直し</h2>
+    <div class="row" style="align-items:baseline;gap:6px"><span class="small grow">解き直しの正解率（目標 9割）</span><b class="num" style="font-size:34px;color:${pctColor(r.acc)}">${r.acc == null ? "—" : Math.round(r.acc * 100)}</b><span>%</span></div>
+    <div class="small">${r.done ? `解き直した ${r.done}問のうち ${r.ok}問正解` : "まだ解き直した問題はありません"}${r.td ? `　／　<b>今日 ${r.tdOk}/${r.td}問正解（${Math.round(r.tdOk / r.td * 100)}%）</b>` : ""}</div>
+    <div class="row mt" style="gap:8px"><span class="small" style="flex:none">進み</span><div class="bar grow" style="height:10px"><i style="width:${r.done / r.total * 100}%"></i></div><span class="small num" style="flex:none">${r.done}/${r.total}問</span></div>
+    <div class="small mt">${r.left ? `残り <b>${r.left}問</b>。${daysTo(REDO_END) > 0 ? `${mdj(REDO_END)}までに終えるには<b>1日 ${pace}問</b>` : `予定（${mdj(REDO_END)}）を過ぎています。1日 ${pace}問で過去問と並行して`}` : "✓ 間違えた問題は全部解き直しました"}${r.still ? `　／　今も間違えたまま <b style="color:var(--ng)">${r.still}問</b>` : ""}</div>
+    <div class="btns mt">${r.left ? `<button class="btn" onclick="startRedo()">▶ 解き直す（残り${r.left}問）</button>` : ""}${r.still ? `<button class="btn ${r.left ? "sec" : ""}" onclick="startStill()">❌ まだ間違えたままの${r.still}問</button>` : ""}</div>
+    <div class="small mt">「解き直し」＝前に間違えた問題を、別の日にもう一度解いた1回目。同じ日の再出題は数えません。</div></div>`;
+}
+
 function StageBanner() {
   const st = stageInfo(), names = ["", "1周目", "2周目", "苦手つぶし", "本番の形", "仕上げ"];
   const jump = S.stageSeen && S.stageSeen < st.no; // 段階が進んだ瞬間だけ「終わりました」を出す
@@ -517,22 +552,31 @@ function GoalCard() {
 }
 
 // ---------- ③ 合格までの道（今どこにいて、何がそろえば合格圏か） ----------
+// 🆕 v6.16 下田さん「合格までの数字がしっかり追えるように」→ 目標・今・期限・ペースを1つの表に
 function RoadCard() {
-  const d = today(), re = readEnd(), dl = daysLeft();
-  const phases = [["教科書", `〜${mdj(re)}`, d <= re], ["過去問", "〜11/7", d > re && dl > LAST_WEEK], ["仕上げ", "11/8〜", dl <= LAST_WEEK && dl > 0], ["本番", "11/15", dl === 0]];
-  const P = predict(), seen = Object.keys(S.cards).filter(id => QM[id]).length;
+  const r = redoStats(), seen = Object.keys(S.cards).filter(id => QM[id]).length, unseen = Q.length - seen;
   const pastOkN = new Set(S.pastLog.filter(l => l.score >= l.pass).map(l => l.year)).size;
   const reh = S.mocks.filter(m => m.n >= 40 && m.score >= PASS_LINE + 2).length;
-  const chk = [
-    ["全問に一度挑戦する", `${seen}/${Q.length}問`, seen >= Q.length],
-    ["○×の正解率 9割", P.seenAll ? `今 ${Math.round(P.overall * 100)}%` : "まだ記録なし", P.seenAll >= 100 && P.overall >= 0.9],
-    ["過去問5年分すべて合格点", `${pastOkN}/5年`, pastOkN >= 5],
-    [`本番形式で${PASS_LINE + 2}点以上を2回`, `${reh}/2回`, reh >= 2],
+  const late = `<span style="color:var(--ng)">期限すぎ</span>`;
+  const per = (left, end) => { if (!left) return ""; const d = daysTo(end); return d > 0 ? `1日 ${Math.ceil(left / d)}問` : late; };
+  const rows = [
+    ["全問に一度挑戦する", `${seen}/${Q.length}問`, unseen === 0, R1_END, per(unseen, R1_END)],
+    ["間違えた問題を全部解き直す", `${r.done}/${r.total}問`, r.total > 0 && r.left === 0, REDO_END, per(r.left, REDO_END)],
+    ["解き直しの正解率 9割", r.acc == null ? "—" : `<b style="color:${pctColor(r.acc)}">${Math.round(r.acc * 100)}%</b>`, r.done >= 50 && r.acc >= 0.9, "", ""],
+    ["過去問5年分すべて合格点", `${pastOkN}/5年`, pastOkN >= 5, PAST_END, pastOkN < 5 ? (daysTo(PAST_END) > 0 ? `${Math.max(1, Math.floor(daysTo(PAST_END) / (5 - pastOkN)))}日に1回` : late) : ""],
+    [`本番形式で${PASS_LINE + 2}点以上を2回`, `${reh}/2回`, reh >= 2, FINAL_END, ""],
   ];
-  return `<div class="card"><h2>🗺 合格までの道</h2>
-    <div class="row" style="gap:4px;margin:4px 0 10px">${phases.map(([n, t, on]) => `<div style="flex:1;text-align:center;padding:6px 2px;border-radius:8px;${on ? "background:var(--brand);color:#fff;font-weight:700" : "background:var(--track)"}"><div style="font-size:13px">${n}</div><div style="font-size:11px;opacity:.85">${t}</div></div>`).join("")}</div>
-    <div class="small">この4つがそろえば、まず合格できる水準です。</div>
-    ${chk.map(([t, v, ok]) => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:10px"><span style="flex:none;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;${ok ? "background:var(--ok);color:#fff" : "border:2px solid var(--line)"}">${ok ? "✓" : ""}</span><span class="grow" style="font-size:14px">${t}</span><span class="small num">${v}</span></div>`).join("")}</div>`;
+  const cur = rows.findIndex(x => !x[2]);
+  return `<div class="card"><h2>🗺 合格までの数字</h2>
+    <div class="small">上から順に全部 ✓ になれば、まず合格できる水準です（合格点 ${PASS_LINE}点・目標 ${PASS_LINE + 2}点）。</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">
+      <tr style="color:var(--sub)"><td></td><td>目標</td><td class="num">今</td><td class="num">期限</td><td class="num">ペース</td></tr>
+      ${rows.map(([t, v, ok, end, p], i) => `<tr style="border-top:1px solid var(--line);${i === cur ? "background:var(--track)" : ""}">
+        <td style="padding:7px 2px;width:24px"><span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;${ok ? "background:var(--ok);color:#fff" : "border:2px solid var(--line)"}">${ok ? "✓" : ""}</span></td>
+        <td style="padding:7px 2px;${i === cur ? "font-weight:800" : ""}">${t}${i === cur ? ' <span class="chip">いまここ</span>' : ""}</td>
+        <td class="num" style="white-space:nowrap">${v}</td><td class="num">${end ? mdj(end) : ""}</td><td class="num" style="white-space:nowrap">${ok ? "" : p}</td></tr>`).join("")}
+    </table>
+    <div class="small mt">本番まで ${daysLeft()}日。予定＝〜${mdj(R1_END)} 1周目 → 〜${mdj(REDO_END)} 解き直し → 〜${mdj(PAST_END)} 過去問 → 〜${mdj(FINAL_END)} 模試で仕上げ。</div></div>`;
 }
 
 // ---------- 読み上げ ----------
@@ -614,7 +658,7 @@ if (TTS.ok) { TTS.pickVoice(); speechSynthesis.onvoiceschanged = () => TTS.pickV
 const qSpeech = q => `${sess && sess.i > 0 ? "次の問題です。" : "問題です。"}${q.q}`;
 const aSpeech = (q, ok) => `${ok == null ? "" : ok ? "正解。" : "不正解。"}答えは、${q.a ? "マル" : "バツ"}。${q.exp}`;
 function sayQ() { const q = QM[sess.ids[sess.i]]; TTS.speak(sess.ans === null ? qSpeech(q) : aSpeech(q, sess.ans === q.a)); }
-function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else TTS.stop(); render(); }
+function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else { clearTimeout(autoTimer); clearTimeout(autoHard); autoTimer = null; TTS.stop(); } render(); }
 function setRate(r) { S.tts.rate = r; save(); if (AP.el) AP.el.playbackRate = r; render(); }
 const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6, 1.8, 2.0].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
 
@@ -1431,11 +1475,12 @@ function Study() {
   ${range.length ? `<div class="small" style="margin:6px 2px 0">📅 今日の範囲：<b>${range.join("・")}</b>（ここから新しい問題を出しています。ほかは復習の問題）</div>` : ""}
   <div class="small" style="margin:4px 2px 6px">📖 この問題は <b>Section ${esc(q.sec || "")} ${esc(sx?.title || "")}</b>${sx ? `（教科書 p.${sx.page}）` : ""}${range.length && !range.includes(q.sec) ? ` <span class="chip">復習</span>` : ""}</div>
   ${StudyRefBar(q, answered && !ok)}
+  ${sess.done ? `<div class="row" style="margin:0 2px 6px;gap:8px;font-size:14px"><span class="grow">✅ このセットの正解率 <b class="num" style="font-size:18px;color:${pctColor(sess.ok / sess.done)}">${Math.round(sess.ok / sess.done * 100)}%</b>（${sess.ok}/${sess.done}問）</span>${(() => { const r = redoStats(); return r.done ? `<span class="small">解き直し全体 ${Math.round(r.acc * 100)}%</span>` : ""; })()}</div>` : ""}
   <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}${(() => { const tp = todayPlan(); return tp.newTotal ? `<span style="margin-left:8px;color:var(--brand);font-weight:700">今日 ${tp.newDone}/${tp.newTotal}</span>` : ""; })()}</span>
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
-    <div class="small" style="text-align:right;margin-bottom:4px">${S.autoNext ? "正解なら自動で次へ：ON" : "正解なら自動で次へ：OFF（設定タブで変更）"}</div>
+    <div class="small" style="text-align:right;margin-bottom:4px">${S.autoNext && S.tts.auto && TTS.ok ? "正解なら解説を読み終えて自動で次へ" : "「次へ」を押して進みます"}</div>
     <div class="qtext">${gl(q.q)}</div>
     <div class="ox">
       <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
@@ -1526,6 +1571,8 @@ function answer(v) {
   clearTimeout(autoTimer); autoTimer = null;
   // 正解なら：自動読み上げONのときは解説を最後まで読んでから、自動で次の問題へ（2026-10-06 下田さん「次を押さずに自動で次の問題を読み出して」）
   const at = sess.i, goNext = () => { autoTimer = null; if (sess && sess.i === at && sess.ans !== null) nextQ(); };
+  // 🆕 v6.16 下田さん「人が周りにいて読み上げを止めている時は、正解しても勝手に進まず、自分で次へを押したい」
+  //   → 自動で次へは「読み上げON」の時だけ。読み上げOFFの時は「次へ」ボタンで進む
   if (ok && S.autoNext) {
     // 読み終えた瞬間に次を読み始めるとスマホが無視することがあるので、少し間を空けてから次の問題へ
     if (S.tts.auto && TTS.ok) {
@@ -1536,7 +1583,6 @@ function answer(v) {
       clearTimeout(autoHard); autoHard = setTimeout(() => { if (autoTimer === "reading" && sess && sess.i === at) { autoTimer = null; nextQ(); } }, (txt.length / (5 * (S.tts.rate || 1)) + 4) * 1000);
       return;
     }
-    autoTimer = setTimeout(goNext, 1300);
   }
   render();
   if (S.tts.auto) TTS.speak(aSpeech(q, ok)); else TTS.stop();
@@ -1557,6 +1603,7 @@ function StudyMenu() {
   const star = Q.filter(q => card(q.id)?.star).length;
   return `
   ${StageBanner()}
+  ${RedoCard()}
   ${PickCard()}
   ${CountCard()}
   ${WeakMap()}
@@ -1867,7 +1914,7 @@ function Settings() {
     <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">聞き流しの考える時間（問題のあと、答えを読むまで）</div><div class="seg mt">${[2, 4, 7, 10].map(x => `<button class="${S.tts.think === x ? "on" : ""}" onclick="setThink(${x})">${x}秒</button>`).join("")}</div></div></div>
   <div class="card"><h2>✏️ 一問一答</h2>
     ${row("問題文の言葉に意味を付ける（点線の言葉を押すと意味が出る）", sw(S.gloss !== false, "S.gloss=S.gloss===false"))}
-    ${row("正解なら自動で次の問題へ", sw(S.autoNext, "S.autoNext=!S.autoNext"), "自動読み上げONなら、解説を最後まで読んでから次へ。間違えた時は止まって、解説が出ます（教科書は「📖 開く」で見られます）。")}
+    ${row("正解なら自動で次の問題へ", sw(S.autoNext, "S.autoNext=!S.autoNext"), "自動読み上げONの時だけ、解説を最後まで読んでから次へ。読み上げOFFの時は「次へ」を押して進みます。間違えた時は止まって、解説が出ます（教科書は「📖 開く」で見られます）。")}
     <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">1日の新しい問題数（今日の分）</div><div class="mt">${PerDaySeg()}</div></div>
     ${row("新しい問題を章ごとの日替わりにする", sw(S.rotate !== false, "S.rotate=S.rotate===false"), "第1章→第2章→…と毎日入れ替え。明日から反映。")}</div>
   <div class="card"><h2>🎧 講義</h2>
