@@ -158,7 +158,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-22-v6.17";
+const APP_VERSION = "2026-10-23-v6.18";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -415,12 +415,11 @@ function Home() {
   return `
   <div class="card" style="padding:14px 16px"><div class="row" style="align-items:baseline;gap:8px">
     <span class="small grow">本番 11/15（日）13:00 まで</span><b class="num" style="font-size:34px;color:var(--brand)">${dl}</b><span>日</span></div></div>
-  ${StageBanner()}
-  ${RedoCard()}
+  ${NaviCard()}
   ${GoalCard()}
   ${RoadCard()}
   <details class="card"><summary style="font-weight:700;cursor:pointer">📊 くわしく見る（分野別の作戦表・仕上がり・模試の記録・設定）</summary>
-    <div class="mt">${StrategyCard()}${daysLeft() <= 14 ? RadioCard() : ""}
+    <div class="mt">${StageBanner()}${RedoCard()}${StrategyCard()}${daysLeft() <= 14 ? RadioCard() : ""}
   <div class="card"><h2>⚙️ 新しい問題の出し方</h2>
     <details open><summary class="small">1日の新しい問題数：${S.newPerDay ? S.newPerDay + "問" : `おまかせ（約${autoQuota()}問）`}</summary><div class="mt">${PerDaySeg()}</div>
       <div class="small mt">おまかせ＝10/25までに全問を一周できる数。増やすほど復習の数も増えます（間違えた問題は翌日、正解は3日後にまた出ます）。</div>
@@ -576,6 +575,107 @@ function RoadCard() {
         <td class="num" style="white-space:nowrap">${v}</td><td class="num">${end ? mdj(end) : ""}</td><td class="num" style="white-space:nowrap">${ok ? "" : p}</td></tr>`).join("")}
     </table>
     <div class="small mt">本番まで ${daysLeft()}日。予定＝〜${mdj(R1_END)} 1周目 → 〜${mdj(REDO_END)} 解き直し → 〜${mdj(PAST_END)} 過去問 → 〜${mdj(FINAL_END)} 模試で仕上げ。</div></div>`;
+}
+
+// ---------- 🧭 合格ナビ（2026-10-23 下田さん「次に何をやるべきか案内を出して。君が進捗を見て、合格まで何をどうするか判断して。絶対合格しないといけない」） ----------
+// v5.0で外した「今日の指示」を本人の依頼で復活。中身は毎回、記録から組み直す（解き直しの残り・過去問の予定・苦手Section・まだ聞いていない講義）。
+// 毎朝 Claude が記録を見て判断を書き込む（COACH＝ひとことと、今日の苦手Section）。届かない日はアプリの計算だけで出す
+const PAST_PLAN = [["2026-10-25", "R3"], ["2026-10-29", "R4"], ["2026-11-01", "R5"], ["2026-11-04", "R6"], ["2026-11-07", "R7"]];
+const MOCK_PLAN = ["2026-11-08", "2026-11-12"];
+const COACH_KEY = "chinkan.coach";
+let COACH = (() => { try { return JSON.parse(localStorage.getItem(COACH_KEY) || "null"); } catch (e) { return null; } })();
+async function coachLoad() {
+  try {
+    const r = await fetch(CLOUD, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "load", key: "c0ac4000-" + S.syncKey }) }).then(x => x.json());
+    if (r.data?.date && JSON.stringify(r.data) !== JSON.stringify(COACH)) { COACH = r.data; try { localStorage.setItem(COACH_KEY, JSON.stringify(COACH)); } catch (e) {} if (view === "home") render(); }
+  } catch (e) {}
+}
+function pastFreq() { const m = {}; for (const y of PAST?.years || []) for (const q of y.qs) if (q.sec) m[q.sec] = (m[q.sec] || 0) + 1; return m; }
+// 失点の大きい順＝(1−正答率)×(過去5年に出た数＋1)。9割以上のSectionは外す
+function focusRank() {
+  const f = pastFreq();
+  return secStats().filter(x => x.c + x.w >= ACC_MIN && x.acc < 0.9).map(x => ({ ...x, freq: f[x.id] || 0, loss: (1 - x.acc) * ((f[x.id] || 0) + 1) })).sort((a, b) => b.loss - a.loss);
+}
+// 苦手Sectionは間違えたことがある問題→覚えきれていない問題の順に30問まで（83問・109問のSectionもあるため）
+const FOCUS_N = 30;
+function focusIds(sec) {
+  const sc = q => { const c = card(q.id) || { w: 0, box: 0 }; return (c.lastOk === false ? 100 : 0) + c.w * 10 + (5 - Math.min(5, c.box || 0)); };
+  return secQs(sec).map(q => [q, sc(q) + Math.random()]).sort((a, b) => b[1] - a[1]).slice(0, FOCUS_N).map(([q]) => q.id);
+}
+const idsDoneToday = ids => ids.length > 0 && ids.filter(id => card(id)?.last === today()).length >= Math.ceil(ids.length * 0.8);
+// 2周目＝1回しか解いていない問題（1回正解しただけでは本番で取れるとは限らない）。過去問期の終わりまでに一周
+const onceIds = () => Q.filter(q => { const c = card(q.id); return c && c.c + c.w === 1; }).map(q => q.id);
+function startOnce() { const N = naviDay(), ids = onceIds(), fset = new Set(N.focus); startSession(ids.sort((a, b) => (fset.has(QM[b].sec) ? 1 : 0) - (fset.has(QM[a].sec) ? 1 : 0) || bookOrder(a, b)).slice(0, Math.max(10, N.onceQ - (N.onceBase - ids.length))), "2周目（1回しか解いていない問題）"); }
+// その日の中身は朝いちど決めて固定する（解いて正答率が変わっても、今日の苦手Sectionが入れ替わらないように）。コーチの判断が後から届いたら組み直す
+function naviDay() {
+  const t = today();
+  if (S.navi?.date === t && (COACH?.date !== t || S.navi.coach)) return S.navi;
+  const r = redoStats(), d = daysTo(REDO_END), hist = S.naviHist || {};
+  const past = PAST_PLAN.find(([dt, y]) => dt <= t && !S.pastLog.some(l => l.year === y));
+  const nFocus = past || MOCK_PLAN.includes(t) ? 1 : 2;
+  const recent = sec => hist[sec] && hist[sec] >= addDays(t, -3) && hist[sec] < t;
+  const fromCoach = COACH?.date === t ? (COACH.focus || []).filter(s => SECM[s]) : [];
+  const focus = [...new Set([...fromCoach, ...focusRank().filter(x => !recent(x.id)).map(x => x.id)])].slice(0, nFocus);
+  const redoQ = S.navi?.date === t ? S.navi.redoQ : r.left ? (d > 0 ? Math.ceil((r.left + r.td) / d) : r.left + r.td) : 0;
+  const once = onceIds().length, od = daysTo(PAST_END);
+  const keep = S.navi?.date === t ? S.navi : null;
+  S.navi = { date: t, coach: COACH?.date === t, focus, redoQ, fids: Object.fromEntries(focus.map(s => [s, keep?.fids?.[s] || focusIds(s)])),
+    onceBase: keep ? keep.onceBase : once, onceQ: keep ? keep.onceQ : once ? (od > 0 ? Math.ceil(once / od) : once) : 0 };
+  S.naviHist = Object.fromEntries(Object.entries(hist).filter(([, v]) => v >= addDays(t, -10)));
+  for (const s of focus) S.naviHist[s] = t;
+  setTimeout(save, 0);
+  return S.navi;
+}
+function startFocus(s) { const N = naviDay(), ids = N.fids?.[s] || focusIds(s); startSession(shuffle(ids.filter(id => card(id)?.last !== today()).length ? ids.filter(id => card(id)?.last !== today()) : ids), `今日の苦手 ${s}`); }
+function naviPastRev(y) { const dd = S.done[today()] || (S.done[today()] = {}); dd.pastRev = true; save(); studyWrongSecs(y); }
+function naviPlan() {
+  const t = today(), dd = S.done[t] || {}, dl = daysLeft(), N = naviDay(), r = redoStats(), items = [];
+  const add = (done, title, sub, btn, label, btn2, label2) => items.push({ done, title, sub, btn, label, btn2, label2 });
+  if (t === ymd(EXAM)) return { items: [
+    { done: false, title: "朝：数字まとめを10分だけ眺める", sub: "覚え直しではなく確認だけ", btn: "go('numbers')", label: "数字まとめ" },
+    { done: false, title: "持ち物：受験票・写真付きの身分証・鉛筆とけしゴム・時計", sub: "12:30には会場に着く", btn: "", label: "" },
+    { done: false, title: "本番：個数問題は「4つ全部わかる問題」から", sub: "迷った問題は印をつけて最後に戻る", btn: "", label: "" }] };
+  const past = PAST_PLAN.find(([d, y]) => d <= t && !S.pastLog.some(l => l.year === y));
+  const pastToday = S.pastLog.filter(l => l.date === t).slice(-1)[0];
+  if (past) { const [d, y] = past; add(false, `📝 過去問 ${esc(pastYear(y)?.label || y)}（50問・120分）${d < t ? `<span style="color:var(--ng)">（${mdj(d)}の予定分）</span>` : ""}`, "本番と同じ2時間。紙で解いて、番号だけアプリに入れて採点します。今いちばん大事な1つです", `startPast('${y}')`, "答案用紙を開く"); }
+  if (pastToday) add(!!dd.pastRev, `🔍 過去問の間違い直し（${pastToday.score}点だった${esc(pastYear(pastToday.year)?.label || "")}）`, `間違えた${pastToday.wrong.length}問のSectionから問題を出します`, `naviPastRev('${pastToday.year}')`, "直す");
+  if (MOCK_PLAN.includes(t)) add(!!dd.mock, "🏁 本番リハーサル（4択50問・120分）", "本番と同じ13:00から通しで。40点以上を2回が合格圏の目安", "startMock(50)", "始める");
+  if (dl <= LAST_WEEK) {
+    add(!!dd.nums, "🔢 数字まとめ（答えを隠して）", "数字のひっかけ対策。言えなかった数字だけ見直す", "go('numbers')", "開く");
+    add(!!dd.count, "🔢 個数問題ドリル10問", "4つの文を全部判断する練習", "startCountDrill()", "解く");
+  }
+  if (N.redoQ) add(r.td >= N.redoQ || !r.left, `🔁 間違えた問題の解き直し　今日 ${Math.min(r.td, N.redoQ)}/${N.redoQ}問`, r.left ? `残り${r.left}問を${mdj(REDO_END)}までに。解き直しの正解率は今 ${r.acc == null ? "—" : Math.round(r.acc * 100) + "%"}（目標9割）` : "全部解き直しました", "startRedo()", "解き直す");
+  const st = secStats(), f = pastFreq();
+  N.focus.forEach(s => { const x = st.find(v => v.id === s) || {};
+    const ids = N.fids?.[s] || focusIds(s);
+    add(idsDoneToday(ids), `🎯 今日の苦手 ${s} ${esc(x.title || "")}`, `正答率 ${x.acc == null ? "—" : Math.round(x.acc * 100) + "%"}・本番に過去5年で${f[s] || 0}問。講義を聞いて→間違えやすい${ids.length}問を解く`, `startFocus('${s}')`, "解く", LEC[s] ? `startLecture(['${s}'])` : "", "🎧 先に聞く"); });
+  if (N.onceQ) { const left = onceIds().length, td = N.onceBase - left;
+    add(td >= N.onceQ || !left, `🔂 2周目　今日 ${Math.min(td, N.onceQ)}/${N.onceQ}問`, left ? `1回しか解いていない問題が残り${left}問。${mdj(PAST_END)}までに全部2回目を。今日の苦手Sectionの問題から出します` : "全部2回以上解きました", "startOnce()", "解く"); }
+  if (r.still && !r.left) add(false, `❌ まだ間違えたままの ${r.still}問`, "最後に間違えた問題だけ。正解すると外れます", "startStill()", "解く");
+  const un = SECS.filter(x => LEC[x.id] && !heardN(x.id)), heardT = SECS.filter(x => heardToday(x.id)).length;
+  if (un.length || N.lec) { N.lec = 1; add(!un.length || heardT >= 3, `🎧 まだ聞いていない講義（残り${un.length}個）`, un.length ? `移動中に1日3つ。次は ${un.slice(0, 3).map(x => x.id).join("・")}` : "全Section聞き終わりました", un.length ? `startLecture(${JSON.stringify(un.slice(0, 3).map(x => x.id)).replace(/"/g, "'")})` : "", "聞く"); }
+  if (dl > LAST_WEEK && new Date(t + "T00:00:00").getDay() % 2 === 0) add(!!dd.nums, "🔢 数字まとめ（5分）", "答えを隠して言えるか確認", "go('numbers')", "開く");
+  return { items };
+}
+function NaviCard() {
+  const P = naviPlan(), next = P.items.findIndex(x => !x.done), done = P.items.filter(x => x.done).length, t = today();
+  const nextPast = PAST_PLAN.find(([d, y]) => d > t && !S.pastLog.some(l => l.year === y));
+  const sc = Math.round(predict().total), c = COACH?.date === t ? COACH : null;
+  const inSess = sess && sess.i < sess.ids.length;
+  const btnOf = x => x.btn === "startRedo()" && inSess && sess.label === "解き直し" ? "go('study')" : x.btn;
+  return `<div class="card" style="border:2px solid var(--brand)">
+    <div class="row"><h2 class="grow" style="margin:0">🧭 合格ナビ・今日やること</h2><span class="small"><b>${done}/${P.items.length}</b> 完了</span></div>
+    <div class="small mt">今の予想 <b style="color:${sc >= PASS_LINE + 2 ? "var(--ok)" : "var(--ng)"}">${sc}点</b>（合格 ${PASS_LINE}・目標 ${PASS_LINE + 2}）${S.pastLog.length ? `／過去問の最新 <b>${S.pastLog.slice(-1)[0].score}点</b>` : ""}</div>
+    ${c ? `<div style="margin-top:8px;padding:9px 11px;border-radius:10px;background:var(--track);font-size:14px;line-height:1.6"><b>🧑‍🏫 コーチの判断</b><span class="small">（${mdj(c.date)} 朝・記録を見て）</span><br>${esc(c.msg)}</div>` : ""}
+    ${inSess ? `<div class="row mt" style="gap:8px"><span class="grow small">解いている途中：${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}問目</span><button class="btn sec" style="width:auto;padding:7px 12px;font-size:13px" onclick="go('study')">続きから</button></div>` : ""}
+    ${P.items.map((x, i) => { const now = i === next;
+      return `<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;gap:10px;align-items:flex-start;${now ? "" : x.done ? "opacity:.55" : ""}">
+      <span style="flex:none;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;${x.done ? "background:var(--ok);color:#fff" : now ? "background:var(--brand);color:#fff" : "border:2px solid var(--line)"}">${x.done ? "✓" : i + 1}</span>
+      <div class="grow" style="min-width:0"><div style="font-weight:700;${x.done ? "text-decoration:line-through" : ""}">${x.title}</div><div class="small">${esc(x.sub)}</div>
+        ${now && x.btn ? `<div class="btns mt">${x.btn2 ? `<button class="btn sec" onclick="${x.btn2}">${x.label2}</button>` : ""}<button class="btn" onclick="${btnOf(x)}">▶ ${x.label}</button></div>` : ""}</div>
+      ${!now && !x.done && x.btn ? `<button class="btn ghost" style="width:auto;padding:6px 10px;font-size:12px;flex:none" onclick="${btnOf(x)}">${x.label}</button>` : ""}</div>`; }).join("")}
+    ${next < 0 ? `<div class="res ok mt"><b>今日やることは全部できました 🎉</b><br>余裕があれば「くわしく見る」の苦手マップの上から1つ。</div>` : ""}
+    ${nextPast ? `<div class="small mt">📅 次の過去問：<b>${mdj(nextPast[0])}（${"日月火水木金土"[new Date(nextPast[0] + "T00:00:00").getDay()]}）${esc(pastYear(nextPast[1])?.label || nextPast[1])}</b>。2時間空けておいてください。</div>` : ""}</div>`;
 }
 
 // ---------- 読み上げ ----------
@@ -2179,6 +2279,7 @@ function AnkiTheme(ti) {
   if (S.cur && !S.cur.done) view = "mock";
   else if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null)) view = "past";
   render();
+  coachLoad();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
 </script>
