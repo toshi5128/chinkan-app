@@ -158,7 +158,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-25-v6.22";
+const APP_VERSION = "2026-10-25-v6.23";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -714,16 +714,24 @@ function startDojo(ids, label) {
 function dojoYear(y) { startDojo(DOJO.qs.filter(q => q.year === y).map(q => q.id), pastYear(y)?.label || y); }
 function dojoCh(ch) { startDojo(shuffle(DOJO.qs.filter(q => SECM[q.sec]?.ch === ch).map(q => q.id)), `第${ch}章`); }
 function dojoSecs(secs, label) { const set = new Set(secs); startDojo(shuffle(DOJO.qs.filter(q => set.has(q.sec)).map(q => q.id)), label); }
-function dojoWrong() { startDojo(shuffle(DOJO.qs.filter(q => S.dojo[q.id] && !S.dojo[q.id].lastOk).map(q => q.id)), "道場で間違えた問題"); }
+const DOJO_WN = [["now", "今も間違えたまま", d => !d.lastOk], ["1+", "1回以上", d => d.w >= 1], ["1", "1回", d => d.w === 1], ["2", "2回", d => d.w === 2], ["3+", "3回以上", d => d.w >= 3]];
+const dojoWrongIds = f => DOJO.qs.filter(q => S.dojo[q.id] && f(S.dojo[q.id])).map(q => q.id);
+function dojoWrong(key) { const [, l, f] = DOJO_WN.find(x => x[0] === key) || DOJO_WN[0]; startDojo(shuffle(dojoWrongIds(f)), `過去問：間違えた（${l}）`); }
 function dojoUnseen() { startDojo(shuffle(DOJO.qs.filter(q => !S.dojo[q.id]).map(q => q.id)).slice(0, 20), "まだ解いていない問題"); }
 function dojoPastWrong(year) { const log = S.pastLog.filter(l => l.year === year).slice(-1)[0]; if (!log) return; startDojo(DOJO.qs.filter(q => q.year === year && log.wrong.includes(q.no)).map(q => q.id), `${pastYear(year)?.label || year}の間違い直し`); }
-function dojoPick(k) {
-  if (dsess.pick != null) return;
-  const q = dojoQ(dsess.ids[dsess.i]), ok = dojoOk(q, k), d = S.dojo[q.id] || { c: 0, w: 0 };
-  dsess.pick = k; dsess.done++; if (ok) dsess.ok++;
+// 過去問1問の結果を記録（道場・答案用紙のどちらで解いても）。間違えた回数 w で「間違えた問題」を選べる
+function dojoRecord(q, k) {
+  const ok = dojoOk(q, k), d = S.dojo[q.id] || { c: 0, w: 0 };
   if (ok) d.c++; else d.w++; d.last = today(); d.lastOk = ok; d.pick = k; S.dojo[q.id] = d;
   const L = S.dojoLog[today()] || (S.dojoLog[today()] = { n: 0, c: 0 }); L.n++; if (ok) L.c++;
+  return ok;
+}
+function dojoPick(k) {
+  if (dsess.pick != null) return;
+  const q = dojoQ(dsess.ids[dsess.i]), ok = dojoRecord(q, k);
+  dsess.pick = k; dsess.done++; if (ok) dsess.ok++;
   save(); render();
+  if (S.tts.auto) sayDojo();
   setTimeout(() => document.getElementById("dojoRes")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
 }
 function dojoNext(d = 1) { TTS.stop(); dsess.i = Math.max(0, dsess.i + d); dsess.pick = null; render(); window.scrollTo(0, 0); }
@@ -735,12 +743,16 @@ function toggleIn(o, key, k) { const a = o[key] || (o[key] = []), j = a.indexOf(
 function dojoStrike(id, k) { toggleIn(dsess.strike || (dsess.strike = {}), id, k); render(); }
 function strikePast(i, k) { toggleIn(S.pastCur.strike || (S.pastCur.strike = {}), i, k); save(); render(); }
 const exBox = e => e ? `<div class="small" style="display:block;margin-top:4px;padding:6px 8px;border-radius:8px;background:${e.ok ? "var(--okbg)" : "var(--ngbg)"};color:var(--ink)"><b style="white-space:nowrap;color:${e.ok ? "var(--ok)" : "var(--ng)"}">${e.ok ? "○ 正しい" : "× 誤り"}</b>　${esc(e.why)}</div>` : "";
-function sayPast(i) { const y = pastYear(S.pastCur.year), q = y.qs[i], d = dojoQ(`${y.year}-${q.no}`); if (d) TTS.speak(pastSpeech(d, q.no)); }
+// 答え合わせの後は、正解と1文ずつの○×・理由・ポイントを読む（v6.23 下田さん「解説も読んでほしい」）
+const exSpeech = (q, pick) => `${pick == null ? "" : dojoOk(q, pick) ? "正解。" : "不正解。"}正解は${q.ans === "all" ? "全員正解" : Array.isArray(q.ans) ? q.ans.join("と") + "番" : q.ans + "番"}。` + Object.entries(q.ex || {}).map(([k, e]) => `${k}は${e.ok ? "マル" : "バツ"}。${e.why}`).join("") + (q.point ? `ポイント。${q.point}` : "");
+function sayPast(i) {
+  const cur = S.pastCur, y = pastYear(cur.year), q = y.qs[i], d = dojoQ(`${y.year}-${q.no}`); if (!d) return;
+  const rev = S.pastText !== false && S.pastNow !== false && cur.pick[i] != null;
+  TTS.speak(rev ? exSpeech(d, cur.pick[i]) : pastSpeech(d, q.no));
+}
 function sayDojo() {
   const q = dojoQ(dsess.ids[dsess.i]); if (!q) return;
-  let t = pastSpeech(q, q.no);
-  if (dsess.pick != null) t = `正解は${Array.isArray(q.ans) ? q.ans.join("と") : q.ans}番。` + Object.entries(q.ex || {}).map(([k, e]) => `${k}は${e.ok ? "マル" : "バツ"}。${e.why}`).join("") + (q.point ? `ポイント。${q.point}` : "");
-  TTS.speak(t);
+  TTS.speak(dsess.pick != null ? exSpeech(q, dsess.pick) : pastSpeech(q, q.no));
 }
 function Dojo() {
   if (!DOJO || !dsess) { view = "mock"; return Mock(); }
@@ -788,7 +800,9 @@ function DojoCard() {
         <button class="btn ${s.seen ? "sec" : ""}" style="width:auto;padding:7px 14px;font-size:14px" onclick="dojoYear('${y}')">解く</button></div>`; }).join("")}
     <div style="font-weight:700;margin-top:10px">分野で解く（5年分からまとめて）</div>
     <div class="seg mt" style="flex-wrap:wrap">${CHAPS.map(c => `<button onclick="dojoCh(${c.ch})">第${c.ch}章</button>`).join("")}</div>
-    <div class="btns mt">${wrongN ? `<button class="btn" onclick="dojoWrong()">❌ 道場で間違えた問題（${wrongN}問）</button>` : ""}
+    ${DOJO.qs.some(q => S.dojo[q.id]?.w) ? `<div style="font-weight:700;margin-top:10px">❌ 間違えた問題を解く（答案用紙で間違えた分も入ります）</div>
+    <div class="seg mt" style="flex-wrap:wrap">${DOJO_WN.map(([k, l, f]) => { const n = dojoWrongIds(f).length; return `<button ${n ? "" : "disabled"} onclick="dojoWrong('${k}')">${l}（${n}）</button>`; }).join("")}</div>` : ""}
+    <div class="btns mt">
       ${st.seen < all.length ? `<button class="btn sec" onclick="dojoUnseen()">🆕 まだ解いていない問題から20問</button>` : ""}</div>
     <div class="small mt">本番の練習（2時間通し）は、下の「過去問（公式の本試験）」の答案用紙を使ってください。道場は解き直しと分野別の練習用です。</div></div>`;
 }
@@ -2238,7 +2252,14 @@ function startPast(year) {
   S.pastCur = { year, pick: y.qs.map(() => null), start: Date.now(), done: false };
   save(); go("past");
 }
-function pickPast(i, k) { const p = S.pastCur.pick; if (p[i] != null && S.pastText !== false && S.pastNow !== false && DOJO) return; p[i] = p[i] === k ? null : k; save(); render(); }
+function pickPast(i, k) {
+  const p = S.pastCur.pick, now = S.pastText !== false && S.pastNow !== false && DOJO;
+  if (p[i] != null && now) return;
+  p[i] = p[i] === k ? null : k;
+  if (now && p[i] != null) { const y = pastYear(S.pastCur.year), d = dojoQ(`${y.year}-${y.qs[i].no}`); if (d) { dojoRecord(d, k); (S.pastCur.rec || (S.pastCur.rec = {}))[i] = 1; } }
+  save(); render();
+  if (now && p[i] != null && S.tts.auto) sayPast(i);
+}
 function Past() {
   const cur = S.pastCur, y = cur && pastYear(cur.year);
   if (!y) { view = "mock"; return Mock(); }
@@ -2270,6 +2291,7 @@ function finishPast() {
   cur.done = true; cur.end = Date.now();
   const wrong = y.qs.filter((q, i) => !pastOk(q, cur.pick[i])).map(q => q.no);
   cur.score = y.qs.length - wrong.length;
+  if (DOJO) y.qs.forEach((q, i) => { const d = dojoQ(`${y.year}-${q.no}`); if (d && cur.pick[i] != null && !cur.rec?.[i]) dojoRecord(d, cur.pick[i]); }); // その場で答え合わせした問題は記録済み
   S.pastLog.push({ year: y.year, date: today(), score: cur.score, pass: y.pass, n: y.qs.length, min: Math.round((cur.end - cur.start) / 60000), wrong });
   save(); render(); window.scrollTo(0, 0);
 }
