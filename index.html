@@ -158,7 +158,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-25-v6.19";
+const APP_VERSION = "2026-10-25-v6.20";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -2234,11 +2234,19 @@ function Past() {
   if (cur.done) return PastResult(cur, y);
   startTimer();
   const n = cur.pick.filter(x => x != null).length;
+  // v6.20 下田さん「これなんなん」（スマホ1台だとPDFと答案用紙の行き来が大変）→ 道場の問題文があれば、この画面に問題も出す
+  const hasText = !!DOJO && y.qs.every(q => dojoQ(`${y.year}-${q.no}`)), withText = hasText && S.pastText !== false;
   return `<div class="qhead"><span>${esc(y.label)}　入力 ${n}/${y.qs.length}</span><span class="timer num" id="timer" data-start="${cur.start}" data-limit="7200" data-kind="past"></span></div>
-  <div class="card"><div class="small">${y.pdf ? `<a href="${esc(y.pdf)}" target="_blank" rel="noopener">📄 問題PDFを開く</a>　` : ""}紙で解いて、選んだ番号をタップ（もう一度押すと取り消し）。時間は本番と同じ120分が目安です。</div></div>
+  ${withText ? `<div class="card"><div class="small">本番と同じ120分で、上から順に解いて番号をタップ（もう一度押すと取り消し）。答えは最後の「採点する」まで出ません。<button class="linkbtn" onclick="S.pastText=false;save();render()">答案用紙だけにする（紙やPDFで解く）</button></div></div>
+  ${y.qs.map((q, i) => { const d = dojoQ(`${y.year}-${q.no}`); return `<div class="card" id="pq${i}">
+    <div class="qtext" style="font-weight:700;font-size:16px">【問${q.no}】${esc(d.stem)}</div>
+    ${d.items.length ? `<div class="stmts">${d.items.map(x => `<div><b>${x.k}</b><span>${esc(x.t)}</span></div>`).join("")}</div>` : ""}
+    <div class="stmts">${d.opts.map(o => `<div><b>${o.k}</b><span>${esc(o.t)}</span></div>`).join("")}</div>
+    <div class="row" style="gap:6px">${[1, 2, 3, 4].map(k => `<button onclick="pickPast(${i},${k})" style="flex:1;border:1.5px solid ${cur.pick[i] === k ? "var(--brand)" : "var(--line)"};background:${cur.pick[i] === k ? "var(--brand)" : "var(--card)"};color:${cur.pick[i] === k ? "#fff" : "var(--ink)"};border-radius:9px;padding:10px 0;font-weight:700">${k}</button>`).join("")}</div></div>`; }).join("")}` : `
+  <div class="card"><div class="small">${y.pdf ? `<a href="${esc(y.pdf)}" target="_blank" rel="noopener">📄 問題PDFを開く</a>　` : ""}紙で解いて、選んだ番号をタップ（もう一度押すと取り消し）。時間は本番と同じ120分が目安です。${hasText ? `<button class="linkbtn" onclick="S.pastText=true;save();render()">問題文をこの画面に出す</button>` : ""}</div></div>
   ${[0, 10, 20, 30, 40].map(s0 => `<div class="card" style="padding:8px 12px">${y.qs.slice(s0, s0 + 10).map((q, j) => { const i = s0 + j;
     return `<div class="row" style="padding:5px 0;gap:6px"><b class="num" style="width:44px">問${q.no}</b>
-      ${[1, 2, 3, 4].map(k => `<button onclick="pickPast(${i},${k})" style="flex:1;border:1.5px solid ${cur.pick[i] === k ? "var(--brand)" : "var(--line)"};background:${cur.pick[i] === k ? "var(--brand)" : "var(--card)"};color:${cur.pick[i] === k ? "#fff" : "var(--ink)"};border-radius:9px;padding:8px 0;font-weight:700">${k}</button>`).join("")}</div>`; }).join("")}</div>`).join("")}
+      ${[1, 2, 3, 4].map(k => `<button onclick="pickPast(${i},${k})" style="flex:1;border:1.5px solid ${cur.pick[i] === k ? "var(--brand)" : "var(--line)"};background:${cur.pick[i] === k ? "var(--brand)" : "var(--card)"};color:${cur.pick[i] === k ? "#fff" : "var(--ink)"};border-radius:9px;padding:8px 0;font-weight:700">${k}</button>`).join("")}</div>`; }).join("")}</div>`).join("")}`}
   <div class="btns"><button class="btn" onclick="finishPast()">採点する</button>
     <button class="linkbtn" onclick="go('mock')">あとで続ける（入力は保存されています）</button></div>`;
 }
