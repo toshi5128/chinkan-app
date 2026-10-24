@@ -158,7 +158,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-25-v6.23";
+const APP_VERSION = "2026-10-25-v6.24";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -742,9 +742,14 @@ const strikeStyle = on => on ? "text-decoration:line-through;text-decoration-thi
 function toggleIn(o, key, k) { const a = o[key] || (o[key] = []), j = a.indexOf(k); if (j < 0) a.push(k); else a.splice(j, 1); }
 function dojoStrike(id, k) { toggleIn(dsess.strike || (dsess.strike = {}), id, k); render(); }
 function strikePast(i, k) { toggleIn(S.pastCur.strike || (S.pastCur.strike = {}), i, k); save(); render(); }
+const ansWord = (right, mine) => right && mine ? "あなた・正解" : right ? "正解" : mine ? "あなた" : "";
+const ansTag = (right, mine) => right || mine ? `<div style="font-size:11px;font-weight:800;line-height:1.2;color:var(--${right ? "ok" : "ng"})">${ansWord(right, mine)}</div>` : "";
+const ansChip = (right, mine) => right || mine ? `<span style="flex:none;align-self:flex-start;font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:var(--${right ? "ok" : "ng"});color:#fff;white-space:nowrap">${ansWord(right, mine)}</span>` : "";
+const ansLine = (q, pick) => { const ok = dojoOk(q, pick), a = q.ans === "all" ? "全員正解（出題ミス）" : Array.isArray(q.ans) ? q.ans.join("・") : q.ans;
+  return `<b class="t">${ok ? "⭕ 正解" : "❌ 不正解"}</b><div style="margin-top:4px;font-size:16px">あなたの答え <b style="font-size:20px;color:var(--${ok ? "ok" : "ng"})">${pick}</b>　${ok ? "" : "→　"}正解 <b style="font-size:20px;color:var(--ok)">${a}</b></div>`; };
 const exBox = e => e ? `<div class="small" style="display:block;margin-top:4px;padding:6px 8px;border-radius:8px;background:${e.ok ? "var(--okbg)" : "var(--ngbg)"};color:var(--ink)"><b style="white-space:nowrap;color:${e.ok ? "var(--ok)" : "var(--ng)"}">${e.ok ? "○ 正しい" : "× 誤り"}</b>　${esc(e.why)}</div>` : "";
 // 答え合わせの後は、正解と1文ずつの○×・理由・ポイントを読む（v6.23 下田さん「解説も読んでほしい」）
-const exSpeech = (q, pick) => `${pick == null ? "" : dojoOk(q, pick) ? "正解。" : "不正解。"}正解は${q.ans === "all" ? "全員正解" : Array.isArray(q.ans) ? q.ans.join("と") + "番" : q.ans + "番"}。` + Object.entries(q.ex || {}).map(([k, e]) => `${k}は${e.ok ? "マル" : "バツ"}。${e.why}`).join("") + (q.point ? `ポイント。${q.point}` : "");
+const exSpeech = (q, pick) => `${pick == null ? "" : dojoOk(q, pick) ? `正解。あなたの答えは${pick}番。` : `不正解。あなたの答えは${pick}番。`}正解は${q.ans === "all" ? "全員正解" : Array.isArray(q.ans) ? q.ans.join("と") + "番" : q.ans + "番"}。` + Object.entries(q.ex || {}).map(([k, e]) => `${k}は${e.ok ? "マル" : "バツ"}。${e.why}`).join("") + (q.point ? `ポイント。${q.point}` : "");
 function sayPast(i) {
   const cur = S.pastCur, y = pastYear(cur.year), q = y.qs[i], d = dojoQ(`${y.year}-${q.no}`); if (!d) return;
   const rev = S.pastText !== false && S.pastNow !== false && cur.pick[i] != null;
@@ -767,10 +772,10 @@ function Dojo() {
   const ansTxt = q.ans === "all" ? "全員正解（出題ミス）" : Array.isArray(q.ans) ? q.ans.join("・") : q.ans;
   const exRow = k => done ? exBox(q.ex?.[k]) : "";
   const sk = dsess.strike?.[q.id] || [];
-  const stmt = (k, t, ex) => `<div style="display:block"><div onclick="dojoStrike('${q.id}','${k}')" style="display:flex;gap:8px;cursor:pointer;${strikeStyle(sk.includes(k))}"><b>${k}</b><span>${esc(t)}</span></div>${ex ? exRow(k) : ""}</div>`;
+  const stmt = (k, t, ex) => `<div style="display:block"><div onclick="dojoStrike('${q.id}','${k}')" style="display:flex;gap:8px;cursor:pointer;${strikeStyle(sk.includes(k))}"><b>${k}</b><span class="grow">${esc(t)}</span>${done && /^\d$/.test(k) ? ansChip(dojoOk(q, +k), p === +k) : ""}</div>${ex ? exRow(k) : ""}</div>`;
   const items = `<div class="stmts">${(q.items.length ? q.items : q.opts).map(x => stmt(x.k, x.t, true)).join("")}</div>${q.items.length ? `<div class="stmts">${q.opts.map(o => stmt(o.k, o.t, false)).join("")}</div>` : ""}`;
   const opts = `<div class="small" style="margin:2px 0 6px">${done ? "" : "違うと思った文はタップで斜線。答えは下の番号で"}</div><div class="row" style="gap:6px">${[1, 2, 3, 4].map(k => { const mine = p === k, right = done && dojoOk(q, k), c = done ? (right ? "ok" : mine ? "ng" : "") : "";
-    return `<button onclick="dojoPick(${k})" ${done ? "disabled" : ""} style="flex:1;border:${c ? "2.5px" : "1.5px"} solid ${c ? `var(--${c})` : "var(--line)"};background:${c ? `var(--${c}bg)` : "var(--card)"};color:var(--ink);border-radius:9px;padding:11px 0;font-weight:700;font-size:16px">${k}${done && right ? " ⭕" : done && mine ? " ❌" : ""}</button>`; }).join("")}</div>`;
+    return `<button onclick="dojoPick(${k})" ${done ? "disabled" : ""} style="flex:1;border:${c ? "2.5px" : "1.5px"} solid ${c ? `var(--${c})` : "var(--line)"};background:${c ? `var(--${c}bg)` : "var(--card)"};color:var(--ink);border-radius:9px;padding:8px 0;font-weight:700;font-size:16px">${k}${ansTag(done && right, done && mine)}</button>`; }).join("")}</div>`;
   return `
   <div class="qhead"><span>🥋 ${esc(dsess.label)}　${dsess.i + 1}/${dsess.ids.length}</span><span class="small">${dsess.done ? `正解 ${dsess.ok}/${dsess.done}` : ""}</span></div>
   <div class="card">
@@ -778,7 +783,7 @@ function Dojo() {
     ${h && !done ? `<div class="small" style="margin-bottom:4px">前回：${h.lastOk ? "○ 正解" : "× 不正解"}（${mdj(h.last)}）</div>` : ""}
     <div class="qtext" style="font-weight:700">【問${q.no}】${esc(q.stem)}</div>
     ${items}${opts}
-    ${done ? `<div id="dojoRes" class="res ${ok ? "ok" : "ng"}"><b class="t">${ok ? "⭕ 正解" : "❌ 不正解"}</b>　正解は <b>${ansTxt}</b>
+    ${done ? `<div id="dojoRes" class="res ${ok ? "ok" : "ng"}">${ansLine(q, p)}
       ${q.point ? `<div style="margin-top:6px"><b>📌 ポイント</b>　${esc(q.point)}</div>` : ""}
       ${q.law ? `<div style="margin-top:6px;color:var(--ng)"><b>⚠ 法改正</b>　${esc(q.law)}</div>` : ""}</div>
       <div class="btns mt">${LEC[q.sec] ? `<button class="btn sec" onclick="startLecture(['${q.sec}'])">🎧 ${esc(q.sec)} の講義を聞く</button>` : ""}${secQs(q.sec || "").length ? `<button class="btn sec" onclick="startSec('${q.sec}')">✏️ ${esc(q.sec)} の一問一答</button>` : ""}
@@ -2273,10 +2278,10 @@ function Past() {
     <div class="small mt">${now ? "番号を選ぶと、すぐ正解と1文ずつの○×・理由が出ます（選び直しはできません）。" : "答えは最後の「採点する」まで出ません。本番の練習に。"}違うと思った文はタップで斜線、🔊で読み上げ。<button class="linkbtn" onclick="S.pastText=false;save();render()">答案用紙だけにする（紙やPDFで解く）</button></div></div>
   ${y.qs.map((q, i) => { const d = dojoQ(`${y.year}-${q.no}`), rev = now && cur.pick[i] != null; return `<div class="card" id="pq${i}">
     <div class="row" style="align-items:flex-start;gap:6px"><div class="qtext grow" style="font-weight:700;font-size:16px">【問${q.no}】${esc(d.stem)}</div>${TTS.ok ? `<button class="spk" style="flex:none" onclick="sayPast(${i})">🔊</button>` : ""}</div>
-    ${[d.items, d.opts].filter(a => a.length).map((a, ai) => `<div class="stmts">${a.map(x => `<div style="display:block"><div onclick="strikePast(${i},'${x.k}')" style="display:flex;gap:8px;cursor:pointer;${strikeStyle((cur.strike?.[i] || []).includes(x.k))}"><b>${x.k}</b><span>${esc(x.t)}</span></div>${rev && (ai === 0 || !d.items.length) ? exBox(d.ex?.[x.k]) : ""}</div>`).join("")}</div>`).join("")}
+    ${[d.items, d.opts].filter(a => a.length).map((a, ai) => `<div class="stmts">${a.map(x => `<div style="display:block"><div onclick="strikePast(${i},'${x.k}')" style="display:flex;gap:8px;cursor:pointer;${strikeStyle((cur.strike?.[i] || []).includes(x.k))}"><b>${x.k}</b><span class="grow">${esc(x.t)}</span>${rev && /^\d$/.test(x.k) ? ansChip(dojoOk(d, +x.k), cur.pick[i] === +x.k) : ""}</div>${rev && (ai === 0 || !d.items.length) ? exBox(d.ex?.[x.k]) : ""}</div>`).join("")}</div>`).join("")}
     <div class="row" style="gap:6px">${[1, 2, 3, 4].map(k => { const mine = cur.pick[i] === k, c = rev ? (dojoOk(d, k) ? "ok" : mine ? "ng" : "") : "";
-      return `<button onclick="pickPast(${i},${k})" style="flex:1;border:${c ? "2.5px" : "1.5px"} solid ${c ? `var(--${c})` : mine ? "var(--brand)" : "var(--line)"};background:${c ? `var(--${c}bg)` : mine ? "var(--brand)" : "var(--card)"};color:${mine && !c ? "#fff" : "var(--ink)"};border-radius:9px;padding:10px 0;font-weight:700">${k}${rev && dojoOk(d, k) ? " ⭕" : rev && mine ? " ❌" : ""}</button>`; }).join("")}</div>
-    ${rev ? `<div class="res ${dojoOk(d, cur.pick[i]) ? "ok" : "ng"}" style="margin-top:8px"><b class="t">${dojoOk(d, cur.pick[i]) ? "⭕ 正解" : "❌ 不正解"}</b>　正解は <b>${d.ans === "all" ? "全員正解（出題ミス）" : Array.isArray(d.ans) ? d.ans.join("・") : d.ans}</b>${d.point ? `<div style="margin-top:6px"><b>📌 ポイント</b>　${esc(d.point)}</div>` : ""}${d.law ? `<div style="margin-top:6px;color:var(--ng)"><b>⚠ 法改正</b>　${esc(d.law)}</div>` : ""}</div>` : ""}</div>`; }).join("")}` : `
+      return `<button onclick="pickPast(${i},${k})" style="flex:1;border:${c ? "2.5px" : "1.5px"} solid ${c ? `var(--${c})` : mine ? "var(--brand)" : "var(--line)"};background:${c ? `var(--${c}bg)` : mine ? "var(--brand)" : "var(--card)"};color:${mine && !c ? "#fff" : "var(--ink)"};border-radius:9px;padding:8px 0;font-weight:700">${k}${ansTag(rev && dojoOk(d, k), rev && mine)}</button>`; }).join("")}</div>
+    ${rev ? `<div class="res ${dojoOk(d, cur.pick[i]) ? "ok" : "ng"}" style="margin-top:8px">${ansLine(d, cur.pick[i])}${d.point ? `<div style="margin-top:6px"><b>📌 ポイント</b>　${esc(d.point)}</div>` : ""}${d.law ? `<div style="margin-top:6px;color:var(--ng)"><b>⚠ 法改正</b>　${esc(d.law)}</div>` : ""}</div>` : ""}</div>`; }).join("")}` : `
   <div class="card"><div class="small">${y.pdf ? `<a href="${esc(y.pdf)}" target="_blank" rel="noopener">📄 問題PDFを開く</a>　` : ""}紙で解いて、選んだ番号をタップ（もう一度押すと取り消し）。時間は本番と同じ120分が目安です。${hasText ? `<button class="linkbtn" onclick="S.pastText=true;save();render()">問題文をこの画面に出す</button>` : ""}</div></div>
   ${[0, 10, 20, 30, 40].map(s0 => `<div class="card" style="padding:8px 12px">${y.qs.slice(s0, s0 + 10).map((q, j) => { const i = s0 + j;
     return `<div class="row" style="padding:5px 0;gap:6px"><b class="num" style="width:44px">問${q.no}</b>
