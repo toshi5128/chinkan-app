@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-25-v6.26";
+const APP_VERSION = "2026-10-25-v6.27";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -761,8 +761,13 @@ const exSpeech = (q, pick) => `${pick == null ? "" : dojoOk(q, pick) ? `正解�
 function sayPast(i) {
   const cur = S.pastCur, y = pastYear(cur.year), q = y.qs[i], d = dojoQ(`${y.year}-${q.no}`); if (!d) return;
   const rev = S.pastText !== false && S.pastNow !== false && cur.pick[i] != null;
-  TTS.speak(rev ? exSpeech(d, cur.pick[i]) : pastSpeech(d, q.no));
+  TTS.speak(rev ? exSpeech(d, cur.pick[i]) : pastSpeech(d, q.no), rev ? pastResume : undefined);
+  if (rev && TTS.ok) { cur.exTok = TTS.token; pastPause(); }
 }
+// v6.27 下田さん「解説を読んでくれてる時も残り時間が進むのは違くない？」→ 解説の読み上げ中は時計を止める（止めた分は cur.paused に貯める）
+function pastPause() { const c = S.pastCur; if (c && !c.pauseAt) { c.pauseAt = Date.now(); save(); tick(); } }
+function pastResume() { const c = S.pastCur; if (c?.pauseAt) { c.paused = (c.paused || 0) + Math.min(Date.now() - c.pauseAt, 600000); c.pauseAt = null; save(); tick(); } }
+const pastUsed = c => (c.end || Date.now()) - c.start - (c.paused || 0) - (c.pauseAt ? Date.now() - c.pauseAt : 0);
 function sayDojo() {
   const q = dojoQ(dsess.ids[dsess.i]); if (!q) return;
   TTS.speak(dsess.pick != null ? exSpeech(q, dsess.pick) : pastSpeech(q, q.no));
@@ -1905,8 +1910,10 @@ let timerId = null;
 // タイマーは画面の #timer（data-start / data-limit / data-kind）を見て動く
 function tick() {
   const el = document.getElementById("timer"); if (!el) { clearInterval(timerId); timerId = null; return; }
-  const left = Math.max(0, +el.dataset.limit - Math.floor((Date.now() - +el.dataset.start) / 1000));
-  el.textContent = left ? `残り ${Math.floor(left / 60)}:${pad(left % 60)}` : "時間終了";
+  const pc = el.dataset.kind === "past" && S.pastCur;
+  if (pc?.pauseAt && TTS.token !== pc.exTok) pastResume(); // 読み上げを止めた・別の文を読み始めた → 時計を動かす
+  const left = Math.max(0, +el.dataset.limit - Math.floor((pc ? pastUsed(pc) : Date.now() - +el.dataset.start) / 1000));
+  el.innerHTML = (left ? `残り ${Math.floor(left / 60)}:${pad(left % 60)}` : "時間終了") + (pc?.pauseAt ? `<div style="font-size:11px;color:var(--brand);text-align:right">⏸ 解説中は停止</div>` : "");
   if (left === 0 && el.dataset.kind === "mock" && S.cur && !S.cur.done) finishMock(true);
 }
 function startTimer() { if (!timerId) timerId = setInterval(tick, 1000); setTimeout(tick, 0); }
@@ -2311,11 +2318,11 @@ function finishPast() {
   const cur = S.pastCur, y = pastYear(cur.year);
   const blank = cur.pick.filter(x => x == null).length;
   if (blank && !confirm(`まだ${blank}問が未入力です。採点しますか？（未入力は不正解）`)) return;
-  cur.done = true; cur.end = Date.now();
+  pastResume(); cur.done = true; cur.end = Date.now();
   const wrong = y.qs.filter((q, i) => !pastOk(q, cur.pick[i])).map(q => q.no);
   cur.score = y.qs.length - wrong.length;
   if (DOJO) y.qs.forEach((q, i) => { const d = dojoQ(`${y.year}-${q.no}`); if (d && cur.pick[i] != null && !cur.rec?.[i]) dojoRecord(d, cur.pick[i]); }); // その場で答え合わせした問題は記録済み
-  S.pastLog.push({ year: y.year, date: today(), score: cur.score, pass: y.pass, n: y.qs.length, min: Math.round((cur.end - cur.start) / 60000), wrong });
+  S.pastLog.push({ year: y.year, date: today(), score: cur.score, pass: y.pass, n: y.qs.length, min: Math.round(pastUsed(cur) / 60000), wrong });
   save(); render(); window.scrollTo(0, 0);
 }
 function studyWrongSecs(year) {
@@ -2333,7 +2340,7 @@ function PastResult(cur, y) {
   <div class="card center"><div class="small">${esc(y.label)} 本試験</div>
     <div class="hero" style="justify-content:center"><b class="num" style="color:${pass ? "var(--ok)" : "var(--ng)"}">${cur.score}</b><span>/ ${y.qs.length}点</span></div>
     <div class="mt"><span class="tag ${pass ? "ok" : "ng"}">${pass ? `合格点（${y.pass}点）クリア` : `合格点（${y.pass}点）まであと${y.pass - cur.score}点`}</span></div>
-    <div class="small mt">かかった時間 ${Math.round((cur.end - cur.start) / 60000)}分</div></div>
+    <div class="small mt">かかった時間 ${Math.round(pastUsed(cur) / 60000)}分${cur.paused > 60000 ? `（解説を聞いた${Math.round(cur.paused / 60000)}分は除く）` : ""}</div></div>
   <div class="card"><h2>教科書のCHAPTER別</h2>${CHAPS.map(c => { const b = byCh[c.ch]; if (!b) return "";
     return `<div class="area"><div><span class="chip">CH${c.ch}</span> ${esc(c.title)}</div><div class="num small">${b.c}/${b.n}</div>
       <div class="bar" style="grid-column:1/-1"><i style="width:${b.c / b.n * 100}%;background:var(--brand)"></i></div></div>`; }).join("")}</div>
