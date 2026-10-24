@@ -92,7 +92,6 @@ nav.tabs svg{width:22px;height:22px}
 .qhead{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--sub);margin-bottom:8px}
 .pbar{position:sticky;top:0;z-index:4;background:var(--bg);padding:6px 0 8px;margin-bottom:6px;border-bottom:1px solid var(--line)}
 .pbar .bt{flex:none;border:0;border-radius:8px;background:var(--brand);color:#fff;font-weight:700;font-size:13px;padding:7px 10px}
-[id^=pq]{scroll-margin-top:96px}
 .chip{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:99px;background:var(--track);color:var(--sub)}
 .qtext{font-size:17px;line-height:1.75;margin:4px 0 14px;white-space:pre-wrap}
 u.key{text-decoration:underline;text-decoration-color:var(--ng);text-decoration-thickness:2px;text-underline-offset:4px;font-weight:700}
@@ -161,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-25-v6.25";
+const APP_VERSION = "2026-10-25-v6.26";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -387,7 +386,7 @@ function renderTabs() {
 function go(v) { if (v === "lecture") lecFollowOff = 0;
   if (v !== view) { TTS.stop(); if (view === "listen") stopListen(); if (view === "lecture" && !(LV && LV.audio)) stopLecture(); }
   view = v; render(); window.scrollTo(0, 0);
-  if (v === "past") setTimeout(() => pastJump(false), 60);
+  if (v === "past") setTimeout(pastJump, 30);
 }
 // 見た目：自動（スマホの設定に合わせる）→ ライト → ダーク の順に切り替え（2026-10-06 下田さん「ライトとダークを切り替えたい」）
 function curTheme() { try { return localStorage.getItem("chinkan.theme") || "auto"; } catch (e) { return "auto"; } }
@@ -2302,7 +2301,12 @@ function Past() {
     <button class="linkbtn" onclick="go('mock')">あとで続ける（入力は保存されています）</button></div>`;
 }
 // v6.25 下田さん「アプリ更新したら一番上からになる。今解いている問題にすぐ飛びたい」→ まだ答えていない最初の問題へ
-function pastJump(smooth = true) { const i = S.pastCur?.pick.findIndex(x => x == null); if (i > 0) document.getElementById("pq" + i)?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" }); }
+// v6.26 スマホで scrollIntoView が効かなかった（10/25「いま解いているところまで飛べない」）→ 位置を計算して直接スクロール。表示が落ち着くまで3回かけ直す
+function pastJump() {
+  const i = S.pastCur?.pick.findIndex(x => x == null); if (!(i > 0)) return;
+  const to = () => { const el = document.getElementById("pq" + i); if (!el || view !== "past") return; const bar = document.querySelector(".pbar")?.offsetHeight || 0; window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.pageYOffset - bar - 8)); };
+  to(); [150, 500, 1000].forEach(t => setTimeout(to, t));
+}
 function finishPast() {
   const cur = S.pastCur, y = pastYear(cur.year);
   const blank = cur.pick.filter(x => x == null).length;
