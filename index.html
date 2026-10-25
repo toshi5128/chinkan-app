@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-26-v6.28";
+const APP_VERSION = "2026-10-26-v6.29";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -372,11 +372,11 @@ const TABS = [
   ["home", "ホーム", '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>'],
   ["book", "教科書", '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/><path d="M9 7h6"/>'],
   ["study", "一問一答", '<circle cx="8" cy="12" r="4"/><path d="M15 8l6 8M21 8l-6 8"/>'],
-  ["mock", "模試", '<path d="M9 4h6l1 2h3v15H5V6h3z"/><path d="M9 12l2 2 4-4"/>'],
+  ["kako", "過去問", '<path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/>'],
   ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
   ["settings", "設定", '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'],
 ];
-const PARENT = { past: "mock", dojo: "mock", numbers: "book", anki: "book", listen: "study", lecture: "book" };
+const PARENT = { past: "kako", dojo: "kako", mock: "kako", numbers: "book", anki: "book", listen: "study", lecture: "book" };
 function renderTabs() {
   document.getElementById("tabs").innerHTML = TABS.map(([k, l, d]) =>
     `<button class="${(PARENT[view] || view) === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
@@ -403,7 +403,7 @@ function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "settings" ? Settings() : Stats());
+  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "kako" ? Kako() : view === "settings" ? Settings() : Stats());
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -443,7 +443,7 @@ function Home() {
     ${lastMock ? `<div class="row"><span class="grow">模試 ${lastMock.date.slice(5).replace("-", "/")}</span><b class="num" style="font-size:22px;color:${lastMock.score >= PASS_LINE ? "var(--ok)" : "var(--ng)"}">${lastMock.score}点</b><span class="small">/50（目標${PASS_LINE}点）</span></div>`
       : lastPast ? ""
       : `<div class="small">本番と同じ4択50問・120分。まだ受けていません。一周の半分くらいまで進んだら一度受けてみましょう。</div>`}
-    <div class="mt"><button class="btn sec" onclick="go('mock')">模試・過去問へ</button></div>
+    <div class="row mt" style="gap:8px"><button class="btn sec" onclick="go('kako')">過去問・模試へ</button></div>
   </div></div></details>`;
 }
 
@@ -461,7 +461,7 @@ function stageInfo() {
   const weak = Q.filter(q => { const c = card(q.id); return c && (c.box <= 2 || c.w > c.c); }).length;
   if (weak > WEAK_DONE) return { no: 3, title: "3周目以降：「苦手」を空っぽにする", sub: `まだ覚えきれていない問題 ${weak}問。正解が続いた問題は自動で外れるので、${WEAK_DONE}問以下になるまで繰り返します。`, btn: "startWeakAll()", label: "苦手を解く", left: weak };
   const pastDone = new Set(S.pastLog.map(l => l.year)).size;
-  if (pastDone < 5 || Object.values(S.done).filter(d => d.count).length < 3) return { no: 4, title: "本番の形に慣れる", sub: `公式の過去問 ${pastDone}/5年分（時間を計って50問）と、個数問題ドリル。間違えた問題のSectionを聞き直します。`, btn: "go('mock')", label: "模試タブへ", left: 5 - pastDone };
+  if (pastDone < 5 || Object.values(S.done).filter(d => d.count).length < 3) return { no: 4, title: "本番の形に慣れる", sub: `公式の過去問 ${pastDone}/5年分（時間を計って50問）と、個数問題ドリル。間違えた問題のSectionを聞き直します。`, btn: "go('kako')", label: "過去問タブへ", left: 5 - pastDone };
   return { no: 5, title: "仕上げ：新しいことはしない", sub: "数字まとめ、「間違えた」をもう1周、総まとめラジオ。本番形式で40点以上を2回出せれば合格圏です。", btn: "go('numbers')", label: "数字まとめ", left: 0 };
 }
 function startRound2() {
@@ -531,7 +531,7 @@ function gapList() {
   if (by[0] && by[0][1].gain >= 0.8) out.push({ t: `${AREAS[by[0][0]].name}の伸びしろ（正答率 ${Math.round(by[0][1].acc * 100)}%）`, s: `ここを9割台にすると約+${by[0][1].gain.toFixed(1)}点。間違えた問題から解き直します。`, btn: `startArea('${by[0][0]}','weak')`, l: "苦手を解く" });
   const full = S.mocks.filter(m => m.n >= 40);
   if (!full.length) out.push({ t: "本番形式（50問・120分）をまだ解いていない", s: "時間配分は体で覚えるしかありません。日曜13:00に通しで解きます。", btn: "startMock(50)", l: "模試を始める" });
-  if (today() > readEnd() && S.pastLog.length < 5) out.push({ t: `公式の過去問がまだ ${new Set(S.pastLog.map(l => l.year)).size}/5年分`, s: "本番の問題の「くせ」に慣れる一番の方法です。", btn: "go('mock')", l: "過去問へ" });
+  if (today() > readEnd() && S.pastLog.length < 5) out.push({ t: `公式の過去問がまだ ${new Set(S.pastLog.map(l => l.year)).size}/5年分`, s: "本番の問題の「くせ」に慣れる一番の方法です。", btn: "go('kako')", l: "過去問へ" });
   return out.slice(0, 3);
 }
 function GoalCard() {
@@ -592,7 +592,7 @@ let COACH = (() => { try { return JSON.parse(localStorage.getItem(COACH_KEY) || 
 async function coachLoad() {
   try {
     const r = await fetch(CLOUD, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "load", key: "c0ac4000-" + S.syncKey }) }).then(x => x.json());
-    if (r.data?.dojo && !S.dojoKey) dojoLoad(r.data.dojo).then(ok => { if (ok && view === "mock") render(); });
+    if (r.data?.dojo && !S.dojoKey) dojoLoad(r.data.dojo).then(ok => { if (ok && (view === "kako" || view === "home")) render(); });
     if (r.data?.date && JSON.stringify(r.data) !== JSON.stringify(COACH)) { COACH = r.data; try { localStorage.setItem(COACH_KEY, JSON.stringify(COACH)); } catch (e) {} if (view === "home") render(); }
   } catch (e) {}
 }
@@ -773,13 +773,13 @@ function sayDojo() {
   TTS.speak(dsess.pick != null ? exSpeech(q, dsess.pick) : pastSpeech(q, q.no));
 }
 function Dojo() {
-  if (!DOJO || !dsess) { view = "mock"; return Mock(); }
+  if (!DOJO || !dsess) { view = "kako"; return Kako(); }
   if (dsess.i >= dsess.ids.length) {
     const rate = dsess.done ? Math.round(dsess.ok / dsess.done * 100) : 0;
     return `<div class="card center"><h2>おつかれさまでした</h2><div class="hero" style="justify-content:center"><b class="num">${rate}</b><span>%</span></div>
       <div class="small">${esc(dsess.label)}：${dsess.done}問中 ${dsess.ok}問正解${dsess.done && !/間違/.test(dsess.label) ? `（本番なら50問中 約${Math.round(dsess.ok / dsess.done * 50)}点の割合）` : ""}</div>
       ${dsess.redo ? `<div class="res mt" style="text-align:left">${esc(pastYear(dsess.redo.year)?.label || "")}の<b>通しの点数は ${dsess.redo.score}点</b>（合格点${dsess.redo.pass}）のままです。今回は、そのとき間違えた問題を解き直した結果です。</div>` : ""}
-      <div class="btns mt"><button class="btn" onclick="dsess=null;save();go('mock')">道場のメニューへ</button></div></div>`;
+      <div class="btns mt"><button class="btn" onclick="dsess=null;save();go('kako')">道場のメニューへ</button></div></div>`;
   }
   const q = dojoQ(dsess.ids[dsess.i]); if (!q) { dsess.i++; return Dojo(); }
   const p = dsess.pick, done = p != null, ok = done && dojoOk(q, p), sec = SECM[q.sec], h = S.dojo[q.id];
@@ -805,7 +805,7 @@ function Dojo() {
         <button class="btn" onclick="dojoNext()">${dsess.i + 1 < dsess.ids.length ? "次の問題へ ▶" : "結果を見る"}</button></div>` : ""}
     <div class="row mt" style="gap:8px"><button class="btn ghost" style="padding:9px" onclick="dojoNext(-1)" ${dsess.i ? "" : "disabled"}>◀ 前へ</button>
       <button class="btn ghost" style="padding:9px" onclick="dojoNext()">${done ? "次へ" : "とばす"} ▶</button>
-      <button class="btn ghost" style="padding:9px" onclick="dsess=null;save();go('mock')">やめる</button></div></div>`;
+      <button class="btn ghost" style="padding:9px" onclick="dsess=null;save();go('kako')">やめる</button></div></div>`;
 }
 function DojoCard() {
   if (!DOJO) return `<div class="card"><h2>🥋 過去問道場</h2><div class="small">本物の本試験（令和3〜7年度・250問）を1問ずつ解いて、すぐに正解と「4つの記述それぞれの○×と理由」を見られます。問題文は公開できないため、<b>合言葉</b>を入れた端末だけで使えます。</div>
@@ -1922,7 +1922,7 @@ function tick() {
 function startTimer() { if (!timerId) timerId = setInterval(tick, 1000); setTimeout(tick, 0); }
 function Mock() {
   const m = S.cur;
-  if (!m) return MockMenu();
+  if (!m) return Kako();
   if (m.done) return MockResult(m);
   startTimer();
   const it = m.items[m.i], stmts = it.ids.map(id => QM[id]);
@@ -1977,12 +1977,12 @@ function finishMock(timeUp) {
   S.mocks.push({ date: today(), score, n: m.items.length, byArea, min: Math.round((m.end - m.start) / 60000) });
   save(); render(); window.scrollTo(0, 0);
 }
+// v6.29 下田さん「タブに過去問も追加したら？」「模擬試験じゃなくて過去問にしといて」→ 模試タブを「過去問」タブに。道場・答案用紙を上に、個数ドリル・模試はその下
+function Kako() { return `${DojoCard()}${PastMenu()}${MockMenu()}`; }
 function MockMenu() {
   const hist = S.mocks.slice(-8).reverse();
   return `
-  ${DojoCard()}
   ${CountCard()}
-  ${PastMenu()}
   <div class="card"><h2>本番形式の模試（アプリのオリジナル）</h2>
     <div class="small">4択50問・120分。本番の分野の比率に合わせて、毎回ちがう組み合わせで出題します。「正しいものはいくつあるか」の個数問題、組合せ問題も入ります。<br>間違えた問題の4つの文は、翌日の一問一答の復習に自動で入ります。</div>
     <div class="btns mt"><button class="btn" onclick="startMock(50)">▶ 模試（50問・120分）</button>
@@ -2286,7 +2286,7 @@ function pickPast(i, k) {
 }
 function Past() {
   const cur = S.pastCur, y = cur && pastYear(cur.year);
-  if (!y) { view = "mock"; return Mock(); }
+  if (!y) { view = "kako"; return Kako(); }
   if (cur.done) return PastResult(cur, y);
   startTimer();
   const n = cur.pick.filter(x => x != null).length;
@@ -2308,7 +2308,7 @@ function Past() {
     return `<div class="row" id="pq${i}" style="padding:5px 0;gap:6px"><b class="num" style="width:44px">問${q.no}</b>
       ${[1, 2, 3, 4].map(k => `<button onclick="pickPast(${i},${k})" style="flex:1;border:1.5px solid ${cur.pick[i] === k ? "var(--brand)" : "var(--line)"};background:${cur.pick[i] === k ? "var(--brand)" : "var(--card)"};color:${cur.pick[i] === k ? "#fff" : "var(--ink)"};border-radius:9px;padding:8px 0;font-weight:700">${k}</button>`).join("")}</div>`; }).join("")}</div>`).join("")}`}
   <div class="btns"><button class="btn" onclick="finishPast()">採点する</button>
-    <button class="linkbtn" onclick="go('mock')">あとで続ける（入力は保存されています）</button></div>`;
+    <button class="linkbtn" onclick="go('kako')">あとで続ける（入力は保存されています）</button></div>`;
 }
 // v6.25 下田さん「アプリ更新したら一番上からになる。今解いている問題にすぐ飛びたい」→ まだ答えていない最初の問題へ
 // v6.26 スマホで scrollIntoView が効かなかった（10/25「いま解いているところまで飛べない」）→ 位置を計算して直接スクロール。表示が落ち着くまで3回かけ直す
@@ -2354,7 +2354,7 @@ function PastResult(cur, y) {
         <span class="small">あなた ${cur.pick[i] ?? "—"}／正解 <b>${ansTxt(q.ans)}</b></span></div>
         <div class="small" style="margin-left:44px">${x ? `教科書 ${x.id} ${esc(x.title)}（p.${x.page}〜）` : ""}${q.note ? `<br>⚠ ${esc(q.note)}` : ""}</div></div>`; }).join("")}
     <div class="btns mt">${wrongs.length && DOJO ? `<button class="btn" onclick="dojoPastWrong('${y.year}')">🥋 間違えた${wrongs.length}問を解説つきで解き直す</button>` : ""}${wrongs.length ? `<button class="btn ${DOJO ? "sec" : ""}" onclick="studyWrongSecs('${y.year}')">間違えたSectionの一問一答を解く</button>` : ""}
-    <button class="btn ghost" onclick="S.pastCur=null;save();go('mock')">閉じる</button></div></div>`;
+    <button class="btn ghost" onclick="S.pastCur=null;save();go('kako')">閉じる</button></div></div>`;
 }
 
 // ---------- 数字まとめ ----------
@@ -2461,7 +2461,7 @@ function AnkiTheme(ti) {
   else if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null)) view = "past";
   render();
   coachLoad();
-  if (S.dojoKey) dojoLoad().then(ok => { if (ok && view === "mock") render(); });
+  if (S.dojoKey) dojoLoad().then(ok => { if (ok && (view === "kako" || view === "home")) render(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
 </script>
