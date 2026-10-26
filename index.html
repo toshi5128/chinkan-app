@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-27-v6.32";
+const APP_VERSION = "2026-10-27-v6.33";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -653,7 +653,7 @@ function naviPlan() {
   const pastToday = S.pastLog.filter(l => l.date === t).slice(-1)[0];
   if (past) { const [d, y] = past; add(false, `📝 過去問 ${esc(pastYear(y)?.label || y)}（50問・120分）${d < t ? `<span style="color:var(--ng)">（${mdj(d)}の予定分）</span>` : ""}`, "本番と同じ2時間。紙で解いて、番号だけアプリに入れて採点します。今いちばん大事な1つです", `startPast('${y}')`, "答案用紙を開く"); }
   if (pastToday) add(!!dd.pastRev, `🔍 過去問の間違い直し（${pastToday.score}点だった${esc(pastYear(pastToday.year)?.label || "")}）`, `間違えた${pastToday.wrong.length}問のSectionから問題を出します`, `naviPastRev('${pastToday.year}')`, "直す");
-  if (ZQ.length && t >= "2026-10-28") { const z = zStat(), un = z.n - z.seen;
+  if (ZQ.length && t >= "2026-10-27") { const z = zStat(), un = z.n - z.seen;
     if (un || z.wrong) add(false, `🎯 苦手特訓 ${z.seen}/${z.n}問${z.seen ? `（正解 ${Math.round(z.ok / z.seen * 100)}%）` : ""}`, un ? "過去問で落とした所（保証・賃料・契約の終了・使用貸借・建築基準法・管理業法の例外・数字）の新しい問題。迷ったら○にしない" : `全問解きました。今も間違えたままの${z.wrong}問をもう一度`, "startNigate()", un ? "解く" : "間違いを解く"); }
   if (MOCK_PLAN.includes(t)) add(!!dd.mock, "🏁 本番リハーサル（4択50問・120分）", "本番と同じ13:00から通しで。40点以上を2回が合格圏の目安", "startMock(50)", "始める");
   if (dl <= LAST_WEEK) {
