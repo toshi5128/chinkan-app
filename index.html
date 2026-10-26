@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-26-v6.29";
+const APP_VERSION = "2026-10-26-v6.30";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -213,7 +213,7 @@ function load() {
   s.syncKey = s.syncKey || (crypto.randomUUID ? crypto.randomUUID() : Array.from({ length: 32 }, () => "0123456789abcdef"[Math.random() * 16 | 0]).join(""));
   return s;
 }
-function save() { try { S.dsess = dsess; } catch (e) {} try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { alertBox("保存できませんでした。記録タブからバックアップを取ってください。"); } cloudSoon(); }
+function save() { try { S.dsess = dsess; if (dsess?.year) { const P = S.dojoPos || (S.dojoPos = {}), i = dsess.i + (dsess.pick != null ? 1 : 0); P[dsess.year] = i < dsess.ids.length ? { i, ok: dsess.ok, done: dsess.done } : { i: 0 }; } } catch (e) {} try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { alertBox("保存できませんでした。記録タブからバックアップを取ってください。"); } cloudSoon(); }
 // ---------- クラウドへ自動で控え（2026-10-06 下田さん「全てやって」）。保存のたびに20秒まとめて送る ----------
 const CLOUD = "https://aevqdsozxiklyjfavvhf.supabase.co/functions/v1/chinkan";
 let cloudTimer = null;
@@ -717,8 +717,20 @@ function startDojo(ids, label) {
   if (AP.el && !AP.el.paused) AP.el.pause();
   TTS.stop(); dsess = { ids, i: 0, pick: null, label, ok: 0, done: 0 }; save(); view = "dojo"; render(); window.scrollTo(0, 0);
 }
-function dojoYear(y) { startDojo(DOJO.qs.filter(q => q.year === y).map(q => q.id), pastYear(y)?.label || y); dsess.year = y; save(); }
-function dojoCh(ch) { startDojo(shuffle(DOJO.qs.filter(q => SECM[q.sec]?.ch === ch).map(q => q.id)), `第${ch}章`); }
+// v6.30 下田さん「途中でやめても、またやる時に途中からできるようにして」→ 年度ごとに続きの位置を覚える（S.dojoPos）。記録が無い時は、まだ解いていない最初の問題から
+function dojoYearPos(y) {
+  const ids = DOJO.qs.filter(q => q.year === y).map(q => q.id), p = S.dojoPos?.[y];
+  if (p) return p.i > 0 && p.i < ids.length ? p : null;
+  const i = ids.findIndex(id => !S.dojo[id]); if (i <= 0) return null;
+  return { i, done: i, ok: ids.slice(0, i).filter(id => S.dojo[id].lastOk).length };
+}
+function dojoYear(y, fresh) {
+  const p = !fresh && dojoYearPos(y);
+  startDojo(DOJO.qs.filter(q => q.year === y).map(q => q.id), pastYear(y)?.label || y); dsess.year = y;
+  if (p) Object.assign(dsess, { i: p.i, ok: p.ok, done: p.done });
+  save(); render();
+}
+function dojoCh(ch) { const ids = shuffle(DOJO.qs.filter(q => SECM[q.sec]?.ch === ch).map(q => q.id)), r = id => !S.dojo[id] ? 1 : !S.dojo[id].lastOk ? 0 : 2; ids.sort((a, b) => r(a) - r(b)); startDojo(ids, `第${ch}章（間違い→未挑戦→正解済みの順）`); }
 function dojoSecs(secs, label) { const set = new Set(secs); startDojo(shuffle(DOJO.qs.filter(q => set.has(q.sec)).map(q => q.id)), label); }
 const DOJO_WN = [["now", "今も間違えたまま", d => !d.lastOk], ["1+", "1回以上", d => d.w >= 1], ["1", "1回", d => d.w === 1], ["2", "2回", d => d.w === 2], ["3+", "3回以上", d => d.w >= 3]];
 const dojoWrongIds = f => DOJO.qs.filter(q => S.dojo[q.id] && f(S.dojo[q.id])).map(q => q.id);
@@ -807,6 +819,22 @@ function Dojo() {
       <button class="btn ghost" style="padding:9px" onclick="dojoNext()">${done ? "次へ" : "とばす"} ▶</button>
       <button class="btn ghost" style="padding:9px" onclick="dsess=null;save();go('kako')">やめる</button></div></div>`;
 }
+// v6.30 下田さん「過去問も分野別の正答率を出して、分野別で解けるようにもしてほしい」
+// 正答率＝その分野の過去問を解いた全回数のうち正解した割合（解き直しで100%に化けないよう、回数で数える）
+function dojoAcc(ids) { let c = 0, w = 0, seen = 0; for (const id of ids) { const d = S.dojo[id]; if (!d) continue; seen++; c += d.c; w += d.w; } return { n: ids.length, seen, c, w, acc: c + w ? c / (c + w) : null }; }
+function DojoAreas() {
+  const pct = a => a.acc == null ? "—" : Math.round(a.acc * 100) + "%", col = a => a.acc == null ? "var(--sub)" : a.acc >= .8 ? "var(--ok)" : a.acc >= .65 ? "var(--warn,#d89a2b)" : "var(--ng)";
+  const secs = SECS.map(x => ({ x, a: dojoAcc(DOJO.qs.filter(q => q.sec === x.id).map(q => q.id)) })).filter(o => o.a.seen);
+  secs.sort((p, q) => p.a.acc - q.a.acc || q.a.n - p.a.n);
+  return `<div style="font-weight:700;margin-top:10px">📊 分野別の正答率・分野で解く（5年分から）</div>
+    ${CHAPS.map(c => { const ids = DOJO.qs.filter(q => SECM[q.sec]?.ch === c.ch).map(q => q.id), a = dojoAcc(ids), wn = ids.filter(id => S.dojo[id] && !S.dojo[id].lastOk).length;
+      return `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:8px"><div class="grow" style="min-width:0"><div>第${c.ch}章 <span class="small">${esc(c.title)}</span></div>
+        <div class="small">解いた ${a.seen}/${a.n}問・正答率 <b style="font-size:15px;color:${col(a)}">${pct(a)}</b>${wn ? `・今も間違い ${wn}問` : ""}</div>
+        <div class="bar" style="margin-top:4px"><i style="display:block;height:100%;width:${a.acc == null ? 0 : Math.round(a.acc * 100)}%;background:${col(a)}"></i></div></div>
+        <button class="btn sec" style="width:auto;padding:7px 12px;font-size:14px;flex:none" onclick="dojoCh(${c.ch})">解く</button></div>`; }).join("")}
+    ${secs.length ? `<details class="mt"><summary class="small" style="font-weight:700">Section別（正答率の低い順）</summary>
+      ${secs.map(({ x, a }) => `<div class="row" style="border-top:1px solid var(--line);padding:6px 0;gap:8px"><span class="grow small">${esc(x.id)} ${esc(x.title)}<br>解いた ${a.seen}/${a.n}問・正答率 <b style="color:${col(a)}">${pct(a)}</b></span><button class="btn sec" style="width:auto;padding:6px 10px;font-size:13px;flex:none" onclick="dojoSecs(['${x.id}'],'${esc(x.id)} ${esc(x.title)}')">解く</button></div>`).join("")}</details>` : ""}`;
+}
 function DojoCard() {
   if (!DOJO) return `<div class="card"><h2>🥋 過去問道場</h2><div class="small">本物の本試験（令和3〜7年度・250問）を1問ずつ解いて、すぐに正解と「4つの記述それぞれの○×と理由」を見られます。問題文は公開できないため、<b>合言葉</b>を入れた端末だけで使えます。</div>
     <input id="dojoIn" placeholder="合言葉" style="width:100%;padding:10px;margin-top:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)"><button class="btn sec mt" onclick="dojoKeyIn()">道場を開く</button></div>`;
@@ -819,9 +847,9 @@ function DojoCard() {
       // v6.28 下田さん「間違えたのを解いたら50/50になったけど昨日43点。43点って書いとかないと勘違いする」→ 通しの点数を主役に、解き直し後は別の言葉で
       const tl = S.pastLog.filter(l => l.year === y), last = tl[tl.length - 1];
       return `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:8px"><span class="grow">${esc(pastYear(y)?.label || y)}<div class="small">${last ? `通しで解いた点 <b style="font-size:15px;color:${last.score >= last.pass ? "var(--ok)" : "var(--ng)"}">${last.score}点</b>（${mdj(last.date)}・合格点${last.pass}）${tl.length > 1 ? `・${tl.length}回目` : ""}` : "通しはまだ"}${s.seen ? `<br>解き直しを含めた今：${s.seen}問中${s.c}問が正解の状態` : ""}</div></span>
-        <button class="btn ${s.seen ? "sec" : ""}" style="width:auto;padding:7px 14px;font-size:14px" onclick="dojoYear('${y}')">解く</button></div>`; }).join("")}
-    <div style="font-weight:700;margin-top:10px">分野で解く（5年分からまとめて）</div>
-    <div class="seg mt" style="flex-wrap:wrap">${CHAPS.map(c => `<button onclick="dojoCh(${c.ch})">第${c.ch}章</button>`).join("")}</div>
+        ${(() => { const p = dojoYearPos(y); return p ? `<div style="flex:none;text-align:center"><button class="btn" style="width:auto;padding:7px 12px;font-size:14px" onclick="dojoYear('${y}')">▶ 問${p.i + 1}から</button><button class="linkbtn" style="display:block;margin:4px auto 0;font-size:12px" onclick="dojoYear('${y}',true)">最初から</button></div>`
+          : `<button class="btn ${s.seen ? "sec" : ""}" style="width:auto;padding:7px 14px;font-size:14px" onclick="dojoYear('${y}')">解く</button>`; })()}</div>`; }).join("")}
+    ${DojoAreas()}
     ${DOJO.qs.some(q => S.dojo[q.id]?.w) ? `<div style="font-weight:700;margin-top:10px">❌ 間違えた問題を解く（答案用紙で間違えた分も入ります）</div>
     <div class="seg mt" style="flex-wrap:wrap">${DOJO_WN.map(([k, l, f]) => { const n = dojoWrongIds(f).length; return `<button ${n ? "" : "disabled"} onclick="dojoWrong('${k}')">${l}（${n}）</button>`; }).join("")}</div>` : ""}
     <div class="btns mt">
@@ -1428,7 +1456,7 @@ function TodayProgress() {
     <div class="row"><span class="grow" style="font-size:14px">新しい問題 <b class="num" style="font-size:20px;color:var(--brand)">${p.newDone}</b><span class="num">/${p.newTotal}問</span>${p.newTotal && !p.newLeft.length ? " ✓" : ""}</span>
       <span class="small num">${pct}%</span></div>
     <div class="bar mt" style="height:10px"><i style="width:${pct}%;background:var(--brand)"></i></div>
-    <div class="row small mt"><span class="grow">復習 残り <b class="num">${p.due.length}</b>問</span><span>今日解いた合計 <b class="num">${L.n}</b>問${L.n ? `・正答 ${Math.round(L.c / L.n * 100)}%` : ""}</span></div>
+    <div class="row small mt"><span class="grow">復習 残り <b class="num">${p.due.length}</b>問</span><span>今日解いた合計 <b class="num">${L.n}</b>問${L.n ? `・正答 ${Math.round(L.c / L.n * 100)}%` : ""}${S.dojoLog?.[today()]?.n ? `＋過去問 <b class="num">${S.dojoLog[today()].n}</b>問` : ""}</span></div>
   </div>`;
 }
 
@@ -2157,14 +2185,16 @@ function Settings() {
 // ---------- 記録 ----------
 function Stats() {
   const days = []; for (let i = 13; i >= 0; i--) days.push(addDays(today(), -i));
-  const max = Math.max(10, ...days.map(d => S.log[d]?.n || 0));
-  let streak = 0; for (let d = today(); S.log[d]?.n; d = addDays(d, -1)) streak++;
-  const total = Object.values(S.log).reduce((s, l) => s + l.n, 0);
+  // v6.30 下田さん「過去問を解いた時も学習量に記録しないとダメじゃない？」→ 一問一答＋過去問（1問＝1問）で数える
+  const pn = d => S.dojoLog?.[d]?.n || 0, an = d => (S.log[d]?.n || 0) + pn(d), ac = d => (S.log[d]?.c || 0) + (S.dojoLog?.[d]?.c || 0);
+  const max = Math.max(10, ...days.map(an));
+  let streak = 0; for (let d = today(); an(d); d = addDays(d, -1)) streak++;
+  const pastTotal = Object.values(S.dojoLog || {}).reduce((s, l) => s + l.n, 0), total = Object.values(S.log).reduce((s, l) => s + l.n, 0) + pastTotal;
   // 2026-10-10 下田さん「1日の平均問題数も出して」
-  const studied = Object.keys(S.log).filter(d => S.log[d]?.n > 0).sort();
+  const studied = [...new Set([...Object.keys(S.log), ...Object.keys(S.dojoLog || {})])].filter(d => an(d) > 0).sort();
   const first = studied[0];
   const sinceDays = first ? Math.round((new Date(today() + "T00:00:00") - new Date(first + "T00:00:00")) / 86400000) + 1 : 0;
-  const last7 = days.slice(-7).reduce((s2, d) => s2 + (S.log[d]?.n || 0), 0);
+  const last7 = days.slice(-7).reduce((s2, d) => s2 + an(d), 0);
   const avgStudy = studied.length ? Math.round(total / studied.length) : 0;
   const avgAll = sinceDays ? Math.round(total / sinceDays) : 0;
   const avg7 = Math.round(last7 / 7);
@@ -2173,15 +2203,16 @@ function Stats() {
   const tile = (v, l) => `<div style="flex:1;min-width:0;text-align:center;background:var(--bg);border-radius:10px;padding:8px 4px"><div class="num" style="font-size:22px;font-weight:800">${v}</div><div class="small">${l}</div></div>`;
   return `
   <div class="card"><h2>毎日の学習量（14日）</h2>
-    <div class="row small"><span class="grow">連続 <b class="num">${streak}</b>日</span><span>累計 ${total}問</span></div>
+    <div class="row small"><span class="grow">連続 <b class="num">${streak}</b>日</span><span>累計 ${total}問${pastTotal ? `（うち過去問 ${pastTotal}問）` : ""}</span></div>
     <div class="row mt" style="gap:6px">${tile(avg7, "直近7日の<br>1日平均")}${tile(avgStudy, "勉強した日の<br>1日平均")}${tile(avgAll, `始めてから<br>1日平均（${sinceDays}日）`)}</div>
     ${need ? `<div class="small mt">まだ解いていない ${unseen}問を本番（あと${dl}日）までに1周するには、1日 <b class="num">${need}</b>問。${avg7 >= need ? "今のペースで間に合います ✓" : `今のペース（${avg7}問）だと足りないので、あと ${need - avg7}問ずつ増やすと間に合います`}</div>` : ""}
-    <div class="days">${days.map(d => { const n = S.log[d]?.n || 0; return `<div class="col ${d === today() ? "today" : ""}"><b>${n || ""}</b><i style="height:${n / max * 78}%"></i></div>`; }).join("")}</div>
+    <div class="days">${days.map(d => { const n = an(d), pp = n ? pn(d) / n * 100 : 0; return `<div class="col ${d === today() ? "today" : ""}"><b>${n || ""}</b><i style="height:${n / max * 78}%;background:linear-gradient(to bottom,#e0a03a ${pp}%,var(--brand) ${pp}%)"></i></div>`; }).join("")}</div>
     <div class="dlab">${days.map(d => `<span>${+d.slice(8)}</span>`).join("")}</div>
-    <table class="dtbl">${days.slice(-7).reverse().map(d => { const L = S.log[d], w = "日月火水木金土"[new Date(d + "T00:00:00").getDay()];
+    <div class="small" style="margin-top:2px"><span style="color:var(--brand)">■</span> 一問一答　<span style="color:#e0a03a">■</span> 過去問</div>
+    <table class="dtbl">${days.slice(-7).reverse().map(d => { const n = an(d), w = "日月火水木金土"[new Date(d + "T00:00:00").getDay()];
       return `<tr class="${d === today() ? "today" : ""}"><td>${+d.slice(5, 7)}/${+d.slice(8)}（${w}）${d === today() ? " 今日" : d === addDays(today(), -1) ? " 昨日" : ""}</td>
-        <td class="r">${L?.n ? `${L.n}問` : "—"}</td><td class="r small">${L?.n ? `正答 ${Math.round(L.c / L.n * 100)}%` : ""}</td></tr>`; }).join("")}</table>
-    <div class="small mt">数えているのは一問一答で解いた問題（おかわり・Section別・苦手の解き直しも含む）。日付はスマホの時計で0時に切り替わります。</div></div>
+        <td class="r">${n ? `${n}問${pn(d) ? `<div class="small">うち過去問 ${pn(d)}</div>` : ""}` : "—"}</td><td class="r small">${n ? `正答 ${Math.round(ac(d) / n * 100)}%` : ""}</td></tr>`; }).join("")}</table>
+    <div class="small mt">数えているのは一問一答（おかわり・Section別・苦手の解き直しも含む）と過去問（道場・答案用紙で答えた1問ずつ）。日付はスマホの時計で0時に切り替わります。</div></div>
   <div class="card"><h2>分野別の正答率</h2>
     ${Object.entries(AREAS).map(([a, A]) => { const s = areaStats(a); const pct = s.acc == null ? 0 : Math.round(s.acc * 100);
       return `<div class="area"><div><span class="dot" style="background:${A.color}"></span>${A.name}</div><div class="num small">${s.acc == null ? "—" : pct + "%"}</div>
@@ -2271,6 +2302,7 @@ function PastMenu() {
     <div class="small mt">問題PDFは <a href="${esc(PAST.source)}" target="_blank" rel="noopener">公式の過去問ページ</a> にあります。</div></div>`;
 }
 function startPast(year) {
+  if (S.pastCur && !S.pastCur.done && S.pastCur.year === year) { go("past"); return; }
   if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null) && !confirm("途中の過去問の入力を捨てて、新しく始めますか？")) { go("past"); return; }
   const y = pastYear(year);
   S.pastCur = { year, pick: y.qs.map(() => null), start: Date.now(), done: false };
