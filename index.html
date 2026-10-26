@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-27-v6.31";
+const APP_VERSION = "2026-10-27-v6.32";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -251,7 +251,7 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000));
 
 // ---------- 問題 ----------
-let Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], ANKI = [], CONF = [], LEC = {}, AUD = {}, TALK = {};
+let ZQ = [], Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], ANKI = [], CONF = [], LEC = {}, AUD = {}, TALK = {};
 const LEC_FILES = ["lec_1a", "lec_1b", "lec_2", "lec_3", "lec_4", "lec_5"];
 // 2026-10-05 下田さん「会話形式で・図やイラストでイメージしやすく」→ 講義をラジオ風の2人の会話＋図に（data/talk_*.json）。無いSectionは今までの講義のまま
 const TALK_FILES = ["talk_1a", "talk_1b", "talk_2", "talk_3", "talk_4", "talk_5"];
@@ -275,6 +275,8 @@ async function loadQuestions() {
   SECM = Object.fromEntries(SECS.map(x => [x.id, x]));
   Q = parts.flat().filter(q => q && q.id && typeof q.a === "boolean");
   QM = Object.fromEntries(Q.map(q => [q.id, q]));
+  // v6.32 苦手特訓（過去問のミスから作った新問題）。全問数・未挑戦の数がずれないよう Q には混ぜず、QM にだけ入れる
+  ZQ = (await get("data/Z01.json")).filter(q => q && q.id && typeof q.a === "boolean"); ZQ.forEach(q => { q.z = 1; QM[q.id] = q; });
   Q.forEach(q => { if (KEYS && KEYS[q.id]) q.key = KEYS[q.id]; });
 }
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -413,7 +415,7 @@ function alertBox(msg) { const el = document.getElementById("app"); el.insertAdj
 function Home() {
   const p = todayPlan(), L = S.log[today()] || { n: 0, c: 0 };
   const todo = p.due.length + p.newLeft.length;
-  const seen = Object.keys(S.cards).filter(id => QM[id]).length;
+  const seen = Object.keys(S.cards).filter(id => QM[id] && !QM[id].z).length;
   const lastMock = S.mocks.filter(m => m.n >= 40).slice(-1)[0];
   const lastPast = S.pastLog.slice(-1)[0];
   const dl = daysLeft();
@@ -484,6 +486,12 @@ function redoStats() {
 }
 const bookOrder = (a, b) => (SECM[QM[a].sec]?.order ?? 0) - (SECM[QM[b].sec]?.order ?? 0);
 function startRedo() { startSession(Q.filter(q => card(q.id)?.w > 0 && !S.redo[q.id]).map(q => q.id).sort(bookOrder), "解き直し"); }
+// v6.32 下田さん「明日苦手なやつだけ200問解くから作ってくれ」→ 過去問24問のミス（保証・賃料・契約の終了・使用貸借・建築基準法・管理業法の例外・数字）から作った新問題
+const zStat = () => { const seen = ZQ.filter(q => card(q.id)), wrong = seen.filter(q => card(q.id).lastOk === false).length; return { n: ZQ.length, seen: seen.length, wrong, ok: seen.length - wrong }; };
+function startNigate() {
+  const un = shuffle(ZQ.filter(q => !card(q.id)).map(q => q.id));
+  startSession(un.length ? un : shuffle(ZQ.filter(q => card(q.id).lastOk === false).map(q => q.id)), un.length ? "苦手特訓" : "苦手特訓の間違い");
+}
 function startStill() { startSession(Q.filter(q => card(q.id)?.w > 0 && card(q.id).lastOk === false).map(q => q.id).sort(bookOrder), "まだ間違えたまま"); }
 const pctColor = a => a == null ? "var(--sub)" : a >= 0.9 ? "var(--ok)" : a >= 0.8 ? "#d97706" : "var(--ng)";
 function RedoCard() {
@@ -525,7 +533,7 @@ function StrategyCard() {
 
 // ---------- ② 合格まであと何点・足りないもの ----------
 function gapList() {
-  const P = predict(), out = [], unseen = Q.length - Object.keys(S.cards).filter(id => QM[id]).length;
+  const P = predict(), out = [], unseen = Q.length - Object.keys(S.cards).filter(id => QM[id] && !QM[id].z).length;
   const by = Object.entries(P.by).filter(([, b]) => b.cov >= 0.3 && b.acc != null).sort((x, y) => y[1].gain - x[1].gain);
   if (unseen > 0) out.push({ t: `まだ解いていない問題が ${unseen}問`, s: "一度も見ていない論点は、本番でほぼ取れません。どの章・Sectionに残っているかを見て、解きたい所を選べます。", btn: "openPickUnseen()", l: "選んで解く" });
   if (by[0] && by[0][1].gain >= 0.8) out.push({ t: `${AREAS[by[0][0]].name}の伸びしろ（正答率 ${Math.round(by[0][1].acc * 100)}%）`, s: `ここを9割台にすると約+${by[0][1].gain.toFixed(1)}点。間違えた問題から解き直します。`, btn: `startArea('${by[0][0]}','weak')`, l: "苦手を解く" });
@@ -557,7 +565,7 @@ function GoalCard() {
 // ---------- ③ 合格までの道（今どこにいて、何がそろえば合格圏か） ----------
 // 🆕 v6.16 下田さん「合格までの数字がしっかり追えるように」→ 目標・今・期限・ペースを1つの表に
 function RoadCard() {
-  const r = redoStats(), seen = Object.keys(S.cards).filter(id => QM[id]).length, unseen = Q.length - seen;
+  const r = redoStats(), seen = Object.keys(S.cards).filter(id => QM[id] && !QM[id].z).length, unseen = Q.length - seen;
   const pastOkN = new Set(S.pastLog.filter(l => l.score >= l.pass).map(l => l.year)).size;
   const reh = S.mocks.filter(m => m.n >= 40 && m.score >= PASS_LINE + 2).length;
   const late = `<span style="color:var(--ng)">期限すぎ</span>`;
@@ -645,6 +653,8 @@ function naviPlan() {
   const pastToday = S.pastLog.filter(l => l.date === t).slice(-1)[0];
   if (past) { const [d, y] = past; add(false, `📝 過去問 ${esc(pastYear(y)?.label || y)}（50問・120分）${d < t ? `<span style="color:var(--ng)">（${mdj(d)}の予定分）</span>` : ""}`, "本番と同じ2時間。紙で解いて、番号だけアプリに入れて採点します。今いちばん大事な1つです", `startPast('${y}')`, "答案用紙を開く"); }
   if (pastToday) add(!!dd.pastRev, `🔍 過去問の間違い直し（${pastToday.score}点だった${esc(pastYear(pastToday.year)?.label || "")}）`, `間違えた${pastToday.wrong.length}問のSectionから問題を出します`, `naviPastRev('${pastToday.year}')`, "直す");
+  if (ZQ.length && t >= "2026-10-28") { const z = zStat(), un = z.n - z.seen;
+    if (un || z.wrong) add(false, `🎯 苦手特訓 ${z.seen}/${z.n}問${z.seen ? `（正解 ${Math.round(z.ok / z.seen * 100)}%）` : ""}`, un ? "過去問で落とした所（保証・賃料・契約の終了・使用貸借・建築基準法・管理業法の例外・数字）の新しい問題。迷ったら○にしない" : `全問解きました。今も間違えたままの${z.wrong}問をもう一度`, "startNigate()", un ? "解く" : "間違いを解く"); }
   if (MOCK_PLAN.includes(t)) add(!!dd.mock, "🏁 本番リハーサル（4択50問・120分）", "本番と同じ13:00から通しで。40点以上を2回が合格圏の目安", "startMock(50)", "始める");
   if (dl <= LAST_WEEK) {
     add(!!dd.nums, "🔢 数字まとめ（答えを隠して）", "数字のひっかけ対策。言えなかった数字だけ見直す", "go('numbers')", "開く");
