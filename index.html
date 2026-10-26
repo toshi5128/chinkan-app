@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-26-v6.30";
+const APP_VERSION = "2026-10-27-v6.31";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -702,7 +702,7 @@ async function dojoLoad(key) {
     const r = await fetch(CLOUD, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "load", key }) }).then(x => x.json());
     if (!r.data?.qs?.length) return false;
     const fresh = !DOJO || DOJO.v !== r.data.v;
-    DOJO = r.data; S.dojoKey = key; save();
+    DOJO = r.data; S.dojoKey = key; save(); dojoBackfill();
     if (fresh) { try { localStorage.setItem(DOJO_LS, JSON.stringify(DOJO)); } catch (e) {} }
     return true;
   } catch (e) { return false; }
@@ -744,10 +744,29 @@ function dojoRecord(q, k) {
   const L = S.dojoLog[today()] || (S.dojoLog[today()] = { n: 0, c: 0 }); L.n++; if (ok) L.c++;
   return ok;
 }
+// v6.31 下田さん「令和4年のやつ今日やったけど落ちた」→ 道場で年度50問を解き終えた時も、答案用紙と同じく「通しの点数」として記録（間違い直し・年度の点数表示に使う）
+function dojoLogYear(y, date) {
+  const qs = DOJO.qs.filter(q => q.year === y), py = pastYear(y); if (!py) return null;
+  const log = { year: y, date: date || today(), score: qs.filter(q => S.dojo[q.id]?.lastOk).length, pass: py.pass, n: qs.length, min: null, wrong: qs.filter(q => !S.dojo[q.id]?.lastOk).map(q => q.no), via: "dojo" };
+  S.pastLog.push(log); return log;
+}
+// 以前の版で道場だけで解き終えた年度（1回ずつ解いた記録がそろっている）を後から記録
+function dojoBackfill() {
+  if (!DOJO || !PAST) return;
+  let n = 0;
+  for (const y of DOJO.years) {
+    if (S.pastLog.some(l => l.year === y)) continue;
+    const ds = DOJO.qs.filter(q => q.year === y).map(q => S.dojo[q.id]);
+    if (!ds.length || ds.some(d => !d || d.c + d.w !== 1)) continue;
+    if (dojoLogYear(y, ds.map(d => d.last).sort().pop())) n++;
+  }
+  if (n) save();
+}
 function dojoPick(k) {
   if (dsess.pick != null) return;
   const q = dojoQ(dsess.ids[dsess.i]), ok = dojoRecord(q, k);
   dsess.pick = k; dsess.done++; if (ok) dsess.ok++;
+  if (dsess.year && !dsess.redo && !dsess.logged && dsess.i === dsess.ids.length - 1 && dsess.done === dsess.ids.length) dsess.logged = dojoLogYear(dsess.year);
   save(); render();
   if (S.tts.auto) sayDojo();
   setTimeout(() => document.getElementById("dojoRes")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
@@ -789,9 +808,11 @@ function Dojo() {
   if (dsess.i >= dsess.ids.length) {
     const rate = dsess.done ? Math.round(dsess.ok / dsess.done * 100) : 0;
     return `<div class="card center"><h2>おつかれさまでした</h2><div class="hero" style="justify-content:center"><b class="num">${rate}</b><span>%</span></div>
-      <div class="small">${esc(dsess.label)}：${dsess.done}問中 ${dsess.ok}問正解${dsess.done && !/間違/.test(dsess.label) ? `（本番なら50問中 約${Math.round(dsess.ok / dsess.done * 50)}点の割合）` : ""}</div>
+      <div class="small">${esc(dsess.label)}：${dsess.done}問中 ${dsess.ok}問正解${dsess.done && !/間違/.test(dsess.label) && !dsess.logged ? `（本番なら50問中 約${Math.round(dsess.ok / dsess.done * 50)}点の割合）` : ""}</div>
+      ${dsess.logged ? (L => `<div class="res mt" style="text-align:left">${esc(pastYear(L.year)?.label || "")}：<b style="font-size:17px;color:${L.score >= L.pass ? "var(--ok)" : "var(--ng)"}">${L.score}点</b>（合格点${L.pass}）　${L.score >= L.pass ? "合格ライン超え！" : `<b>あと${L.pass - L.score}点</b>`}<div class="small">通しの点数として記録しました。間違えた${L.wrong.length}問は下のボタンで解き直せます。</div></div>
+      ${L.wrong.length ? `<div class="btns mt"><button class="btn" onclick="dojoPastWrong('${L.year}')">❌ 間違えた${L.wrong.length}問を解き直す</button></div>` : ""}`)(dsess.logged) : ""}
       ${dsess.redo ? `<div class="res mt" style="text-align:left">${esc(pastYear(dsess.redo.year)?.label || "")}の<b>通しの点数は ${dsess.redo.score}点</b>（合格点${dsess.redo.pass}）のままです。今回は、そのとき間違えた問題を解き直した結果です。</div>` : ""}
-      <div class="btns mt"><button class="btn" onclick="dsess=null;save();go('kako')">道場のメニューへ</button></div></div>`;
+      <div class="btns mt"><button class="btn sec" onclick="dsess=null;save();go('kako')">道場のメニューへ</button></div></div>`;
   }
   const q = dojoQ(dsess.ids[dsess.i]); if (!q) { dsess.i++; return Dojo(); }
   const p = dsess.pick, done = p != null, ok = done && dojoOk(q, p), sec = SECM[q.sec], h = S.dojo[q.id];
@@ -2491,6 +2512,7 @@ function AnkiTheme(ti) {
   else if (S.sess) { S.sess = null; save(); }
   if (S.cur && !S.cur.done) view = "mock";
   else if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null)) view = "past";
+  dojoBackfill();
   render();
   coachLoad();
   if (S.dojoKey) dojoLoad().then(ok => { if (ok && (view === "kako" || view === "home")) render(); });
