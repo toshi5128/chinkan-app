@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-31-v6.35";
+const APP_VERSION = "2026-10-31-v6.36";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -797,7 +797,7 @@ function pqBuild() {
     for (const o of st || []) {
       const e = d.ex?.[o.k]; if (!e || typeof e.ok !== "boolean" || !o.t) continue;
       PQ.push({ id: `P:${d.id}:${o.k}`, pid: d.id, z: 1, pq: 1, area: areaOf(d.sec), sec: d.sec, sub: d.topic || "", level: 2,
-        q: f ? f.replace("{t}", o.t) : o.t, a: e.ok, exp: e.why + (d.point ? `【この問題のポイント】${d.point}` : ""), ref: "",
+        q: f ? f.replace("{t}", o.t) : o.t, a: e.ok, exp: e.why, // v6.36 下田さん「他の記述の解説が混ざるとわけわからなくなる」→ 問題全体のまとめ(point)は付けず、この記述の理由だけ ref: "",
         ctx: d.stem, from: `${pastYear(d.year)?.label || d.year} 問${d.no}・記述${o.k}` });
     }
   }
