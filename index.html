@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-31-v6.34";
+const APP_VERSION = "2026-10-31-v6.35";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1013,7 +1013,10 @@ const TTS = {
 };
 if (TTS.ok) { TTS.pickVoice(); speechSynthesis.onvoiceschanged = () => TTS.pickVoice(); }
 // 問題を読む時は頭に「問題」と付けて、解説との区切りを耳でわかるように（2026-10-06 下田さん）
-const qSpeech = q => `${sess && sess.i > 0 ? "次の問題です。" : "問題です。"}${q.q}`;
+// v6.35 下田さん「AやBが出てくると上の問題文を読まないと分からない」→ 過去問○×は、元の問題の前提（「次の記述のうち〜どれか」と「（以下〜という。）」を除いた部分）を先に読む
+const ctxSay = s => String(s || "").replace(/（[^（）]*という。?）/g, "").split(/(?<=。)/).map(x => !/(どれか|あるか)。?$/.test(x) ? x
+  : x.replace(/(に関する|についての|に関して|に関し)?、?(次|以下)の記述(のうち)?、?/, "").replace(/(として|のうち)?、?(最も)?(適切|不適切|正しい|誤っている|誤り|正しくない)[^。]*。?$/, "").replace(/(の組合せ|はどれか|はいくつあるか)[^。]*。?$/, "").replace(/、$/, "") + "。").join("").trim();
+const qSpeech = q => `${sess && sess.i > 0 ? "次の問題です。" : "問題です。"}${q.pq && !PQ_FORM[q.pid] && q.ctx ? `元の問題。${ctxSay(q.ctx)}記述。` : ""}${q.q}`;
 const aSpeech = (q, ok) => `${ok == null ? "" : ok ? "正解。" : "不正解。"}答えは、${q.a ? "マル" : "バツ"}。${noCite(q.exp)}`;
 function sayQ() { const q = QM[sess.ids[sess.i]]; TTS.speak(sess.ans === null ? qSpeech(q) : aSpeech(q, sess.ans === q.a)); }
 function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else { clearTimeout(autoTimer); clearTimeout(autoHard); autoTimer = null; TTS.stop(); } render(); }
@@ -1815,7 +1818,7 @@ function Study() {
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
     <div class="small" style="text-align:right;margin-bottom:4px">${S.autoNext && S.tts.auto && TTS.ok ? "正解なら解説を読み終えて自動で次へ" : "「次へ」を押して進みます"}</div>
-    ${q.pq ? `<div class="small" style="margin-bottom:6px;padding:7px 9px;border-radius:8px;background:var(--track);line-height:1.6">📝 ${esc(q.from)}<br>元の問い：${esc(q.ctx)}<br><b>→ ここでは、下の記述が正しい（あてはまる）かを○×で</b></div>` : ""}
+    ${q.pq ? `<div style="margin-bottom:8px;padding:8px 10px;border-radius:8px;background:var(--track);font-size:14px;line-height:1.7"><span class="small">📝 ${esc(q.from)}</span><br>元の問い：${esc(q.ctx)}<br><b>→ ここでは、下の記述が正しい（あてはまる）かを○×で</b></div>` : ""}
     <div class="qtext">${gl(q.q)}</div>
     <div class="ox">
       <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
