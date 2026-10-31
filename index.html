@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-10-27-v6.33";
+const APP_VERSION = "2026-10-31-v6.34";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -655,6 +655,8 @@ function naviPlan() {
   if (pastToday) add(!!dd.pastRev, `🔍 過去問の間違い直し（${pastToday.score}点だった${esc(pastYear(pastToday.year)?.label || "")}）`, `間違えた${pastToday.wrong.length}問のSectionから問題を出します`, `naviPastRev('${pastToday.year}')`, "直す");
   if (ZQ.length && t >= "2026-10-27") { const z = zStat(), un = z.n - z.seen;
     if (un || z.wrong) add(false, `🎯 苦手特訓 ${z.seen}/${z.n}問${z.seen ? `（正解 ${Math.round(z.ok / z.seen * 100)}%）` : ""}`, un ? "過去問で落とした所（保証・賃料・契約の終了・使用貸借・建築基準法・管理業法の例外・数字）の新しい問題。迷ったら○にしない" : `全問解きました。今も間違えたままの${z.wrong}問をもう一度`, "startNigate()", un ? "解く" : "間違いを解く"); }
+  if (PQ.length) { const pq = pqStat(), un = pq.ids.length - pq.seen;
+    if (un || pq.still) add(false, `🧩 間違えた過去問を○×で ${pq.seen}/${pq.ids.length}問`, un ? `間違えた${pq.qn}問を記述ごとの○×に分けたもの。今日20問ずつ・本番までに全部` : `まだ✕の文が${pq.still}問。0になるまで`, un ? "startPQ()" : "startPQ('still')", "解く"); }
   if (MOCK_PLAN.includes(t)) add(!!dd.mock, "🏁 本番リハーサル（4択50問・120分）", "本番と同じ13:00から通しで。40点以上を2回が合格圏の目安", "startMock(50)", "始める");
   if (dl <= LAST_WEEK) {
     add(!!dd.nums, "🔢 数字まとめ（答えを隠して）", "数字のひっかけ対策。言えなかった数字だけ見直す", "go('numbers')", "開く");
@@ -712,7 +714,7 @@ async function dojoLoad(key) {
     const r = await fetch(CLOUD, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "load", key }) }).then(x => x.json());
     if (!r.data?.qs?.length) return false;
     const fresh = !DOJO || DOJO.v !== r.data.v;
-    DOJO = r.data; S.dojoKey = key; save(); dojoBackfill();
+    DOJO = r.data; S.dojoKey = key; save(); dojoBackfill(); pqBuild();
     if (fresh) { try { localStorage.setItem(DOJO_LS, JSON.stringify(DOJO)); } catch (e) {} }
     return true;
   } catch (e) { return false; }
@@ -771,6 +773,53 @@ function dojoBackfill() {
     if (dojoLogYear(y, ds.map(d => d.last).sort().pop())) n++;
   }
   if (n) save();
+}
+// v6.34 下田さん「間違えた4択の過去問を一問一答に分解して、集中して解けるように」
+//   → 道場の過去問（クラウドの合言葉データ）から、記述1つ＝○×1問を端末の中だけで組み立てる（問題文は公開の置き場に置かない）
+//   ○×は「その記述が正しいか（あてはまるか）」。記述が文になっていない7問だけ、問いの条件を足して文にする
+const PQ_FORM = {
+  "R3-2": "「{t}」は、管理受託契約の重要事項説明で説明しなければならない事項である。",
+  "R3-5": "「{t}」は、標準管理受託契約書で賃貸住宅管理業者に代理権が与えられている事項に含まれる。",
+  "R3-37": "「{t}」は、特定賃貸借契約の重要事項説明で説明しなければならない事項である。",
+  "R4-6": "「{t}」は、委託者の承諾を得れば、管理業務報告の方法として認められる。",
+  "R5-22": "3人で共有する賃貸住宅で、「{t}」は、全員の合意までは要らず、持分の価格の過半数で決める。",
+  "R5-37": "「{t}」は、特定賃貸借契約の重要事項説明書に記載して説明すべき事項である。",
+  "R7-17": "「{t}」は、特定賃貸借契約の重要事項説明書に記載しなければならない事項である。",
+};
+let PQ = [];
+function pqBuild() {
+  if (!DOJO?.qs || !Q.length) return;
+  const secArea = {}; Q.forEach(q => { const m = secArea[q.sec] || (secArea[q.sec] = {}); m[q.area] = (m[q.area] || 0) + 1; });
+  const areaOf = sec => { const m = secArea[sec]; return m ? Object.keys(m).sort((a, b) => m[b] - m[a])[0] : "A"; };
+  PQ = [];
+  for (const d of DOJO.qs) {
+    const st = d.items?.length ? d.items : d.opts, f = PQ_FORM[d.id];
+    for (const o of st || []) {
+      const e = d.ex?.[o.k]; if (!e || typeof e.ok !== "boolean" || !o.t) continue;
+      PQ.push({ id: `P:${d.id}:${o.k}`, pid: d.id, z: 1, pq: 1, area: areaOf(d.sec), sec: d.sec, sub: d.topic || "", level: 2,
+        q: f ? f.replace("{t}", o.t) : o.t, a: e.ok, exp: e.why + (d.point ? `【この問題のポイント】${d.point}` : ""), ref: "",
+        ctx: d.stem, from: `${pastYear(d.year)?.label || d.year} 問${d.no}・記述${o.k}` });
+    }
+  }
+  PQ.forEach(q => { QM[q.id] = q; });
+}
+const pqWrongQs = () => DOJO ? DOJO.qs.filter(d => S.dojo[d.id]?.w > 0).map(d => d.id) : [];
+function pqStat() { const set = new Set(pqWrongQs()), ids = PQ.filter(q => set.has(q.pid)).map(q => q.id), seen = ids.filter(id => card(id)), still = seen.filter(id => card(id).lastOk === false);
+  return { ids, seen: seen.length, still: still.length, stillIds: still, qn: set.size }; }
+function startPQ(mode) {
+  const s = pqStat(); let ids;
+  if (mode === "still") ids = shuffle(s.stillIds);
+  else { const un = shuffle(s.ids.filter(id => !card(id))); ids = un.length ? un : shuffle(s.ids.filter(id => card(id).lastOk === false || card(id).box <= 2)); }
+  startSession(ids, mode === "still" ? "過去問○×：まだ✕の文" : "過去問○×：間違えた過去問を分解");
+}
+function PQCard() {
+  if (!DOJO || !PQ.length) return "";
+  const s = pqStat(); if (!s.qn) return "";
+  const un = s.ids.length - s.seen;
+  return `<div class="card" style="border:2px solid var(--brand)"><h2>🧩 間違えた過去問を一問一答で</h2>
+    <div class="small">道場・答案用紙で間違えた <b>${s.qn}問</b> を、4つの記述に分けて <b>${s.ids.length}問の○×</b> にしました。4択の「どれ？」ではなく、1つずつ「正しい？」で覚えます。間違えた文は5問あとにもう一度出て、忘れたころに復習にも出ます。</div>
+    <div class="small mt">挑戦 ${s.seen}/${s.ids.length}問・まだ✕ <b style="color:${s.still ? "var(--ng)" : "var(--ok)"}">${s.still}問</b></div>
+    <div class="btns mt">${s.still ? `<button class="btn sec" onclick="startPQ('still')">❌ まだ✕の文だけ（${s.still}）</button>` : ""}<button class="btn" onclick="startPQ()">▶ ${un ? `解く（まだの${un}問から）` : "もう一周（あやしい文）"}</button></div></div>`;
 }
 function dojoPick(k) {
   if (dsess.pick != null) return;
@@ -1766,6 +1815,7 @@ function Study() {
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
     <div class="small" style="text-align:right;margin-bottom:4px">${S.autoNext && S.tts.auto && TTS.ok ? "正解なら解説を読み終えて自動で次へ" : "「次へ」を押して進みます"}</div>
+    ${q.pq ? `<div class="small" style="margin-bottom:6px;padding:7px 9px;border-radius:8px;background:var(--track);line-height:1.6">📝 ${esc(q.from)}<br>元の問い：${esc(q.ctx)}<br><b>→ ここでは、下の記述が正しい（あてはまる）かを○×で</b></div>` : ""}
     <div class="qtext">${gl(q.q)}</div>
     <div class="ox">
       <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
@@ -2037,7 +2087,7 @@ function finishMock(timeUp) {
   save(); render(); window.scrollTo(0, 0);
 }
 // v6.29 下田さん「タブに過去問も追加したら？」「模擬試験じゃなくて過去問にしといて」→ 模試タブを「過去問」タブに。道場・答案用紙を上に、個数ドリル・模試はその下
-function Kako() { return `${DojoCard()}${PastMenu()}${MockMenu()}`; }
+function Kako() { return `${PQCard()}${DojoCard()}${PastMenu()}${MockMenu()}`; }
 function MockMenu() {
   const hist = S.mocks.slice(-8).reverse();
   return `
@@ -2513,6 +2563,7 @@ function AnkiTheme(ti) {
 (async () => {
   renderTabs();
   await loadQuestions();
+  pqBuild();
   if (S._toPd200) { delete S._toPd200; setPerDay(200); }
   if (S.readPlan && !S.readPlan.sync) S.readPlan = null;
   if (S.lecPos && S.lecPos.at >= addDays(today(), -7) && S.lecPos.ids?.every(hasLecAudio)) {
