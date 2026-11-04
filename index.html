@@ -142,6 +142,12 @@ select,input[type=number]{font:inherit;padding:8px;border:1px solid var(--line);
 .center{text-align:center}
 b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2px;font-weight:800}
 .spk{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:5px 11px;font-size:13px;color:var(--brand);font-weight:700}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font:inherit;min-height:86px}
+.tile b{font-size:14.5px}.tile .ti{font-size:18px;line-height:1}.tile .tn{font-size:18px;font-weight:800;color:var(--brand)}
+.tile:disabled,.spk:disabled{opacity:.4}
+.fold>summary{font-weight:700;cursor:pointer;font-size:15px}
+.fold .card{border:none;padding:0;margin:0;background:none}
 .tools{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
 .tools .spk{white-space:nowrap;padding:7px 4px;text-align:center}
 .spk.on{background:var(--brand);color:#fff;border-color:var(--brand)}
@@ -162,7 +168,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.69";
+const APP_VERSION = "2026-11-05-v6.70";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -2127,34 +2133,56 @@ function luck() {
 }
 function toggleStar(id) { const c = S.cards[id]; if (!c) return; c.star = !c.star; save(); render(); }
 function nextQ() { sess.tri = false; clipStop(); clearTimeout(autoHard); if (autoTimer !== "reading") clearTimeout(autoTimer); autoTimer = null; sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
+// v6.70 下田さん「一問一答のメニューが縦長でどこに何があるか分からない・選びにくい」→ 上に「何を解く？」のボタンを並べ、細かい選び方はたたむ
+let foldOpen = {};
+const allPool = () => [...Q, ...TQ, ...ZQ, ...PQ];
+const kindQs = (kind, a) => allPool().filter(q => { if (a && q.area !== a) return false; const c = card(q.id);
+  if (kind === "wrong") return c && c.lastOk === false;
+  if (kind === "tri") return c && c.lastTri && !(c.lastOk && (c.okRun || 0) >= 2);
+  if (kind === "star") return c && c.star;
+  if (kind === "new") return !c;
+  if (kind === "weak") return c && (c.w > 0 || c.box <= 2);
+  if (kind === "tq") return q.tq && (!c || c.lastOk === false);
+  return true; });
+const KIND_L = { wrong: "間違えたまま", tri: "△迷った", star: "★マーク", new: "まだ解いていない", weak: "苦手", tq: "TAC模試の記述", all: "全部" };
+function startKind(kind, a) {
+  const qs = kindQs(kind, a); if (!qs.length) { alertBox("この条件の問題はありません。"); return; }
+  const rank = new Map(normaRank().map((id, k) => [id, k])), ids = qs.map(q => q.id);
+  // 苦手な順（間違い・△が多い順）。まだ解いていない問題と全部はランダム
+  const order = kind === "new" || kind === "all" ? shuffle(ids) : ids.sort((x, y) => (rank.get(x) ?? 1e9) - (rank.get(y) ?? 1e9));
+  startSession(order, (a ? AREAS[a].short + "・" : "") + KIND_L[kind]);
+}
 function StudyMenu() {
-  const p = todayPlan();
-  const wrong = Q.filter(q => { const c = card(q.id); return c && c.w > 0 && c.box <= 2; }).length;
-  const star = Q.filter(q => card(q.id)?.star).length;
+  const n = normaDone(), L = TQ.length ? lapInfo() : null, cnt = k => kindQs(k).length;
+  const inNorma = sess && /^本番セット/.test(sess.label || "") && sess.i < sess.ids.length;
+  const tile = (icon, title, num, sub, on, dis) => `<button class="tile" onclick="${on}" ${dis ? "disabled" : ""}><span class="ti">${icon}</span><b>${title}</b><span class="tn num">${num}</span><span class="small">${sub}</span></button>`;
+  const fold = (k, title, body) => `<details class="card fold" ${foldOpen[k] ? "open" : ""} ontoggle="foldOpen['${k}']=this.open"><summary>${title}</summary><div class="mt">${body}</div></details>`;
   return `
-  ${StageBanner()}
-  ${RedoCard()}
-  ${PickCard()}
-  ${CountCard()}
-  ${WeakMap()}
-  <div class="card"><h2>今日の分</h2>${TodayProgress()}
-    <div class="btns mt">${p.due.length + p.newLeft.length ? `${TodayListenBtn()}<button class="btn" onclick="startToday()">▶ すぐ解く</button>` : `<button class="btn sec" onclick="moreToday(50)">🍚 おかわり ＋50問</button>`}</div>
-    <div class="small mt">1日の新しい問題数</div><div class="mt">${PerDaySeg()}</div></div>
-  <div class="card"><h2>分野を選んで解く（30問ずつ）</h2>
-    ${Object.entries(AREAS).map(([a, A]) => { const s = areaStats(a);
-      return `<div style="border-top:1px solid var(--line);padding:10px 0">
-        <div class="row"><span class="grow"><span class="dot" style="background:${A.color}"></span>${A.name}</span><span class="small num">${s.seen}/${s.total}問${s.acc != null ? `・正答${Math.round(s.acc * 100)}%` : ""}</span></div>
-        <div class="row mt" style="gap:6px"><button class="btn sec" style="padding:9px" onclick="startArea('${a}')">ランダム</button>
-          <button class="btn ghost" style="padding:9px" onclick="startArea('${a}','new')">未挑戦</button>
-          <button class="btn ghost" style="padding:9px" onclick="startArea('${a}','weak')">苦手</button></div></div>`; }).join("")}
+  <div class="card"><h2>✏️ 何を解く？</h2>
+    <button class="btn" onclick="${inNorma ? "backToSess()" : "startNorma()"}" style="text-align:left;padding:12px 14px;display:block">
+      <b style="font-size:17px">▶ 本番セット${inNorma ? "（続きから）" : ""}</b><br><span style="font-size:13px;font-weight:400">今日 ${n}/${S.normaQ || 500}問${L ? `・${L.n}周目 ${L.done}/${L.total}問` : ""}　いつもはこれ</span></button>
+    <div class="tiles mt">
+      ${tile("❌", "間違えたまま", cnt("wrong") + "問", "最後に×だった問題", "startKind('wrong')", !cnt("wrong"))}
+      ${tile("△", "迷った", cnt("tri") + "問", "△をつけた問題", "startKind('tri')", !cnt("tri"))}
+      ${tile("📝", "TAC模試の記述", cnt("tq") + "問", "未挑戦と×の記述", "startKind('tq')", !cnt("tq"))}
+      ${tile("🆕", "まだ解いていない", cnt("new") + "問", "ランダムに全部", "startKind('new')", !cnt("new"))}
+      ${tile("★", "★マーク", cnt("star") + "問", "★をつけた問題", "startKind('star')", !cnt("star"))}
+      ${tile("🔢", "個数問題ドリル", "10問", "4つ全部を判断", "startCountDrill()")}
+    </div>
+    <div class="small mt">間違い・迷ったは、苦手な順に全部出します（区切りなし）。途中でやめても続きから。</div></div>
+  <div class="card"><h2>📚 分野で選ぶ</h2>
+    <div class="row small" style="padding:0 0 4px;color:var(--sub)"><span class="grow">分野（正答率）</span><span style="width:174px;text-align:center">解く問題</span></div>
+    ${Object.entries(AREAS).map(([a, A]) => { const s = areaStats(a), w = kindQs("weak", a).length, nw = kindQs("new", a).length;
+      return `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:6px">
+        <span class="grow" style="font-size:14px;line-height:1.35"><span class="dot" style="background:${A.color}"></span><b>${A.short}</b><br><span class="small">${s.acc != null ? `正答 ${Math.round(s.acc * 100)}%` : "まだ"}</span></span>
+        <button class="spk" style="width:58px;padding:5px 0;border-radius:10px" onclick="startKind('weak','${a}')" ${w ? "" : "disabled"}>苦手<br><span class="small num">${w}</span></button>
+        <button class="spk" style="width:58px;padding:5px 0;border-radius:10px" onclick="startKind('new','${a}')" ${nw ? "" : "disabled"}>未挑戦<br><span class="small num">${nw}</span></button>
+        <button class="spk" style="width:58px;padding:5px 0;border-radius:10px" onclick="startKind('all','${a}')">全部<br><span class="small num">${kindQs("all", a).length}</span></button></div>`; }).join("")}
   </div>
-  <div class="card"><h2>見直し</h2><div class="btns">
-    <button class="btn ghost" onclick="startSpecial('wrong')" ${wrong ? "" : "disabled"}>間違えた問題（${wrong}問）</button>
-    <button class="btn ghost" onclick="startSpecial('star')" ${star ? "" : "disabled"}>★マークした問題（${star}問）</button></div></div>
-  ${ListenCard()}
-  ${TTS.ok ? `<div class="card"><h2>🔊 読み上げの設定</h2><div class="row"><span class="grow small">問題が出たら自動で読む・答えたら解説を読む</span><button class="spk ${S.tts.auto ? "on" : ""}" onclick="S.tts.auto=!S.tts.auto;save();render()">${S.tts.auto ? "ON" : "OFF"}</button></div>
-    <div class="small mt">読む速さ</div><div class="mt">${RateSeg()}</div>
-    <div class="mt"><button class="btn ghost" onclick="TTS.speak('この速さで読み上げます。管理戸数が二百戸以上の賃貸住宅管理業者は、登録が必要です。')">🔊 試しに聞く</button></div></div>` : ""}`;
+  ${fold("pick", "🎯 章・Sectionを選んで解く", PickCard())}
+  ${fold("count", "🔢 個数問題ドリルの設定", CountCard())}
+  ${fold("weak", "📍 苦手マップ（Section別）", WeakMap())}
+  ${fold("listen", "🎧 聞いて覚える（講義・聞き流し）", ListenCard())}`;
 }
 
 // ---------- 🎯 TAC予想模試（2026-11-04 下田さん「買ってきたTACの本の模擬試験を携帯でやりたい」「解説はテキストどおりに」） ----------
