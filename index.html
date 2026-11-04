@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.56";
+const APP_VERSION = "2026-11-04-v6.57";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -647,7 +647,8 @@ function naviDay() {
 function startFocus(s) { const N = naviDay(), ids = N.fids?.[s] || focusIds(s); startSession(shuffle(ids.filter(id => card(id)?.last !== today()).length ? ids.filter(id => card(id)?.last !== today()) : ids), `今日の苦手 ${s}`); }
 function naviPastRev(y) { const dd = S.done[today()] || (S.done[today()] = {}); dd.pastRev = true; save(); if (DOJO) dojoPastWrong(y); else studyWrongSecs(y); }
 // ---------- 📌 試験までのノルマ（v6.51 下田さん「一問一答は1日400問、過去問は1日1回。模試も含めて。○×△で間違いやすい所を洗い出して、苦手を徹底的に」） ----------
-const NORMA_FROM = "2026-11-04", NORMA_Q = 400, NORMA_CHUNK = 50;
+const NORMA_FROM = "2026-11-04", NORMA_CHUNK = 50;
+let NORMA_Q = 400;
 const PAST_ORDER = [["R3"], ["R4"], ["R5"], ["R6"], ["R7"], ["T", "2"], ["T", "3"], ["T", "1"]];
 function pastDoneOn(d) { return S.pastLog.some(l => l.date === d) || S.mocks.some(h => h.tac && h.date === d && h.n >= 40 && !h.ext); }
 function pastNext() { for (const [y, r] of PAST_ORDER) { if (y === "T") { if (TAC?.rounds?.[r] && !S.mocks.some(h => h.tac === r && h.n >= 40 && h.date >= NORMA_FROM && h.date !== "2026-11-04")) return { tac: r, label: `TAC予想模試 第${r}回` }; }
@@ -664,7 +665,31 @@ function normaRank() {
     return [q.id, sc]; }).filter(Boolean).sort((a, b) => b[1] - a[1]).map(x => x[0]);
 }
 const normaDone = () => S.log[today()]?.n || 0;
-function startNorma() { const left = Math.max(0, NORMA_Q - normaDone()), n = Math.min(NORMA_CHUNK, left || NORMA_CHUNK); startSession(normaRank().slice(0, n), `ノルマ（苦手順）${n}問`); }
+// v6.57 下田さん「本番セット」：一度でも×・△の問題 ＋ TAC模試3回分の記述 ＋ 苦手特訓 ＋ 建物・実務の未挑戦100問。これを周回する
+// 3周目からは「2周続けて自信ありで正解」の問題を外す。周の途中で新しく×・△になった問題は自動で入る
+function honbanIds() {
+  const pool = [...Q, ...TQ, ...ZQ, ...PQ], set = new Set();
+  for (const q of pool) { const c = card(q.id); if (c && (c.w > 0 || c.tri > 0)) set.add(q.id); }
+  TQ.forEach(q => set.add(q.id)); ZQ.forEach(q => set.add(q.id));
+  const fill = S.hbFill || (S.hbFill = Q.filter(q => (q.area === "C" || q.area === "E") && !card(q.id)).sort(() => Math.random() - .5).slice(0, 100).map(q => q.id));
+  fill.forEach(id => QM[id] && set.add(id));
+  const lap = S.lap?.n || 1;
+  return [...set].filter(id => QM[id] && !(lap >= 3 && (card(id)?.okRun || 0) >= 2 && !card(id)?.lastTri));
+}
+function lapInfo() {
+  S.lap = S.lap || { n: 1, d: today() };
+  const ids = honbanIds(), done = ids.filter(id => (card(id)?.lap || 0) >= S.lap.n).length;
+  if (ids.length && done >= ids.length) { S.lap.n++; S.lap.d = today(); setTimeout(save, 0); return lapInfo(); }
+  return { n: S.lap.n, ids, done, total: ids.length };
+}
+function startNorma() {
+  const L = lapInfo(), rank = new Map(normaRank().map((id, i) => [id, i]));
+  const left = L.ids.filter(id => (card(id)?.lap || 0) < L.n && card(id)?.last !== today()).sort((a, b) => (rank.get(a) ?? 1e9) - (rank.get(b) ?? 1e9));
+  const pick = (left.length ? left : L.ids.filter(id => (card(id)?.lap || 0) < L.n)).slice(0, NORMA_CHUNK);
+  if (!pick.length) { alertBox("今日解ける本番セットの問題がありません。"); return; }
+  startSession(pick, `本番セット ${L.n}周目`);
+}
+function lapMark(id, ok, tri) { const c = S.cards[id]; if (!c) return; const n = S.lap?.n || 1; c.lap = Math.max(c.lap || 0, n); c.okRun = ok && !tri ? (c.okRun || 0) + 1 : 0; }
 function startPastNorma() { const x = pastNext(); if (!x) return; if (x.tac) { go("tac"); startTac(x.tac); } else startPast(x.year); }
 
 function naviPlan() {
@@ -675,8 +700,8 @@ function naviPlan() {
     { done: false, title: "持ち物：受験票・写真付きの身分証・鉛筆とけしゴム・時計", sub: "12:30には会場に着く", btn: "", label: "" },
     { done: false, title: "本番：個数問題は「4つ全部わかる問題」から", sub: "迷った問題は印をつけて最後に戻る", btn: "", label: "" }] };
   const norma = t >= NORMA_FROM;
-  if (norma) { const n = normaDone(), px = pastNext(), pd = pastDoneOn(t);
-    add(n >= NORMA_Q, `✏️ 一問一答 ${n}/${NORMA_Q}問`, "苦手順（×・△をつけた問題 → 正答率の低い建物・実務・民法 → まだ解いていない問題）に50問ずつ。迷ったら△を押してから答える", "startNorma()", n >= NORMA_Q ? "おかわり50問" : "50問解く");
+  if (norma) { NORMA_Q = S.normaQ || 400; const n = normaDone(), px = pastNext(), pd = pastDoneOn(t), L = TQ.length ? lapInfo() : null;
+    add(n >= NORMA_Q, `✏️ 本番セット ${L ? `${L.n}周目 ${L.done}/${L.total}問` : ""}　今日 ${n}/${NORMA_Q}問`, `今まで×・△の問題＋TAC模試3回分の記述＋苦手特訓＋建物・実務の未挑戦。苦手順に50問ずつ。3周目からは2周続けて自信ありで正解した問題を外す。1日の数：${[400, 500, 700, 1000].map(v => v === NORMA_Q ? `【${v}】` : v).join("・")}（設定タブで変更）`, "startNorma()", n >= NORMA_Q ? "おかわり50問" : "50問解く");
     add(pd, `📝 過去問を1回（50問・120分）${px && !pd ? `：今日は ${esc(px.label)}` : ""}`, "本番と同じ時間で通しで。記述ごとに○×△をつける。終わったら判断ちがいと△を見直す", px ? "startPastNorma()" : "go('kako')", "始める");
     const R = Object.keys(S.marks).length ? markRows() : [], B = R.filter(r => r.bad).length, T = R.filter(r => r.m === "t").length;
     if (B + T) add(!!dd.marksRev, `🔍 ○×△の見直し（判断ちがい ${B}・迷った ${T}）`, "なぜその判断をしたかを解説で確認。理由が言えたら次へ", "S.done[today()]=S.done[today()]||{};S.done[today()].marksRev=true;save();go('marks')", "見る");
@@ -1904,7 +1929,7 @@ function Study() {
   ${q.sec ? `<div class="small" style="margin:4px 2px 6px">📖 この問題は <b>Section ${esc(q.sec || "")} ${esc(sx?.title || "")}</b>${sx ? `（教科書 p.${sx.page}）` : ""}${range.length && !range.includes(q.sec) ? ` <span class="chip">復習</span>` : ""}</div>` : ""}
   ${StudyRefBar(q, answered && !ok)}
   ${sess.done ? `<div class="row" style="margin:0 2px 6px;gap:8px;font-size:14px"><span class="grow">✅ このセットの正解率 <b class="num" style="font-size:18px;color:${pctColor(sess.ok / sess.done)}">${Math.round(sess.ok / sess.done * 100)}%</b>（${sess.ok}/${sess.done}問）</span>${(() => { const r = redoStats(); return r.done ? `<span class="small">解き直し全体 ${Math.round(r.acc * 100)}%</span>` : ""; })()}</div>` : ""}
-  <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}${(() => { if (today() >= NORMA_FROM) return `<span style="margin-left:8px;color:var(--brand);font-weight:700">今日 ${normaDone()}/${NORMA_Q}</span>`; const tp = todayPlan(); return tp.newTotal ? `<span style="margin-left:8px;color:var(--brand);font-weight:700">今日 ${tp.newDone}/${tp.newTotal}</span>` : ""; })()}</span>
+  <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}${(() => { if (today() >= NORMA_FROM) return `<span style="margin-left:8px;color:var(--brand);font-weight:700">今日 ${normaDone()}/${S.normaQ || 400}</span>`; const tp = todayPlan(); return tp.newTotal ? `<span style="margin-left:8px;color:var(--brand);font-weight:700">今日 ${tp.newDone}/${tp.newTotal}</span>` : ""; })()}</span>
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk" onclick="S.skipOk=!S.skipOk;save();render()" style="${S.skipOk ? "background:var(--brand);color:#fff" : ""}">⚡ 速く ${S.skipOk ? "ON" : "OFF"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
@@ -1996,6 +2021,7 @@ function answer(v) {
   sess.ans = v; sess.done++; if (ok) sess.ok++;
   record(q.id, ok);
   // v6.51 一問一答の△：迷った問題は正解でも明日また出す。苦手の洗い出しに使う
+  if (/^本番セット/.test(sess.label || "")) lapMark(q.id, ok, sess.tri);
   if (sess.tri) { const c = S.cards[q.id]; c.tri = (c.tri || 0) + 1; c.lastTri = today(); if (ok) { c.box = Math.min(c.box, 1); c.due = addDays(today(), 1); } (S.triLog || (S.triLog = {}))[q.id] = { d: today(), ok }; }
   // 間違えた問題は、5問あとにもう一度（1セッション1回まで）
   if (!ok && !sess.requeued[q.id]) { sess.requeued[q.id] = 1; sess.ids.splice(Math.min(sess.ids.length, sess.i + 6), 0, q.id); }
@@ -2499,6 +2525,7 @@ function Settings() {
     <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">聞き流しの考える時間（問題のあと、答えを読むまで）</div><div class="seg mt">${[2, 4, 7, 10].map(x => `<button class="${S.tts.think === x ? "on" : ""}" onclick="setThink(${x})">${x}秒</button>`).join("")}</div></div></div>
   <div class="card"><h2>✏️ 一問一答</h2>
     ${row("正解なら自動で次の問題へ", sw(S.autoNext, "S.autoNext=!S.autoNext"), "自動読み上げONの時だけ、解説を最後まで読んでから次へ。読み上げOFFの時は「次へ」を押して進みます。間違えた時は止まって、解説が出ます（教科書は「📖 開く」で見られます）。")}
+    <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">本番セットの1日のノルマ（一問一答）</div><div class="mt seg">${[400, 500, 700, 1000].map(v => `<button class="${(S.normaQ || 400) === v ? "on" : ""}" onclick="S.normaQ=${v};save();render()">${v}問</button>`).join("")}</div></div>
     <div style="border-top:1px solid var(--line);padding:10px 0"><div class="small">1日の新しい問題数（今日の分）</div><div class="mt">${PerDaySeg()}</div></div>
     ${row("新しい問題を章ごとの日替わりにする", sw(S.rotate !== false, "S.rotate=S.rotate===false"), "第1章→第2章→…と毎日入れ替え。明日から反映。")}</div>
   <div class="card"><h2>🎧 講義</h2>
