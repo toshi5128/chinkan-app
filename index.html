@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.52";
+const APP_VERSION = "2026-11-04-v6.54";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -657,7 +657,7 @@ function pastNext() { for (const [y, r] of PAST_ORDER) { if (y === "T") { if (TA
 function normaRank() {
   const st = Object.fromEntries(secStats().map(x => [x.id, x.acc])), t = today();
   const areaW = { A: 0, B: 0, C: 25, D: 18, E: 25 };
-  return Q.map(q => { const c = card(q.id);
+  return [...Q, ...TQ, ...PQ].map(q => { const c = card(q.id);
     if (c?.last === t) return null;
     const acc = st[q.sec] ?? 0.5;
     const sc = (c?.lastOk === false ? 120 : 0) + (c?.lastTri ? 80 : 0) + (c ? c.w * 12 + (c.tri || 0) * 15 - (c.box || 0) * 8 : 30) + (1 - acc) * 60 + (areaW[q.area] || 0) + Math.random() * 10;
@@ -1901,7 +1901,7 @@ function Study() {
   <div class="row" style="margin:2px 0 6px"><button class="spk" onclick="openStudyMenu()">≡ メニュー（範囲を選ぶ）</button><span class="grow"></span></div>
   <div class="prog"><i style="width:${sess.i / sess.ids.length * 100}%"></i></div>
   ${range.length ? `<div class="small" style="margin:6px 2px 0">📅 今日の範囲：<b>${range.join("・")}</b>（ここから新しい問題を出しています。ほかは復習の問題）</div>` : ""}
-  <div class="small" style="margin:4px 2px 6px">📖 この問題は <b>Section ${esc(q.sec || "")} ${esc(sx?.title || "")}</b>${sx ? `（教科書 p.${sx.page}）` : ""}${range.length && !range.includes(q.sec) ? ` <span class="chip">復習</span>` : ""}</div>
+  ${q.sec ? `<div class="small" style="margin:4px 2px 6px">📖 この問題は <b>Section ${esc(q.sec || "")} ${esc(sx?.title || "")}</b>${sx ? `（教科書 p.${sx.page}）` : ""}${range.length && !range.includes(q.sec) ? ` <span class="chip">復習</span>` : ""}</div>` : ""}
   ${StudyRefBar(q, answered && !ok)}
   ${sess.done ? `<div class="row" style="margin:0 2px 6px;gap:8px;font-size:14px"><span class="grow">✅ このセットの正解率 <b class="num" style="font-size:18px;color:${pctColor(sess.ok / sess.done)}">${Math.round(sess.ok / sess.done * 100)}%</b>（${sess.ok}/${sess.done}問）</span>${(() => { const r = redoStats(); return r.done ? `<span class="small">解き直し全体 ${Math.round(r.acc * 100)}%</span>` : ""; })()}</div>` : ""}
   <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}${(() => { if (today() >= NORMA_FROM) return `<span style="margin-left:8px;color:var(--brand);font-weight:700">今日 ${normaDone()}/${NORMA_Q}</span>`; const tp = todayPlan(); return tp.newTotal ? `<span style="margin-left:8px;color:var(--brand);font-weight:700">今日 ${tp.newDone}/${tp.newTotal}</span>` : ""; })()}</span>
@@ -2071,7 +2071,7 @@ async function tacLoad() {
     const kb = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("chinkan-tac:" + S.dojoKey));
     const k = await crypto.subtle.importKey("raw", kb, "AES-GCM", false, ["decrypt"]);
     const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, k, buf.slice(12));
-    TAC = JSON.parse(await new Response(new Blob([pt]).stream().pipeThrough(new DecompressionStream("gzip"))).text());
+    TAC = JSON.parse(await new Response(new Blob([pt]).stream().pipeThrough(new DecompressionStream("gzip"))).text()); tqBuild();
   } catch (e) { TAC = null; }
   tacBusy = false; return !!TAC;
 }
@@ -2120,6 +2120,10 @@ function TacPage() {
   ${fin ? `<div class="card"><div class="row" style="gap:8px"><span class="grow">TAC第${S.cur.tac}回は時間切れで採点されました。未解答 ${S.cur.pick.filter(x => x === null).length}問</span><button class="btn" style="width:auto;padding:8px 14px" onclick="tacResume()">▶ 続きから</button></div>
     <button class="linkbtn" onclick="go('mock')">結果と解説を見る</button></div>` : ""}
   ${TacCard()}
+  ${TQ.length ? (() => { const seen = TQ.filter(q => card(q.id)).length, wr = TQ.filter(q => card(q.id)?.lastOk === false || card(q.id)?.lastTri).length;
+    return `<div class="card"><h2>✏️ TAC模試の記述を一問一答で</h2><div class="small">3回分の記述を1つずつ○×に（全${TQ.length}問）。解説は本の文章です。ノルマの400問にも入ります。</div>
+      <div class="row mt small"><span class="grow">挑戦</span><b class="num">${seen}/${TQ.length}</b>　×・△ <b class="num" style="color:var(--ng)">${wr}</b></div>
+      <div class="btns mt"><button class="btn" onclick="startTQ()">▶ 50問解く</button>${wr ? `<button class="btn sec" onclick="startTQ('wrong')">×・△だけ（${wr}問）</button>` : ""}</div></div>`; })() : ""}
   ${MarksCard()}
   ${TACNUM.length ? `<div class="card"><h2>🔢 試験によく出る重要数字</h2><div class="small">本の76項目を穴埋めにしたもの。数字を言えたら「覚えた」で外していきます。</div>
     <div class="row mt small"><span class="grow">覚えた</span><b class="num">${tn}/${TACNUM.length}</b></div>
@@ -2149,6 +2153,27 @@ function tacFrom(r, from) {
   save(); go("mock");
 }
 const tacFirstUnmarked = r => { for (let n = 1; n <= 50; n++) if (!S.marks[`T${r}-${n}`]) return n; return 51; };
+
+// v6.53 下田さん「模擬試験の問題も一問一答にして」→ TAC模試の記述（ア〜エ・1〜4）を1つずつ○×に。解説は本の文章。暗号化した tac.bin を開けた端末だけ
+let TQ = [];
+function tqBuild() {
+  if (!TAC?.rounds) return; TQ = [];
+  for (const [r, R] of Object.entries(TAC.rounds)) for (const q of R.qs) {
+    const lines = q.items || q.opts, keys = q.items ? KANA : ["1", "2", "3", "4"];
+    if (!q.ex?.items?.length || q.ex.items.length !== lines.length) continue;
+    q.ex.items.forEach((e, j) => { if (typeof e.ok !== "boolean" || !lines[j]) return;
+      TQ.push({ id: `T:${r}-${q.n}:${keys[j]}`, z: 1, pq: 1, tq: 1, area: q.a, sec: null, sub: q.t, level: q.lv === "A" ? 1 : q.lv === "B" ? 2 : 3,
+        q: lines[j], a: e.ok, exp: e.t, ref: "", ctx: q.stem + (q.ex.note ? `（${q.ex.note}）` : ""), from: `TAC第${r}回 問${q.n}・記述${keys[j]}` }); });
+  }
+  TQ.forEach(q => { QM[q.id] = q; });
+}
+function startTQ(mode) {
+  if (!TQ.length) { alertBox("TACの問題を読み込めていません。電波の良いところで開き直してください。"); return; }
+  const un = TQ.filter(q => !card(q.id)), wr = TQ.filter(q => card(q.id)?.lastOk === false || card(q.id)?.lastTri);
+  const ids = mode === "wrong" ? shuffle(wr.map(q => q.id)) : (un.length ? shuffle(un.map(q => q.id)) : shuffle(wr.map(q => q.id)));
+  if (!ids.length) { alertBox("該当する問題がありません。"); return; }
+  startSession(ids.slice(0, 50), mode === "wrong" ? "TAC記述 ×・△だけ" : "TAC記述を○×で");
+}
 
 function TacCard() {
   if (!S.dojoKey) return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2><div class="small">「過去問」タブの過去問道場を合言葉で開くと、TACの予想模試も解けるようになります。</div></div>`;
