@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.62";
+const APP_VERSION = "2026-11-04-v6.63";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1173,8 +1173,9 @@ function voiceHandle(t) {
   if (/もう一回|もう一度|もういっかい|繰り返|くりかえ/.test(t)) { sayQ(); return; }
   if (!answered) {
     if (/さんかく|サンカク|三角|△|迷|自信な|微妙/.test(t)) { sess.tri = true; render(); TTS.speak("三角。まるか、ばつで答えてください"); return; }
-    if (/ばつ|バツ|罰|抜|×|✕|ペケ|誤り|あやまり|違う|ちがう|間違|ノー|NO|no/.test(t)) { answer(false); return; }
-    if (/まる|マル|丸|円|○|〇|◯|正しい|ただしい|正解|せいかい|オーケー|OK|ok|はい|イエス/.test(t)) { answer(true); return; }
+    if (/ばつ|バツ|罰|抜|×|✕|ペケ|誤り|あやまり|違う|ちがう|間違|ノー|^no$|いいえ/i.test(t)) { answer(false); return; }
+    // v6.62 「まる」は短すぎて「0」「ゼロ」「Maru」「まあ」などに化けやすい → それも○として受ける
+    if (/まる|マル|丸|円|○|〇|◯|^[0０]$|ゼロ|maru|mar|まー|まぁ|まあ|正しい|ただしい|正解|せいかい|オーケー|オッケー|OK|ok|はい|イエス|そう/i.test(t)) { answer(true); return; }
   } else {
     if (/まぐれ/.test(t) && sess.ans === QM[sess.ids[sess.i]].a) { luck(); return; }
     if (/次|つぎ|ツギ|ネクスト|オッケー|OK|ok|はい|進/.test(t)) { nextQ(); return; }
