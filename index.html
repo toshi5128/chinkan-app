@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.39";
+const APP_VERSION = "2026-11-04-v6.40";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -377,13 +377,14 @@ const TABS = [
   ["book", "教科書", '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/><path d="M9 7h6"/>'],
   ["study", "一問一答", '<circle cx="8" cy="12" r="4"/><path d="M15 8l6 8M21 8l-6 8"/>'],
   ["kako", "過去問", '<path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/>'],
+  ["tac", "TAC本", '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>'],
   ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
   ["settings", "設定", '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'],
 ];
-const PARENT = { past: "kako", dojo: "kako", mock: "kako", numbers: "book", tacnum: "book", anki: "book", listen: "study", lecture: "book" };
+const PARENT = { past: "kako", dojo: "kako", mock: "kako", numbers: "book", tacnum: "tac", anki: "book", listen: "study", lecture: "book" };
 function renderTabs() {
   document.getElementById("tabs").innerHTML = TABS.map(([k, l, d]) =>
-    `<button class="${(PARENT[view] || view) === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
+    `<button class="${(view === "mock" && S.cur?.tac ? "tac" : PARENT[view] || view) === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
   document.getElementById("hdrDays").textContent = `本番まで ${daysLeft()}日`;
   themeBtn();
 }
@@ -407,7 +408,7 @@ function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "tacnum" ? TacNum() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "kako" ? Kako() : view === "settings" ? Settings() : Stats());
+  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "tacnum" ? TacNum() : view === "tac" ? TacPage() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "kako" ? Kako() : view === "settings" ? Settings() : Stats());
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -717,7 +718,7 @@ async function dojoLoad(key) {
     const r = await fetch(CLOUD, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "load", key }) }).then(x => x.json());
     if (!r.data?.qs?.length) return false;
     const fresh = !DOJO || DOJO.v !== r.data.v;
-    DOJO = r.data; S.dojoKey = key; save(); dojoBackfill(); pqBuild(); tacLoad().then(ok => { if (ok && view === "kako") render(); });
+    DOJO = r.data; S.dojoKey = key; save(); dojoBackfill(); pqBuild(); tacLoad().then(ok => { if (ok && view === "tac") render(); });
     if (fresh) { try { localStorage.setItem(DOJO_LS, JSON.stringify(DOJO)); } catch (e) {} }
     return true;
   } catch (e) { return false; }
@@ -1680,7 +1681,6 @@ function Book() {
     ${ANKI.length ? `<div class="mt"><button class="btn" onclick="ankiMode='anki';ankiOpen=null;go('anki')">🧠 暗記まとめ（罰則・期間・数字・「〜つ」もの）</button></div>` : ""}
     ${CONF.length ? `<div class="mt"><button class="btn" onclick="ankiMode='conf';ankiOpen=null;go('anki')">🔀 まぎらわしい比較（左右に並べて違いを見る）</button></div>` : ""}
     ${NUMS.length ? `<div class="mt"><button class="btn sec" onclick="go('numbers')">🔢 数字まとめ（${NUMS.length}項目）</button></div>` : ""}
-    ${TACNUM.length ? `<div class="mt"><button class="btn sec" onclick="go('tacnum')">🎯 TAC重要数字 穴埋め（${TACNUM.length}問・覚えた${Object.keys(S.tacnum).length}）</button></div>` : ""}</div>
   ${BundleCard()}
   ${CHAPS.map(c => { const secs = SECS.filter(x => x.ch === c.ch), r = secs.filter(x => S.read[x.id]).length, open = cur === c.ch;
     return `<div class="card"><button onclick="openCh=${open ? -1 : c.ch};render()" style="border:0;background:none;padding:0;width:100%;text-align:left">
@@ -2019,9 +2019,23 @@ function tacReview(it, k, m) {
     ${ex.sum ? `<div class="mt" style="font-size:14px;font-weight:700">${esc(ex.sum)}</div>` : ""}
     <div class="small mt">難易度 ${TAC_LV[q.lv] || q.lv}</div></details>`;
 }
+// v6.40 下田さん「ごちゃごちゃして分かりにくいからタブ分けていいよ」→ TACの本から作ったもの（予想模試・重要数字）は「TAC本」タブにまとめる
+function TacPage() {
+  const hist = S.mocks.filter(h => h.tac).slice(-6).reverse(), tn = TACNUM.length ? TACNUM.filter(x => S.tacnum[x.n]).length : 0;
+  const mid = S.cur && !S.cur.done && S.cur.tac;
+  return `${mid ? `<div class="card"><div class="row" style="gap:8px"><span class="grow">TAC第${S.cur.tac}回を解いている途中です（${S.cur.pick.filter(x => x !== null).length}/50問）</span><button class="btn" style="width:auto;padding:8px 14px" onclick="go('mock')">▶ 続きへ</button></div></div>` : ""}
+  ${TacCard()}
+  ${TACNUM.length ? `<div class="card"><h2>🔢 試験によく出る重要数字</h2><div class="small">本の76項目を穴埋めにしたもの。数字を言えたら「覚えた」で外していきます。</div>
+    <div class="row mt small"><span class="grow">覚えた</span><b class="num">${tn}/${TACNUM.length}</b></div>
+    <div class="bar mt"><i style="width:${tn / TACNUM.length * 100}%;background:var(--ok)"></i></div>
+    <div class="btns mt"><button class="btn sec" onclick="go('tacnum')">開く</button></div></div>` : ""}
+  ${hist.length ? `<div class="card"><h2>TAC模試の結果</h2>${hist.map(h => { const R = TAC?.rounds?.[h.tac], ok = R ? h.score >= R.pass : h.score >= PASS_LINE;
+    return `<div class="row" style="border-top:1px solid var(--line);padding:8px 0"><span class="grow">${h.date.replace(/-/g, "/")}<span class="small">（第${h.tac}回・${h.min}分）</span></span><b class="num" style="color:${ok ? "var(--ok)" : "var(--ng)"}">${h.score}点</b><span class="small">/${h.n}</span></div>`; }).join("")}</div>` : ""}`;
+}
+
 function TacCard() {
-  if (!S.dojoKey) return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2><div class="small">下の過去問道場を合言葉で開くと、TACの予想模試も解けるようになります。</div></div>`;
-  if (!TAC) { tacLoad().then(ok => { if (ok && view === "kako") render(); }); return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2><div class="small">読み込み中…</div></div>`; }
+  if (!S.dojoKey) return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2><div class="small">「過去問」タブの過去問道場を合言葉で開くと、TACの予想模試も解けるようになります。</div></div>`;
+  if (!TAC) { tacLoad().then(ok => { if (ok && view === "tac") render(); }); return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2><div class="small">読み込み中…</div></div>`; }
   const rs = ["1", "2", "3"];
   return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2>
     <div class="small">本と同じ問題・同じ解説です。50問・120分。採点後に1問ずつ、記述ごとの○×と本の解説が出ます。</div>
@@ -2138,7 +2152,7 @@ function pickOpt(k) { S.cur.pick[S.cur.i] = S.cur.pick[S.cur.i] === k ? null : k
 function mockClock(m) { const now = Date.now(); m.spent = m.spent || m.items.map(() => 0); m.spent[m.i] += now - (m.qt || m.start); m.qt = now; }
 function mockGo(k) { TTS.stop(); mockClock(S.cur); S.cur.i = Math.max(0, Math.min(S.cur.items.length - 1, k)); save(); render(); window.scrollTo(0, 0); }
 function moveMock(d) { mockGo(S.cur.i + d); }
-function quitMock() { if (!confirm("この模試をやめますか？（結果は残りません）")) return; S.cur = null; save(); render(); }
+function quitMock() { if (!confirm("この模試をやめますか？（結果は残りません）")) return; const t = S.cur?.tac; S.cur = null; save(); if (t) go("tac"); else render(); }
 function finishMock(timeUp) {
   const m = S.cur;
   const blank = m.pick.filter(x => x === null).length;
@@ -2157,7 +2171,7 @@ function finishMock(timeUp) {
   save(); render(); window.scrollTo(0, 0);
 }
 // v6.29 下田さん「タブに過去問も追加したら？」「模擬試験じゃなくて過去問にしといて」→ 模試タブを「過去問」タブに。道場・答案用紙を上に、個数ドリル・模試はその下
-function Kako() { return `${TacCard()}${PQCard()}${DojoCard()}${PastMenu()}${MockMenu()}`; }
+function Kako() { return `${PQCard()}${DojoCard()}${PastMenu()}${MockMenu()}`; }
 function MockMenu() {
   const hist = S.mocks.slice(-8).reverse();
   return `
@@ -2190,7 +2204,7 @@ function MockResult(m) {
       return `<details class="st"><summary><span class="tag ${ok ? "ok" : "ng"}">${ok ? "正解" : "×"}</span> 問${k + 1} ${STEM[it.type]}<span class="small">（あなた：${m.pick[k] === null ? "未解答" : label(m.pick[k])}／正解：${label(it.ans)}）</span></summary>
         ${it.ids.map((id, j) => { const q = QM[id]; return `<div style="margin:8px 0 0;font-size:14px;line-height:1.7"><b>${it.opts ? KANA[j] : j + 1}</b> ${gl(q.q)}<br>
           <span class="tag ${q.a ? "ok" : "ng"}">${q.a ? "○ 正しい" : "× 誤り"}</span> <span class="small">${gx(q)}</span></div>`; }).join("")}</details>`; }).join("")}
-    <div class="btns mt"><button class="btn" onclick="S.cur=null;save();go('home')">閉じる</button></div></div>`;
+    <div class="btns mt"><button class="btn" onclick="const t=S.cur?.tac;S.cur=null;save();go(t ? 'tac' : 'home')">閉じる</button></div></div>`;
 }
 
 function MockTime(m) {
@@ -2554,7 +2568,6 @@ function Numbers() {
   return `<div class="card"><h2>🔢 数字まとめ</h2><div class="small">本番は数字のひっかけが多い試験です。「答えを隠す」にすると、タップするまで数字が見えないので暗記テストになります。</div>
     <div class="row mt" style="gap:6px;flex-wrap:wrap">${CHAPS.map(c => `<button class="chip" style="border:0;padding:6px 12px;font-size:13px;${numCh === c.ch ? "background:var(--brand);color:#fff" : ""}" onclick="numCh=${c.ch};numOpen={};render()">CH${c.ch}</button>`).join("")}
       <span class="grow"></span><button class="linkbtn" onclick="numHide=!numHide;numOpen={};render()">${numHide ? "答えを表示" : "答えを隠す"}</button></div>
-    ${TACNUM.length ? `<div class="mt"><button class="btn sec" onclick="go('tacnum')">🎯 TAC「試験によく出る重要数字」76問を穴埋めで</button></div>` : ""}
     ${TTS.ok ? `<div class="mt"><button class="btn sec" onclick="sayNums()">🎧 CH${numCh}の数字を通しで聞く</button></div>` : ""}</div>
   <div class="card">${list.map((x, i) => { const shown = !numHide || numOpen[i];
     return `<div style="border-top:${i ? "1px solid var(--line)" : "0"};padding:9px 0" ${numHide ? `onclick="numOpen[${i}]=!numOpen[${i}];render()"` : ""}>
@@ -2587,7 +2600,7 @@ function TacNum() {
       <div style="font-size:15px;line-height:1.9;margin-top:2px" onclick="tnOpen[${x.n}]=!tnOpen[${x.n}];render()">${tnFill(x.t, o)}</div>
       <div class="row" style="gap:8px;margin-top:4px"><button class="linkbtn" onclick="tnOpen[${x.n}]=!tnOpen[${x.n}];render()">${o ? "隠す" : "答えを見る"}</button><span class="grow"></span>
         <button class="chip" style="border:0;padding:5px 12px;${ok ? "background:var(--ok);color:#fff" : ""}" onclick="tnMark(${x.n})">${ok ? "✓ 覚えた" : "覚えた"}</button></div></div>`; }).join("") || `<div class="small">全部覚えました。</div>`}</div>
-  <div class="center"><button class="linkbtn" onclick="go('book')">◀ 教科書に戻る</button></div>`;
+  <div class="center"><button class="linkbtn" onclick="go('tac')">◀ TAC本に戻る</button></div>`;
 }
 
 // ---------- 暗記まとめ ----------
@@ -2674,7 +2687,7 @@ function AnkiTheme(ti) {
   render();
   coachLoad();
   if (S.dojoKey) dojoLoad().then(ok => { if (ok && (view === "kako" || view === "home")) render(); });
-  if (S.dojoKey) tacLoad().then(ok => { if (ok && ["kako", "mock", "home"].includes(view)) render(); });
+  if (S.dojoKey) tacLoad().then(ok => { if (ok && ["tac", "mock", "home"].includes(view)) render(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
 </script>
