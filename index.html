@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.63";
+const APP_VERSION = "2026-11-04-v6.64";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1170,6 +1170,9 @@ function voiceHandle(t) {
   if (/ストップ|止め|やめ/.test(t)) { voiceStop(); TTS.speak("音声入力を止めます"); render(); return; }
   if (view !== "study" || !sess || sess.i >= sess.ids.length) return;
   const answered = sess.ans !== null;
+  // v6.64 「読んで」「問題」→ 問題文を読む／「解説」→ 答えたあとの解説を読む
+  if (/解説|かいせつ/.test(t) && answered) { TTS.speak(aSpeech(QM[sess.ids[sess.i]], sess.ans === QM[sess.ids[sess.i]].a)); return; }
+  if (/読んで|よんで|読む|よむ|問題|もんだい/.test(t)) { TTS.speak(qSpeech(QM[sess.ids[sess.i]])); return; }
   if (/もう一回|もう一度|もういっかい|繰り返|くりかえ/.test(t)) { sayQ(); return; }
   if (!answered) {
     if (/さんかく|サンカク|三角|△|迷|自信な|微妙/.test(t)) { sess.tri = true; render(); TTS.speak("三角。まるか、ばつで答えてください"); return; }
@@ -1981,7 +1984,7 @@ function Study() {
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk" onclick="voiceToggle()" style="${VOICE.on ? "background:var(--ng);color:#fff" : ""}">🎤 ${VOICE.on ? "聞いてる" : "声で答える"}</button><button class="spk" onclick="S.skipOk=!S.skipOk;save();render()" style="${S.skipOk ? "background:var(--brand);color:#fff" : ""}">⚡ 速く ${S.skipOk ? "ON" : "OFF"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
-    ${VOICE.on ? `<div class="small" style="text-align:right;margin-bottom:4px;color:var(--ng)">🎤 「まる」「ばつ」「さんかく」→ 答え／「つぎ」「もう一回」「まぐれ」「ストップ」<br><span id="vSt">${esc(VOICE.st || "準備中")}${VOICE.err ? `（エラー：${esc(VOICE.err)}）` : ""}</span>　<button class="linkbtn" onclick="voiceOnce()">🎙 押して話す</button><br><b id="vHeard">${VOICE.last ? `聞こえた：${esc(VOICE.last)}` : "（まだ何も聞こえていません）"}</b></div>` : ""}
+    ${VOICE.on ? `<div class="small" style="text-align:right;margin-bottom:4px;color:var(--ng)">🎤 「まる・正しい・オッケー」「ばつ」「さんかく」→ 答え／「読んで」「解説」「つぎ」「もう一回」「まぐれ」「ストップ」<br><span id="vSt">${esc(VOICE.st || "準備中")}${VOICE.err ? `（エラー：${esc(VOICE.err)}）` : ""}</span>　<button class="linkbtn" onclick="voiceOnce()">🎙 押して話す</button><br><b id="vHeard">${VOICE.last ? `聞こえた：${esc(VOICE.last)}` : "（まだ何も聞こえていません）"}</b></div>` : ""}
     <div class="small" style="text-align:right;margin-bottom:4px">${S.skipOk && S.autoNext ? "⚡ 自信ありで正解→すぐ次へ。△をつけて正解・不正解のときは解説を読む" : S.autoNext && S.tts.auto && TTS.ok ? "正解なら解説を読み終えて自動で次へ" : "「次へ」を押して進みます"}</div>
     ${q.pq ? `<div style="margin-bottom:8px;padding:8px 10px;border-radius:8px;background:var(--track);font-size:14px;line-height:1.7"><span class="small">📝 ${esc(q.from)}</span><br>元の問い：${esc(q.ctx)}<br><b>→ ここでは、下の記述が正しい（あてはまる）かを○×で</b></div>` : ""}
     <div class="qtext">${gl(q.q)}</div>
