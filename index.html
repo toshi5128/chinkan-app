@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.44";
+const APP_VERSION = "2026-11-04-v6.45";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -854,7 +854,7 @@ const markCmp = (m, ok) => !m ? "" : m === "t" ? `<div class="small" style="marg
 function markSet(qid, k, v) { const m = S.marks[qid] || (S.marks[qid] = {}); if (m[k] === v) delete m[k]; else m[k] = v; if (!Object.keys(m).length) delete S.marks[qid]; save(); render(); }
 const markBtns = (qid, k) => { const m = myMark(qid, k); return ["o", "x", "t"].map(v => { const on = m === v, c = MK[v][1];
   return `<button onclick="event.stopPropagation();markSet('${qid}','${k}','${v}')" style="width:38px;height:32px;border-radius:8px;border:2px solid ${on ? c : "var(--line)"};background:${on ? c : "transparent"};color:${on ? "#fff" : c};font-weight:900;font-size:17px;line-height:1;padding:0">${MK[v][0]}</button>`; }).join(""); };
-const markLine = (qid, k, t, after = "") => { const m = myMark(qid, k); return `<div class="row" style="gap:6px;align-items:center"><b style="width:18px;font-size:16px">${k}</b>${markBtns(qid, k)}<span class="grow"></span>${after}</div><div style="margin:4px 0 2px;line-height:1.75;${m === "x" ? "opacity:.5" : ""}">${esc(t)}</div>`; };
+const markLine = (qid, k, t, after = "") => { const m = myMark(qid, k); return `<div class="row" style="gap:6px;align-items:center"><b style="width:18px;font-size:16px">${k}</b>${markBtns(qid, k)}<span class="grow"></span>${TTS.ok ? `<button class="spk" style="padding:4px 9px" data-t="${esc(k + "。" + t)}" onclick="event.stopPropagation();TTS.speak(this.dataset.t)">🔊</button>` : ""}${after}</div><div style="margin:4px 0 2px;line-height:1.75;${m === "x" ? "opacity:.5" : ""}">${esc(t)}</div>`; };
 // 振り返り用に、印をつけた記述を全部集める（正誤がわかるものだけ判定）
 function markRows() {
   const out = [];
@@ -898,11 +898,21 @@ const exBox = e => e ? `<div class="small" style="display:block;margin-top:4px;p
 // 読み上げでは根拠の条文カッコ「（管理業法2条1項）」「（解釈・運用の考え方…）」は読まない（v6.25 下田さん「ここのカッコ部分読まなくていい」）。画面には残す
 const noCite = t => String(t || "").replace(/[（(][^（）()、。]{0,40}[）)]/g, m => /(?<!方)法|規則|考え方|施行令|通知|判例|判決|最判|ガイドライン|約款|契約書|指針|告示|要領|\d+条/.test(m) ? "" : m);
 const exSpeech = (q, pick) => `${pick == null ? "" : dojoOk(q, pick) ? `正解。あなたの答えは${pick}番。` : `不正解。あなたの答えは${pick}番。`}正解は${q.ans === "all" ? "全員正解" : Array.isArray(q.ans) ? q.ans.join("と") + "番" : q.ans + "番"}。` + Object.entries(q.ex || {}).map(([k, e]) => `${k}は${e.ok ? "マル" : "バツ"}。${noCite(e.why)}`).join("") + (q.point ? `ポイント。${noCite(q.point)}` : "");
+// v6.45 下田さん「読むボタンを押したら一問ずつ読んでくれるように。続けて読む感じじゃなくて」→ 🔊を押すたびに 問題文 → ア → イ … と1つずつ。記述の横の🔊はその記述だけ
+let RS = null;
+function stepSay(key, parts) {
+  if (!RS || RS.key !== key || RS.i >= parts.length) RS = { key, i: 0 };
+  TTS.speak(parts[RS.i]); RS.i++;
+  const b = document.getElementById("stepBtn"); if (b) b.textContent = RS.i >= parts.length ? "🔊 最初から" : "🔊 次を読む";
+}
+const stepParts = (no, stem, items, opts) => [`問${no}。${stem}`, ...(items.length ? items.map(x => `${x.k}。${x.t}`) : opts.map(o => `${o.k}番。${o.t}`))];
+
 function sayPast(i) {
   const cur = S.pastCur, y = pastYear(cur.year), q = y.qs[i], d = dojoQ(`${y.year}-${q.no}`); if (!d) return;
   const rev = S.pastText !== false && S.pastNow !== false && cur.pick[i] != null;
-  TTS.speak(rev ? exSpeech(d, cur.pick[i]) : pastSpeech(d, q.no), rev ? pastResume : undefined);
-  if (rev && TTS.ok) { cur.exTok = TTS.token; pastPause(); }
+  if (!rev) return stepSay("P" + d.id, stepParts(q.no, d.stem, d.items, d.opts));
+  TTS.speak(exSpeech(d, cur.pick[i]), pastResume);
+  if (TTS.ok) { cur.exTok = TTS.token; pastPause(); }
 }
 // v6.27 下田さん「解説を読んでくれてる時も残り時間が進むのは違くない？」→ 解説の読み上げ中は時計を止める（止めた分は cur.paused に貯める）
 function pastPause() { const c = S.pastCur; if (c && !c.pauseAt) { c.pauseAt = Date.now(); save(); tick(); } }
@@ -910,7 +920,8 @@ function pastResume() { const c = S.pastCur; if (c?.pauseAt) { c.paused = (c.pau
 const pastUsed = c => (c.end || Date.now()) - c.start - (c.paused || 0) - (c.pauseAt ? Date.now() - c.pauseAt : 0);
 function sayDojo() {
   const q = dojoQ(dsess.ids[dsess.i]); if (!q) return;
-  TTS.speak(dsess.pick != null ? exSpeech(q, dsess.pick) : pastSpeech(q, q.no));
+  if (dsess.pick != null) return TTS.speak(exSpeech(q, dsess.pick));
+  stepSay("D" + q.id, stepParts(q.no, q.stem, q.items, q.opts));
 }
 function Dojo() {
   if (!DOJO || !dsess) { view = "kako"; return Kako(); }
@@ -938,7 +949,7 @@ function Dojo() {
   <div class="pbar"><div class="row" style="gap:8px"><span class="grow" style="font-weight:700">🥋 ${esc(dsess.label)}　${dsess.i + 1}/${dsess.ids.length}問目</span>${dsess.year ? `<span class="small">合格点 <b>${pastYear(dsess.year)?.pass}点</b></span>` : ""}</div>
     <div class="small">${dsess.done ? `${dsess.done}問中 <b style="color:var(--ok);font-size:15px">${dsess.ok}問正解</b>（${Math.round(dsess.ok / dsess.done * 100)}%）` : "まだ答えていません"}</div></div>
   <div class="card">
-    <div class="row" style="gap:6px;margin-bottom:4px"><span class="chip">${esc(pastYear(q.year)?.label || q.year)} 問${q.no}</span>${sec ? `<span class="small grow">${esc(q.sec)} ${esc(sec.title)}</span>` : `<span class="grow"></span>`}${TTS.ok ? `<button class="spk" onclick="sayDojo()">🔊</button>` : ""}</div>
+    <div class="row" style="gap:6px;margin-bottom:4px"><span class="chip">${esc(pastYear(q.year)?.label || q.year)} 問${q.no}</span>${sec ? `<span class="small grow">${esc(q.sec)} ${esc(sec.title)}</span>` : `<span class="grow"></span>`}${TTS.ok ? `<button class="spk" id="stepBtn" onclick="sayDojo()">${dsess.pick != null ? "🔊 解説" : "🔊 問題文"}</button>` : ""}</div>
     ${h && !done ? `<div class="small" style="margin-bottom:4px">前回：${h.lastOk ? "○ 正解" : "× 不正解"}（${mdj(h.last)}）</div>` : ""}
     <div class="qtext" style="font-weight:700">【問${q.no}】${esc(q.stem)}</div>
     ${items}${opts}
@@ -2053,7 +2064,7 @@ function tacBody(it, m) {
 }
 function tacSay(it, n) {
   const q = tacQ(it); if (!q) return;
-  TTS.speak(`問${n}。${q.stem}` + (q.items ? q.items.map((t, k) => `${KANA[k]}。${t}`).join("") + q.opts.map((o, k) => `選択肢${k + 1}、${o}。`).join("") : q.opts.map((o, k) => `${k + 1}番。${o}`).join("")));
+  stepSay(`T${it.tac[0]}-${q.n}`, [`問${n}。${q.stem}`, ...(q.items ? q.items.map((t, k) => `${KANA[k]}。${t}`) : q.opts.map((o, k) => `${k + 1}番。${o}`))]);
 }
 const br = t => esc(t || "").replace(/\n/g, "<br>");
 function tacReview(it, k, m) {
@@ -2177,7 +2188,7 @@ function Mock() {
   return `
   <div class="qhead"><span>${m.tac ? `TAC第${m.tac}回 ` : ""}問${m.i + 1} / ${m.items.length}　<span class="chip" style="color:${AREAS[it.area].color}">${AREAS[it.area].short}</span></span><span class="timer num" id="timer" data-start="${m.start}" data-limit="${m.limit || 7200}" data-kind="mock"></span></div>
   <div class="card">
-    ${TTS.ok ? `<div class="row" style="justify-content:flex-end;margin-bottom:4px"><button class="spk" onclick="sayMock()">🔊 読む</button></div>` : ""}
+    ${TTS.ok ? `<div class="row" style="justify-content:flex-end;margin-bottom:4px"><button class="spk" id="stepBtn" onclick="sayMock()">🔊 問題文</button></div>` : ""}
     <div class="qtext" style="font-weight:700">【問${m.i + 1}】${it.tac ? esc(tacQ(it)?.stem || "") : STEM[it.type]}</div>
     ${body}
     <div class="row mt" style="gap:8px">
