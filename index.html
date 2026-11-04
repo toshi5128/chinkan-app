@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.41";
+const APP_VERSION = "2026-11-04-v6.42";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -208,6 +208,7 @@ function load() {
   //   この版より前の分は記録から推定（10/14以降に2回以上解いて最後に解いた日が10/14以降のもの）
   s.redo = s.redo || {};
   if (!s.redoSeed) { s.redoSeed = 1; for (const [id, c] of Object.entries(s.cards || {})) if (c.w > 0 && c.c + c.w >= 2 && c.last >= "2026-10-14" && !s.redo[id]) s.redo[id] = { d: c.last, ok: !!c.lastOk }; }
+  s.marks = s.marks || {};     // 記述ごとの自分の判断：問題id(R5-12 / T1-5) → {ア:"o"|"x"|"t"}（v6.42 ○×△）
   s.dojo = s.dojo || {};       // 過去問道場：問題id(R3-5等) → {c, w, last, lastOk, pick}
   s.dojoLog = s.dojoLog || {}; // 日付 → {n, c}
   s.done = s.done || {};     // 日付 → {count, mock, radio, nums}（今日の指示の✓に使う）
@@ -381,7 +382,7 @@ const TABS = [
   ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
   ["settings", "設定", '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'],
 ];
-const PARENT = { past: "kako", dojo: "kako", mock: "kako", numbers: "book", tacnum: "tac", anki: "book", listen: "study", lecture: "book" };
+const PARENT = { past: "kako", dojo: "kako", marks: "kako", mock: "kako", numbers: "book", tacnum: "tac", anki: "book", listen: "study", lecture: "book" };
 function renderTabs() {
   document.getElementById("tabs").innerHTML = TABS.map(([k, l, d]) =>
     `<button class="${(view === "mock" && S.cur?.tac ? "tac" : PARENT[view] || view) === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
@@ -408,7 +409,7 @@ function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "tacnum" ? TacNum() : view === "tac" ? TacPage() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "kako" ? Kako() : view === "settings" ? Settings() : Stats());
+  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "tacnum" ? TacNum() : view === "tac" ? TacPage() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "marks" ? MarksView() : view === "kako" ? Kako() : view === "settings" ? Settings() : Stats());
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -837,6 +838,47 @@ function dojoPick(k) {
 function dojoNext(d = 1) { TTS.stop(); dsess.i = Math.max(0, dsess.i + d); dsess.pick = null; save(); render(); window.scrollTo(0, 0); }
 // 過去問の問題文を読み上げる文に（記述ア〜エ → 選択肢）。v6.21 下田さん「過去問も読み上げてほしい」
 const pastSpeech = (q, no) => `問${no}。${q.stem}。` + (q.items.length ? q.items.map(x => `${x.k}。${x.t}`).join("") + q.opts.map(o => `選択肢${o.k}、${o.t}。`).join("") : q.opts.map(o => `${o.k}番。${o.t}`).join(""));
+
+// ---------- ○×△（v6.42 下田さん「記述の横に一個一個○×△をつけて、微妙なのは△。あとで何で△つけたか・自分が○と×どっちと判断したか振り返りやすいように」） ----------
+// 記述をタップするたびに 無印→○→×→△→無印。問題ごとに S.marks に残す（記録はクラウドの控えにも乗るので、あとでClaudeも見られる）
+const MK = { o: ["○", "var(--ok)"], x: ["×", "var(--ng)"], t: ["△", "var(--warn)"] };
+const MK_NEXT = { "": "o", o: "x", x: "t", t: "" };
+const myMark = (qid, k) => S.marks[qid]?.[k] || "";
+function markTap(qid, k) { const m = S.marks[qid] || (S.marks[qid] = {}), n = MK_NEXT[m[k] || ""]; if (n) m[k] = n; else delete m[k]; if (!Object.keys(m).length) delete S.marks[qid]; save(); render(); }
+const markBadge = m => `<span style="flex:none;width:26px;height:26px;border-radius:50%;border:2px solid ${m ? MK[m][1] : "var(--line)"};color:${m ? MK[m][1] : "var(--sub)"};display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;line-height:1">${m ? MK[m][0] : ""}</span>`;
+// 答え合わせの後：自分の判断と正解を並べる。○×が逆なら「判断ちがい」、△なら「迷った」
+const markCmp = (m, ok) => !m ? "" : m === "t" ? `<div class="small" style="margin-top:3px;color:var(--warn);font-weight:700">△ 迷った記述（正しくは${ok ? "○" : "×"}）</div>`
+  : (m === "o") !== ok ? `<div class="small" style="margin-top:3px;color:var(--ng);font-weight:700">⚠ 判断ちがい：あなた ${MK[m][0]} → 正しくは ${ok ? "○" : "×"}</div>` : `<div class="small" style="margin-top:3px;color:var(--ok)">✓ 判断どおり</div>`;
+// 記述1行（道場・答案用紙・TAC模試で共通）。fade＝×をつけた文は薄く
+const markLine = (qid, k, t, after = "") => { const m = myMark(qid, k); return `<div onclick="markTap('${qid}','${k}')" style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;${m === "x" ? "opacity:.5" : ""}">${markBadge(m)}<b style="flex:none">${k}</b><span class="grow">${esc(t)}</span>${after}</div>`; };
+// 振り返り用に、印をつけた記述を全部集める（正誤がわかるものだけ判定）
+function markRows() {
+  const out = [];
+  for (const [qid, ms] of Object.entries(S.marks)) {
+    let label, stem, lines, truth, why;
+    if (qid.startsWith("T")) { const [r, n] = qid.slice(1).split("-"), q = TAC?.rounds?.[r]?.qs?.[n - 1]; if (!q) continue;
+      label = `TAC第${r}回 問${n}`; stem = q.stem; const L = q.items || q.opts, keys = q.items ? KANA : ["1", "2", "3", "4"];
+      lines = Object.fromEntries(keys.map((k, j) => [k, L[j]])); truth = k => q.ex.items[keys.indexOf(k)]?.ok; why = k => q.ex.items[keys.indexOf(k)]?.t;
+    } else { const q = dojoQ(qid); if (!q) continue; label = `${pastYear(q.year)?.label || q.year} 問${q.no}`; stem = q.stem;
+      lines = Object.fromEntries((q.items.length ? q.items : q.opts).map(x => [x.k, x.t])); truth = k => q.ex?.[k]?.ok; why = k => q.ex?.[k]?.why; }
+    const seen = qid.startsWith("T") ? S.mocks.some(h => h.tac === qid.slice(1).split("-")[0]) : !!S.dojo[qid];
+    for (const [k, m] of Object.entries(ms)) { if (!(k in lines)) continue; const ok = truth(k);
+      out.push({ qid, k, m, label, stem, t: lines[k], ok, why: why(k), seen, bad: seen && ok != null && m !== "t" && (m === "o") !== ok }); }
+  }
+  return out;
+}
+let mkTab = "t";
+function MarksView() {
+  const R = markRows(), T = R.filter(r => r.m === "t"), B = R.filter(r => r.bad), list = mkTab === "t" ? T : mkTab === "b" ? B : R;
+  return `<div class="card"><h2>📝 ○×△の振り返り</h2>
+    <div class="small">過去問道場・答案用紙・TAC模試で、記述につけた印です。△＝迷った文、判断ちがい＝○と×を逆につけた文。ここが本番で落としやすい所です。</div>
+    <div class="seg mt">${[["t", `△ 迷った ${T.length}`], ["b", `⚠ 判断ちがい ${B.length}`], ["a", `すべて ${R.length}`]].map(([v, l]) => `<button class="${mkTab === v ? "on" : ""}" onclick="mkTab='${v}';render()">${l}</button>`).join("")}</div></div>
+  ${list.length ? list.map(r => `<div class="card" style="padding:10px 12px"><div class="small"><b>${esc(r.label)}</b>　${esc(r.stem).slice(0, 40)}…</div>
+    <div style="display:flex;gap:8px;margin-top:6px">${markBadge(r.m)}<b style="flex:none">${esc(r.k)}</b><span class="grow" style="font-size:14.5px">${esc(r.t)}</span></div>
+    ${r.seen && r.ok != null ? markCmp(r.m, r.ok) + (r.why ? `<div class="small" style="margin-top:4px">${esc(r.why).slice(0, 400)}</div>` : "") : `<div class="small" style="margin-top:3px">まだ答え合わせしていない問題です</div>`}</div>`).join("")
+    : `<div class="card small">まだありません。過去問を解くとき、記述をタップして○×△をつけてください。</div>`}
+  <div class="center"><button class="linkbtn" onclick="go(S.cur?.tac ? 'tac' : 'kako')">◀ 戻る</button></div>`;
+}
 // 違うと思った記述をタップで斜線（v6.21 下田さん「これ違うなと思ったやつは斜線で消していけたら見やすい」）。もう一度タップで戻る
 const strikeStyle = on => on ? "text-decoration:line-through;text-decoration-thickness:2px;opacity:.45" : "";
 function toggleIn(o, key, k) { const a = o[key] || (o[key] = []), j = a.indexOf(k); if (j < 0) a.push(k); else a.splice(j, 1); }
@@ -882,9 +924,11 @@ function Dojo() {
   const ansTxt = q.ans === "all" ? "全員正解（出題ミス）" : Array.isArray(q.ans) ? q.ans.join("・") : q.ans;
   const exRow = k => done ? exBox(q.ex?.[k]) : "";
   const sk = dsess.strike?.[q.id] || [];
-  const stmt = (k, t, ex) => `<div style="display:block"><div onclick="dojoStrike('${q.id}','${k}')" style="display:flex;gap:8px;cursor:pointer;${strikeStyle(sk.includes(k))}"><b>${k}</b><span class="grow">${esc(t)}</span>${done && /^\d$/.test(k) ? ansChip(dojoOk(q, +k), p === +k) : ""}</div>${ex ? exRow(k) : ""}</div>`;
+  const chip = k => done && /^\d$/.test(k) ? ansChip(dojoOk(q, +k), p === +k) : "";
+  const stmt = (k, t, ex) => ex ? `<div style="display:block">${markLine(q.id, k, t, chip(k))}${done && q.ex?.[k] ? markCmp(myMark(q.id, k), q.ex[k].ok) : ""}${exRow(k)}</div>`
+    : `<div style="display:block"><div onclick="dojoStrike('${q.id}','${k}')" style="display:flex;gap:8px;cursor:pointer;${strikeStyle(sk.includes(k))}"><b>${k}</b><span class="grow">${esc(t)}</span>${chip(k)}</div></div>`;
   const items = `<div class="stmts">${(q.items.length ? q.items : q.opts).map(x => stmt(x.k, x.t, true)).join("")}</div>${q.items.length ? `<div class="stmts">${q.opts.map(o => stmt(o.k, o.t, false)).join("")}</div>` : ""}`;
-  const opts = `<div class="small" style="margin:2px 0 6px">${done ? "" : "違うと思った文はタップで斜線。答えは下の番号で"}</div><div class="row" style="gap:6px">${[1, 2, 3, 4].map(k => { const mine = p === k, right = done && dojoOk(q, k), c = done ? (right ? "ok" : mine ? "ng" : "") : "";
+  const opts = `<div class="small" style="margin:2px 0 6px">${done ? "" : "記述をタップで ○→×→△（迷った）→消す。答えは下の番号で"}</div><div class="row" style="gap:6px">${[1, 2, 3, 4].map(k => { const mine = p === k, right = done && dojoOk(q, k), c = done ? (right ? "ok" : mine ? "ng" : "") : "";
     return `<button onclick="dojoPick(${k})" ${done ? "disabled" : ""} style="flex:1;border:${c ? "2.5px" : "1.5px"} solid ${c ? `var(--${c})` : "var(--line)"};background:${c ? `var(--${c}bg)` : "var(--card)"};color:var(--ink);border-radius:9px;padding:8px 0;font-weight:700;font-size:16px">${k}${ansTag(done && right, done && mine)}</button>`; }).join("")}</div>`;
   return `
   <div class="pbar"><div class="row" style="gap:8px"><span class="grow" style="font-weight:700">🥋 ${esc(dsess.label)}　${dsess.i + 1}/${dsess.ids.length}問目</span>${dsess.year ? `<span class="small">合格点 <b>${pastYear(dsess.year)?.pass}点</b></span>` : ""}</div>
@@ -1996,10 +2040,12 @@ function startTac(r) {
 }
 function tacBody(it, m) {
   const q = tacQ(it); if (!q) return `<div class="small">問題データを読み込めませんでした。電波の良いところで開き直してください。</div>`;
+  const qid = `T${it.tac[0]}-${q.n}`, hint = `<div class="small" style="margin:4px 0 2px">記述をタップで ○→×→△（迷った）→消す</div>`;
   return q.items
-    ? `<div class="stmts">${q.items.map((t, k) => `<div><b>${KANA[k]}</b><span>${esc(t)}</span></div>`).join("")}</div>
+    ? `${hint}<div class="stmts">${q.items.map((t, k) => `<div style="display:block">${markLine(qid, KANA[k], t)}</div>`).join("")}</div>
        <div class="opts">${q.opts.map((o, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${esc(o)}</span></button>`).join("")}</div>`
-    : `<div class="opts">${q.opts.map((o, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${esc(o)}</span></button>`).join("")}</div>`;
+    : `${hint}<div class="stmts">${q.opts.map((o, k) => `<div style="display:block">${markLine(qid, String(k + 1), o)}</div>`).join("")}</div>
+       <div class="opts">${q.opts.map((o, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})" style="padding:8px 12px"><span class="n">${k + 1}</span><span>${k + 1}を選ぶ</span></button>`).join("")}</div>`;
 }
 function tacSay(it, n) {
   const q = tacQ(it); if (!q) return;
@@ -2015,7 +2061,7 @@ function tacReview(it, k, m) {
     ${ex.note ? `<div class="small mt">${esc(ex.note)}</div>` : ""}
     ${ex.body ? `<div style="margin:8px 0;font-size:14px;line-height:1.8">${br(ex.body)}</div>` : ""}
     ${ex.items.map((e, j) => `<div style="margin:10px 0 0;font-size:14px;line-height:1.75;border-top:1px dashed var(--line);padding-top:8px">
-      <b>${esc(e.k)}</b> ${esc(lines[j] || "")}<br><span class="tag ${e.ok ? "ok" : "ng"}">${e.ok ? "○" : "×"}</span> <span>${br(e.t)}</span></div>`).join("")}
+      <div style="display:flex;gap:8px">${markBadge(myMark(`T${it.tac[0]}-${q.n}`, e.k))}<b style="flex:none">${esc(e.k)}</b><span class="grow">${esc(lines[j] || "")}</span></div>${markCmp(myMark(`T${it.tac[0]}-${q.n}`, e.k), e.ok)}<span class="tag ${e.ok ? "ok" : "ng"}">${e.ok ? "○" : "×"}</span> <span>${br(e.t)}</span></div>`).join("")}
     ${ex.sum ? `<div class="mt" style="font-size:14px;font-weight:700">${esc(ex.sum)}</div>` : ""}
     <div class="small mt">難易度 ${TAC_LV[q.lv] || q.lv}</div></details>`;
 }
@@ -2025,6 +2071,7 @@ function TacPage() {
   const mid = S.cur && !S.cur.done && S.cur.tac;
   return `${mid ? `<div class="card"><div class="row" style="gap:8px"><span class="grow">TAC第${S.cur.tac}回を解いている途中です（${S.cur.pick.filter(x => x !== null).length}/50問）</span><button class="btn" style="width:auto;padding:8px 14px" onclick="go('mock')">▶ 続きへ</button></div></div>` : ""}
   ${TacCard()}
+  ${MarksCard()}
   ${TACNUM.length ? `<div class="card"><h2>🔢 試験によく出る重要数字</h2><div class="small">本の76項目を穴埋めにしたもの。数字を言えたら「覚えた」で外していきます。</div>
     <div class="row mt small"><span class="grow">覚えた</span><b class="num">${tn}/${TACNUM.length}</b></div>
     <div class="bar mt"><i style="width:${tn / TACNUM.length * 100}%;background:var(--ok)"></i></div>
@@ -2171,7 +2218,9 @@ function finishMock(timeUp) {
   save(); render(); window.scrollTo(0, 0);
 }
 // v6.29 下田さん「タブに過去問も追加したら？」「模擬試験じゃなくて過去問にしといて」→ 模試タブを「過去問」タブに。道場・答案用紙を上に、個数ドリル・模試はその下
-function Kako() { return `${PQCard()}${DojoCard()}${PastMenu()}${MockMenu()}`; }
+function MarksCard() { const R = Object.keys(S.marks).length ? markRows() : [], T = R.filter(r => r.m === "t").length, B = R.filter(r => r.bad).length;
+  return R.length ? `<div class="card"><div class="row" style="gap:8px"><span class="grow"><b>📝 ○×△の振り返り</b><div class="small">△ 迷った ${T}・⚠ 判断ちがい ${B}</div></span><button class="btn sec" style="width:auto;padding:8px 14px" onclick="go('marks')">見る</button></div></div>` : ""; }
+function Kako() { return `${MarksCard()}${PQCard()}${DojoCard()}${PastMenu()}${MockMenu()}`; }
 function MockMenu() {
   const hist = S.mocks.slice(-8).reverse();
   return `
@@ -2494,10 +2543,12 @@ function Past() {
   return `<div class="pbar"><div class="row" style="gap:8px"><span class="grow" style="font-weight:700">${esc(y.label)}　合格点 <span style="color:var(--brand)">${y.pass}点</span></span><span class="timer num small" id="timer" data-start="${cur.start}" data-limit="7200" data-kind="past"></span></div>
     <div class="row" style="gap:8px;margin-top:3px"><span class="grow small">${now && n ? `${n}問中 <b style="color:var(--ok);font-size:15px">${okN}問正解</b>（あと${Math.max(0, y.pass - okN)}問で合格点）` : `入力 ${n}/${y.qs.length}問`}</span>${nextI >= 0 ? `<button class="bt" onclick="pastJump()">▶ 問${y.qs[nextI].no}へ</button>` : ""}</div></div>
   ${withText ? `<div class="card"><div class="seg">${[[true, "その場で答え合わせ"], [false, "最後にまとめて（本番形式）"]].map(([v, l]) => `<button class="${now === v ? "on" : ""}" onclick="S.pastNow=${v};save();render()">${l}</button>`).join("")}</div>
-    <div class="small mt">${now ? "番号を選ぶと、すぐ正解と1文ずつの○×・理由が出ます（選び直しはできません）。" : "答えは最後の「採点する」まで出ません。本番の練習に。"}違うと思った文はタップで斜線、🔊で読み上げ。<button class="linkbtn" onclick="S.pastText=false;save();render()">答案用紙だけにする（紙やPDFで解く）</button></div></div>
+    <div class="small mt">${now ? "番号を選ぶと、すぐ正解と1文ずつの○×・理由が出ます（選び直しはできません）。" : "答えは最後の「採点する」まで出ません。本番の練習に。"}記述をタップで ○→×→△（迷った）→消す、🔊で読み上げ。<button class="linkbtn" onclick="S.pastText=false;save();render()">答案用紙だけにする（紙やPDFで解く）</button></div></div>
   ${y.qs.map((q, i) => { const d = dojoQ(`${y.year}-${q.no}`), rev = now && cur.pick[i] != null; return `<div class="card" id="pq${i}">
     <div class="row" style="align-items:flex-start;gap:6px"><div class="qtext grow" style="font-weight:700;font-size:16px">【問${q.no}】${esc(d.stem)}</div>${TTS.ok ? `<button class="spk" style="flex:none" onclick="sayPast(${i})">🔊</button>` : ""}</div>
-    ${[d.items, d.opts].filter(a => a.length).map((a, ai) => `<div class="stmts">${a.map(x => `<div style="display:block"><div onclick="strikePast(${i},'${x.k}')" style="display:flex;gap:8px;cursor:pointer;${strikeStyle((cur.strike?.[i] || []).includes(x.k))}"><b>${x.k}</b><span class="grow">${esc(x.t)}</span>${rev && /^\d$/.test(x.k) ? ansChip(dojoOk(d, +x.k), cur.pick[i] === +x.k) : ""}</div>${rev && (ai === 0 || !d.items.length) ? exBox(d.ex?.[x.k]) : ""}</div>`).join("")}</div>`).join("")}
+    ${[d.items, d.opts].filter(a => a.length).map((a, ai) => `<div class="stmts">${a.map(x => { const st = ai === 0 || !d.items.length, ch = rev && /^\d$/.test(x.k) ? ansChip(dojoOk(d, +x.k), cur.pick[i] === +x.k) : "";
+      return st ? `<div style="display:block">${markLine(d.id, x.k, x.t, ch)}${rev && d.ex?.[x.k] ? markCmp(myMark(d.id, x.k), d.ex[x.k].ok) + exBox(d.ex[x.k]) : ""}</div>`
+        : `<div style="display:block"><div onclick="strikePast(${i},'${x.k}')" style="display:flex;gap:8px;cursor:pointer;${strikeStyle((cur.strike?.[i] || []).includes(x.k))}"><b>${x.k}</b><span class="grow">${esc(x.t)}</span>${ch}</div></div>`; }).join("")}</div>`).join("")}
     <div class="row" style="gap:6px">${[1, 2, 3, 4].map(k => { const mine = cur.pick[i] === k, c = rev ? (dojoOk(d, k) ? "ok" : mine ? "ng" : "") : "";
       return `<button onclick="pickPast(${i},${k})" style="flex:1;border:${c ? "2.5px" : "1.5px"} solid ${c ? `var(--${c})` : mine ? "var(--brand)" : "var(--line)"};background:${c ? `var(--${c}bg)` : mine ? "var(--brand)" : "var(--card)"};color:${mine && !c ? "#fff" : "var(--ink)"};border-radius:9px;padding:8px 0;font-weight:700">${k}${ansTag(rev && dojoOk(d, k), rev && mine)}</button>`; }).join("")}</div>
     ${rev ? `<div class="res ${dojoOk(d, cur.pick[i]) ? "ok" : "ng"}" style="margin-top:8px">${ansLine(d, cur.pick[i])}${d.point ? `<div style="margin-top:6px"><b>📌 ポイント</b>　${esc(d.point)}</div>` : ""}${d.law ? `<div style="margin-top:6px;color:var(--ng)"><b>⚠ 法改正</b>　${esc(d.law)}</div>` : ""}</div>` : ""}</div>`; }).join("")}` : `
