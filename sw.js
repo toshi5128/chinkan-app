@@ -1,5 +1,5 @@
 // ネット優先・つながらない時だけ保存分（電車の地下でも勉強できるように）
-const CACHE = "chinkan-v75";
+const CACHE = "chinkan-v76";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 self.addEventListener("fetch", e => {

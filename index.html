@@ -168,7 +168,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.70";
+const APP_VERSION = "2026-11-05-v6.71";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -920,15 +920,15 @@ const markLine = (qid, k, t, after = "") => { const m = myMark(qid, k); return `
 function markRows() {
   const out = [];
   for (const [qid, ms] of Object.entries(S.marks)) {
-    let label, stem, lines, truth, why;
+    let label, stem, lines, truth, why, wkey = () => null;
     if (qid.startsWith("T")) { const [r, n] = qid.slice(1).split("-"), q = TAC?.rounds?.[r]?.qs?.[n - 1]; if (!q) continue;
       label = `TAC第${r}回 問${n}`; stem = q.stem; const L = q.items || q.opts, keys = q.items ? KANA : ["1", "2", "3", "4"];
-      lines = Object.fromEntries(keys.map((k, j) => [k, L[j]])); truth = k => q.ex.items[keys.indexOf(k)]?.ok; why = k => q.ex.items[keys.indexOf(k)]?.t;
+      lines = Object.fromEntries(keys.map((k, j) => [k, L[j]])); truth = k => q.ex.items[keys.indexOf(k)]?.ok; why = k => q.ex.items[keys.indexOf(k)]?.t; wkey = k => q.ex.items[keys.indexOf(k)]?.key;
     } else { const q = dojoQ(qid); if (!q) continue; label = `${pastYear(q.year)?.label || q.year} 問${q.no}`; stem = q.stem;
       lines = Object.fromEntries((q.items.length ? q.items : q.opts).map(x => [x.k, x.t])); truth = k => q.ex?.[k]?.ok; why = k => q.ex?.[k]?.why; }
     const seen = qid.startsWith("T") ? S.mocks.some(h => h.tac === qid.slice(1).split("-")[0]) : !!S.dojo[qid];
     for (const [k, m] of Object.entries(ms)) { if (!(k in lines)) continue; const ok = truth(k);
-      out.push({ qid, k, m, label, stem, t: lines[k], ok, why: why(k), seen, bad: seen && ok != null && m !== "t" && (m === "o") !== ok }); }
+      out.push({ qid, k, m, label, stem, t: lines[k], ok, why: why(k), wkey: wkey(k), seen, bad: seen && ok != null && m !== "t" && (m === "o") !== ok }); }
   }
   return out;
 }
@@ -940,7 +940,7 @@ function MarksView() {
     <div class="seg mt">${[["t", `△ 迷った ${T.length}`], ["b", `⚠ 判断ちがい ${B.length}`], ["a", `すべて ${R.length}`]].map(([v, l]) => `<button class="${mkTab === v ? "on" : ""}" onclick="mkTab='${v}';render()">${l}</button>`).join("")}</div></div>
   ${list.length ? list.map(r => `<div class="card" style="padding:10px 12px"><div class="small"><b>${esc(r.label)}</b>　${esc(r.stem).slice(0, 40)}…</div>
     <div style="display:flex;gap:8px;margin-top:6px">${markBadge(r.m)}<b style="flex:none">${esc(r.k)}</b><span class="grow" style="font-size:14.5px">${esc(r.t)}</span></div>
-    ${r.seen && r.ok != null ? markCmp(r.m, r.ok) + (r.why ? `<div class="small" style="margin-top:4px">${esc(r.why).slice(0, 400)}</div>` : "") : `<div class="small" style="margin-top:3px">まだ答え合わせしていない問題です</div>`}</div>`).join("")
+    ${r.seen && r.ok != null ? markCmp(r.m, r.ok) + (r.why ? `<div class="small" style="margin-top:4px">${r.wkey ? brk(r.why, r.wkey) : esc(r.why).slice(0, 400)}</div>` : "") : `<div class="small" style="margin-top:3px">まだ答え合わせしていない問題です</div>`}</div>`).join("")
     : `<div class="card small">まだありません。過去問を解くとき、記述をタップして○×△をつけてください。</div>`}
   <div class="center"><button class="linkbtn" onclick="go(S.cur?.tac ? 'tac' : 'kako')">◀ 戻る</button></div>`;
 }
@@ -2224,6 +2224,8 @@ function tacSay(it, n) {
   stepSay(`T${it.tac[0]}-${q.n}`, [`問${n}。${q.stem}`, ...(q.items ? q.items.map((t, k) => `${KANA[k]}。${t}`) : q.opts.map((o, k) => `${k + 1}番。${o}`))]);
 }
 const br = t => esc(t || "").replace(/\n/g, "<br>");
+// v6.71 下田さん「TACの問題も大事な箇所に下線を」→ 本の解説の中の決め手の部分（tac.bin の key）に赤い下線
+const brk = (t, ks) => { let h = br(t); (ks || []).forEach(k => { const e = esc(k), i = h.indexOf(e); if (e && i >= 0) h = h.slice(0, i) + `<u class="key">${e}</u>` + h.slice(i + e.length); }); return h; };
 function tacReview(it, k, m) {
   const q = tacQ(it); if (!q) return "";
   const ok = m.pick[k] === it.ans, lab = o => q.items ? `${o + 1}（${q.opts[o]}）` : String(o + 1);
@@ -2233,7 +2235,7 @@ function tacReview(it, k, m) {
     ${ex.note ? `<div class="small mt">${esc(ex.note)}</div>` : ""}
     ${ex.body ? `<div style="margin:8px 0;font-size:14px;line-height:1.8">${br(ex.body)}</div>` : ""}
     ${ex.items.map((e, j) => `<div style="margin:10px 0 0;font-size:14px;line-height:1.75;border-top:1px dashed var(--line);padding-top:8px">
-      <div style="display:flex;gap:8px">${markBadge(myMark(`T${it.tac[0]}-${q.n}`, e.k))}<b style="flex:none">${esc(e.k)}</b><span class="grow">${esc(lines[j] || "")}</span></div>${markCmp(myMark(`T${it.tac[0]}-${q.n}`, e.k), e.ok)}<span class="tag ${e.ok ? "ok" : "ng"}">${e.ok ? "○" : "×"}</span> <span>${br(e.t)}</span></div>`).join("")}
+      <div style="display:flex;gap:8px">${markBadge(myMark(`T${it.tac[0]}-${q.n}`, e.k))}<b style="flex:none">${esc(e.k)}</b><span class="grow">${esc(lines[j] || "")}</span></div>${markCmp(myMark(`T${it.tac[0]}-${q.n}`, e.k), e.ok)}<span class="tag ${e.ok ? "ok" : "ng"}">${e.ok ? "○" : "×"}</span> <span>${brk(e.t, e.key)}</span></div>`).join("")}
     ${ex.sum ? `<div class="mt" style="font-size:14px;font-weight:700">${esc(ex.sum)}</div>` : ""}
     <div class="small mt">難易度 ${TAC_LV[q.lv] || q.lv}</div></details>`;
 }
@@ -2288,7 +2290,7 @@ function tqBuild() {
     if (!q.ex?.items?.length || q.ex.items.length !== lines.length) continue;
     q.ex.items.forEach((e, j) => { if (typeof e.ok !== "boolean" || !lines[j]) return;
       TQ.push({ id: `T:${r}-${q.n}:${keys[j]}`, z: 1, pq: 1, tq: 1, area: q.a, sec: null, sub: q.t, level: q.lv === "A" ? 1 : q.lv === "B" ? 2 : 3,
-        q: lines[j], a: e.ok, exp: e.t, ref: "", ctx: q.stem + (q.ex.note ? `（${q.ex.note}）` : ""), from: `TAC第${r}回 問${q.n}・記述${keys[j]}` }); });
+        q: lines[j], a: e.ok, exp: e.t, key: e.key || [], ref: "", ctx: q.stem + (q.ex.note ? `（${q.ex.note}）` : ""), from: `TAC第${r}回 問${q.n}・記述${keys[j]}` }); });
   }
   TQ.forEach(q => { QM[q.id] = q; });
 }
