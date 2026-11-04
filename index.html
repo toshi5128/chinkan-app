@@ -148,6 +148,10 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 .tile:disabled,.spk:disabled{opacity:.4}
 .fold>summary{font-weight:700;cursor:pointer;font-size:15px}
 .fold .card{border:none;padding:0;margin:0;background:none}
+.fig{margin:10px 0 0;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--card)}
+.fig>summary{font-weight:700;font-size:14px;color:var(--brand);cursor:pointer}
+.figsvg svg{width:100%;height:auto;display:block;margin-top:8px}
+.figpts{margin:6px 0 2px;padding-left:1.2em;font-size:13.5px;line-height:1.7}
 .tools{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
 .tools .spk{white-space:nowrap;padding:7px 4px;text-align:center}
 .spk.on{background:var(--brand);color:#fff;border-color:var(--brand)}
@@ -168,7 +172,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.71";
+const APP_VERSION = "2026-11-05-v6.72";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -276,6 +280,7 @@ async function loadQuestions() {
   TALK = Object.assign({}, ...talks);
   NUMS = Array.isArray(nums) ? nums : [];
   const KEYS = await fetch("data/keys.json", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
+  FIGS = await fetch("data/figs.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   TACNUM = await fetch("data/tacnum.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   ANKI = await fetch("data/anki.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   CONF = await fetch("data/confuse.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
@@ -1207,6 +1212,19 @@ const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6, 1.8, 2.0].map(r =
 // ---------- 解説の大事なところに下線（2026-10-22 下田さん「分からない言葉の解説はもういい。解説の大事なところだけに下線を」） ----------
 //   data/keys.json = {問題id: [解説の中の大事な言い回し…]}。v6.15 の言葉の意味（点線→ポップアップ）は廃止
 function gl(text) { return esc(text); }
+// v6.72 下田さん「建物設備とか、イラストがないとイメージがわかないものはイラストをつけて解説して」→ data/figs.json の図を、言葉が合う問題の解説の下に出す
+let FIGS = [], figCache = {}, figOpen = true;
+function figFor(q) {
+  if (!FIGS.length || !q) return null; if (q.id in figCache) return figCache[q.id];
+  const main = `${q.q || ""} ${q.sub || ""} ${q.ctx || ""}`, all = main + " " + (q.exp || "");
+  const hit = t => FIGS.map(f => [f, f.kw.filter(k => t.includes(k)).length]).filter(x => x[1]).sort((a, b) => b[1] - a[1])[0]?.[0];
+  return figCache[q.id] = hit(main) || hit(all) || null;
+}
+const figBox = (f, open = true) => f ? `<details class="fig" ${open ? "open" : ""}><summary>🖼 図で見る：${esc(f.title)}</summary><div class="figsvg">${f.svg}</div>${(f.pts || []).length ? `<ul class="figpts">${f.pts.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</details>` : "";
+// よく出る図（サブリース・管理受託など）は毎回ひらくと邪魔なので、同じ図は最初の6問だけ開いて出し、あとはたたむ（押せば開く）。建物・設備の問題はいつも開く
+function figAuto(q) { const f = figFor(q); if (!f) return false; if (q.area === "C") return true;
+  const L = (S.figSeen || (S.figSeen = {}))[f.id] || (S.figSeen[f.id] = []); if (!L.includes(q.id) && L.length < 6) L.push(q.id); return L.includes(q.id); }
+function FigList() { return FIGS.length ? FIGS.map(f => figBox(f, false)).join("") : `<div class="small">図を読み込めていません。</div>`; }
 function gx(q) {
   let t = esc(q.exp);
   (q.key || []).forEach(k => { const e = esc(k); const i = t.indexOf(e); if (e && i >= 0) t = t.slice(0, i) + `<u class="key">${e}</u>` + t.slice(i + e.length); });
@@ -2009,7 +2027,7 @@ function Study() {
     ${answered ? (sess.tri ? `<div class="small" style="margin:4px 0;color:var(--warn);font-weight:700">△ 迷った問題として記録しました${ok ? "（正解でも、明日もう一度出します）" : ""}</div>` : "")
       : `<button onclick="sess.tri=!sess.tri;render()" style="width:100%;margin:6px 0 2px;padding:9px;border-radius:10px;font-weight:800;font-size:15px;border:2px solid var(--warn);background:${sess.tri ? "var(--warn)" : "transparent"};color:${sess.tri ? "#fff" : "var(--warn)"}">△ 迷った・自信なし${sess.tri ? "（オン：このあと○か×で答える）" : "（押してから○か×）"}</button>`}
     ${answered ? `<div class="res ${ok ? "ok" : "ng"}"><b class="t">${ok ? "正解" : "不正解"}</b>　答えは <b>${q.a ? "○（正しい）" : "×（誤り）"}</b><br>${gx(q)}
-      ${q.ref ? `<div class="ref">根拠：${esc(q.ref)}</div>` : ""}</div>
+      ${q.ref ? `<div class="ref">根拠：${esc(q.ref)}</div>` : ""}</div>${figBox(figFor(q), figAuto(q))}
       <div class="row mt">
         ${ok ? `<button class="linkbtn" onclick="luck()">まぐれだった</button>` : ""}
         <span class="grow"></span>
@@ -2182,6 +2200,7 @@ function StudyMenu() {
   ${fold("pick", "🎯 章・Sectionを選んで解く", PickCard())}
   ${fold("count", "🔢 個数問題ドリルの設定", CountCard())}
   ${fold("weak", "📍 苦手マップ（Section別）", WeakMap())}
+  ${fold("figs", `🖼 図で覚える（建物・設備など ${FIGS.length}枚）`, FigList())}
   ${fold("listen", "🎧 聞いて覚える（講義・聞き流し）", ListenCard())}`;
 }
 
@@ -2237,6 +2256,7 @@ function tacReview(it, k, m) {
     ${ex.items.map((e, j) => `<div style="margin:10px 0 0;font-size:14px;line-height:1.75;border-top:1px dashed var(--line);padding-top:8px">
       <div style="display:flex;gap:8px">${markBadge(myMark(`T${it.tac[0]}-${q.n}`, e.k))}<b style="flex:none">${esc(e.k)}</b><span class="grow">${esc(lines[j] || "")}</span></div>${markCmp(myMark(`T${it.tac[0]}-${q.n}`, e.k), e.ok)}<span class="tag ${e.ok ? "ok" : "ng"}">${e.ok ? "○" : "×"}</span> <span>${brk(e.t, e.key)}</span></div>`).join("")}
     ${ex.sum ? `<div class="mt" style="font-size:14px;font-weight:700">${esc(ex.sum)}</div>` : ""}
+    ${figBox(figFor({ id: `TR${it.tac[0]}-${q.n}`, q: q.stem, sub: q.t, exp: (lines || []).join(" ") }))}
     <div class="small mt">難易度 ${TAC_LV[q.lv] || q.lv}</div></details>`;
 }
 // v6.40 下田さん「ごちゃごちゃして分かりにくいからタブ分けていいよ」→ TACの本から作ったもの（予想模試・重要数字）は「TAC本」タブにまとめる
