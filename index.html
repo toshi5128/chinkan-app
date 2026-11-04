@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.54";
+const APP_VERSION = "2026-11-04-v6.55";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -657,7 +657,7 @@ function pastNext() { for (const [y, r] of PAST_ORDER) { if (y === "T") { if (TA
 function normaRank() {
   const st = Object.fromEntries(secStats().map(x => [x.id, x.acc])), t = today();
   const areaW = { A: 0, B: 0, C: 25, D: 18, E: 25 };
-  return [...Q, ...TQ, ...PQ].map(q => { const c = card(q.id);
+  return [...Q, ...TQ, ...ZQ, ...PQ].map(q => { const c = card(q.id);
     if (c?.last === t) return null;
     const acc = st[q.sec] ?? 0.5;
     const sc = (c?.lastOk === false ? 120 : 0) + (c?.lastTri ? 80 : 0) + (c ? c.w * 12 + (c.tri || 0) * 15 - (c.box || 0) * 8 : 30) + (1 - acc) * 60 + (areaW[q.area] || 0) + Math.random() * 10;
