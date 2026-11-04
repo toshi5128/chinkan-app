@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.46";
+const APP_VERSION = "2026-11-04-v6.47";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -2083,8 +2083,10 @@ function tacReview(it, k, m) {
 // v6.40 下田さん「ごちゃごちゃして分かりにくいからタブ分けていいよ」→ TACの本から作ったもの（予想模試・重要数字）は「TAC本」タブにまとめる
 function TacPage() {
   const hist = S.mocks.filter(h => h.tac).slice(-6).reverse(), tn = TACNUM.length ? TACNUM.filter(x => S.tacnum[x.n]).length : 0;
-  const mid = S.cur && !S.cur.done && S.cur.tac;
+  const mid = S.cur && !S.cur.done && S.cur.tac, fin = S.cur && S.cur.done && S.cur.tac && S.cur.pick.some(x => x === null);
   return `${mid ? `<div class="card"><div class="row" style="gap:8px"><span class="grow">TAC第${S.cur.tac}回を解いている途中です（${S.cur.pick.filter(x => x !== null).length}/50問）</span><button class="btn" style="width:auto;padding:8px 14px" onclick="go('mock')">▶ 続きへ</button></div></div>` : ""}
+  ${fin ? `<div class="card"><div class="row" style="gap:8px"><span class="grow">TAC第${S.cur.tac}回は時間切れで採点されました。未解答 ${S.cur.pick.filter(x => x === null).length}問</span><button class="btn" style="width:auto;padding:8px 14px" onclick="tacResume()">▶ 続きから</button></div>
+    <button class="linkbtn" onclick="go('mock')">結果と解説を見る</button></div>` : ""}
   ${TacCard()}
   ${MarksCard()}
   ${TACNUM.length ? `<div class="card"><h2>🔢 試験によく出る重要数字</h2><div class="small">本の76項目を穴埋めにしたもの。数字を言えたら「覚えた」で外していきます。</div>
@@ -2093,6 +2095,17 @@ function TacPage() {
     <div class="btns mt"><button class="btn sec" onclick="go('tacnum')">開く</button></div></div>` : ""}
   ${hist.length ? `<div class="card"><h2>TAC模試の結果</h2>${hist.map(h => { const R = TAC?.rounds?.[h.tac], ok = R ? h.score >= R.pass : h.score >= PASS_LINE;
     return `<div class="row" style="border-top:1px solid var(--line);padding:8px 0"><span class="grow">${h.date.replace(/-/g, "/")}<span class="small">（第${h.tac}回・${h.min}分）</span></span><b class="num" style="color:${ok ? "var(--ok)" : "var(--ng)"}">${h.score}点</b><span class="small">/${h.n}</span></div>`; }).join("")}</div>` : ""}`;
+}
+
+// v6.47 下田さん「途中までなのに急に終わっちゃった。続きからやりたい」（120分の時間切れで自動採点）→ 時間切れのあとも、未解答の問題を続けて解ける。時間内の点数は別に残す
+function tacResume() {
+  const m = S.cur; if (!m || !m.done) return;
+  const last = S.mocks[S.mocks.length - 1];
+  if (last && last.tac === m.tac && !last.ext && m.timed == null) { m.timed = last.score; S.mocks.pop(); }
+  m.done = false; m.ext = true; m.end = null; m.peek = false;
+  m.limit = Math.floor((Date.now() - m.start) / 1000) + 7200; // ここから120分
+  const k = m.pick.findIndex(x => x === null); m.i = k >= 0 ? k : 0; m.qt = Date.now();
+  save(); go("mock");
 }
 
 function TacCard() {
@@ -2234,7 +2247,7 @@ function finishMock(timeUp) {
     if (!ok) (it.ids || []).forEach(id => { const c = S.cards[id] || { box: 0, c: 0, w: 0 }; c.box = Math.min(c.box || 1, 1); c.due = addDays(today(), 1); c.w = c.w || 0; S.cards[id] = c; });
   });
   m.score = score;
-  S.mocks.push({ date: today(), score, n: m.items.length, byArea, min: Math.round((m.end - m.start) / 60000), ...(m.tac ? { tac: m.tac } : {}) });
+  S.mocks.push({ date: today(), score, n: m.items.length, byArea, min: Math.round((m.end - m.start) / 60000), ...(m.tac ? { tac: m.tac, pick: m.pick.slice(), ...(m.ext ? { ext: true, timed: m.timed } : {}) } : {}) });
   save(); render(); window.scrollTo(0, 0);
 }
 // v6.29 下田さん「タブに過去問も追加したら？」「模擬試験じゃなくて過去問にしといて」→ 模試タブを「過去問」タブに。道場・答案用紙を上に、個数ドリル・模試はその下
@@ -2263,7 +2276,9 @@ function MockResult(m) {
   <div class="card center"><div class="small">${TR ? `TAC予想模試 第${m.tac}回（${TR.level}・合格推定${TR.pass}点）` : "模試の結果"}</div>
     <div class="hero" style="justify-content:center"><b class="num" style="color:${pass ? "var(--ok)" : "var(--ng)"}">${m.score}</b><span>/ ${m.items.length}点</span></div>
     <div class="mt"><span class="tag ${pass ? "ok" : "ng"}">${full ? (pass ? (TR ? "合格推定ライン到達" : "目標ライン到達") : `${TR ? "合格推定ライン" : "目標"}まであと${line - m.score}点`) : `正答率 ${Math.round(m.score / m.items.length * 100)}%（目標76%）`}</span></div>
-    <div class="small mt">かかった時間 ${Math.round((m.end - m.start) / 60000)}分</div></div>
+    <div class="small mt">かかった時間 ${Math.round((m.end - m.start) / 60000)}分</div>
+    ${m.timed != null ? `<div class="small mt">120分の時間内では <b>${m.timed}点</b>（時間切れのあと続きを解いた結果が上の点数）</div>` : ""}
+    ${m.tac && m.pick.some(x => x === null) ? `<div class="btns mt"><button class="btn" onclick="tacResume()">▶ 未解答の${m.pick.filter(x => x === null).length}問を続きから解く</button></div><div class="small">時間内の点数は別に残します。</div>` : ""}</div>
   <div class="card"><h2>分野別</h2>${Object.entries(by).map(([a, b]) => `<div class="area"><div><span class="dot" style="background:${AREAS[a].color}"></span>${AREAS[a].name}</div><div class="num small">${b.c}/${b.n}</div>
     <div class="bar" style="grid-column:1/-1"><i style="width:${b.c / b.n * 100}%;background:${AREAS[a].color}"></i></div></div>`).join("")}</div>
   ${m.spent ? MockTime(m) : ""}
@@ -2753,6 +2768,7 @@ function AnkiTheme(ti) {
   if (S.sess && S.sess.date === today() && S.sess.i < S.sess.ids.length && S.sess.ids.every(id => QM[id])) { sess = { ...S.sess }; view = "study"; }
   else if (S.sess) { S.sess = null; save(); }
   if (S.cur && !S.cur.done) view = "mock";
+  else if (S.cur?.done && S.cur.tac && S.cur.pick.some(x => x === null)) view = "tac";
   else if (S.pastCur && !S.pastCur.done && S.pastCur.pick.some(x => x != null)) view = "past";
   dojoBackfill();
   render();
