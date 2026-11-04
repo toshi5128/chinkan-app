@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.57";
+const APP_VERSION = "2026-11-04-v6.58";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -685,7 +685,8 @@ function lapInfo() {
 function startNorma() {
   const L = lapInfo(), rank = new Map(normaRank().map((id, i) => [id, i]));
   const left = L.ids.filter(id => (card(id)?.lap || 0) < L.n && card(id)?.last !== today()).sort((a, b) => (rank.get(a) ?? 1e9) - (rank.get(b) ?? 1e9));
-  const pick = (left.length ? left : L.ids.filter(id => (card(id)?.lap || 0) < L.n)).slice(0, NORMA_CHUNK);
+  // v6.58 下田さん「50問で区切らなくていい。セット丸ごとで」→ この周の残り全部を苦手順に1本で出す（途中でやめても同じ日なら続きから）
+  const pick = left.length ? left : L.ids.filter(id => (card(id)?.lap || 0) < L.n);
   if (!pick.length) { alertBox("今日解ける本番セットの問題がありません。"); return; }
   startSession(pick, `本番セット ${L.n}周目`);
 }
@@ -701,7 +702,7 @@ function naviPlan() {
     { done: false, title: "本番：個数問題は「4つ全部わかる問題」から", sub: "迷った問題は印をつけて最後に戻る", btn: "", label: "" }] };
   const norma = t >= NORMA_FROM;
   if (norma) { NORMA_Q = S.normaQ || 400; const n = normaDone(), px = pastNext(), pd = pastDoneOn(t), L = TQ.length ? lapInfo() : null;
-    add(n >= NORMA_Q, `✏️ 本番セット ${L ? `${L.n}周目 ${L.done}/${L.total}問` : ""}　今日 ${n}/${NORMA_Q}問`, `今まで×・△の問題＋TAC模試3回分の記述＋苦手特訓＋建物・実務の未挑戦。苦手順に50問ずつ。3周目からは2周続けて自信ありで正解した問題を外す。1日の数：${[400, 500, 700, 1000].map(v => v === NORMA_Q ? `【${v}】` : v).join("・")}（設定タブで変更）`, "startNorma()", n >= NORMA_Q ? "おかわり50問" : "50問解く");
+    add(n >= NORMA_Q, `✏️ 本番セット ${L ? `${L.n}周目 ${L.done}/${L.total}問` : ""}　今日 ${n}/${NORMA_Q}問`, `今まで×・△の問題＋TAC模試3回分の記述＋苦手特訓＋建物・実務の未挑戦。苦手順にこの周の残りを全部まとめて（途中でやめても続きから）。3周目からは2周続けて自信ありで正解した問題を外す。1日の数：${[400, 500, 700, 1000].map(v => v === NORMA_Q ? `【${v}】` : v).join("・")}（設定タブで変更）`, (sess && /^本番セット/.test(sess.label || "") && sess.i < sess.ids.length) ? "go('study')" : "startNorma()", (sess && /^本番セット/.test(sess.label || "") && sess.i < sess.ids.length) ? "続きから" : "解く");
     add(pd, `📝 過去問を1回（50問・120分）${px && !pd ? `：今日は ${esc(px.label)}` : ""}`, "本番と同じ時間で通しで。記述ごとに○×△をつける。終わったら判断ちがいと△を見直す", px ? "startPastNorma()" : "go('kako')", "始める");
     const R = Object.keys(S.marks).length ? markRows() : [], B = R.filter(r => r.bad).length, T = R.filter(r => r.m === "t").length;
     if (B + T) add(!!dd.marksRev, `🔍 ○×△の見直し（判断ちがい ${B}・迷った ${T}）`, "なぜその判断をしたかを解説で確認。理由が言えたら次へ", "S.done[today()]=S.done[today()]||{};S.done[today()].marksRev=true;save();go('marks')", "見る");
@@ -2157,7 +2158,7 @@ function TacPage() {
   ${TQ.length ? (() => { const seen = TQ.filter(q => card(q.id)).length, wr = TQ.filter(q => card(q.id)?.lastOk === false || card(q.id)?.lastTri).length;
     return `<div class="card"><h2>✏️ TAC模試の記述を一問一答で</h2><div class="small">3回分の記述を1つずつ○×に（全${TQ.length}問）。解説は本の文章です。ノルマの400問にも入ります。</div>
       <div class="row mt small"><span class="grow">挑戦</span><b class="num">${seen}/${TQ.length}</b>　×・△ <b class="num" style="color:var(--ng)">${wr}</b></div>
-      <div class="btns mt"><button class="btn" onclick="startTQ()">▶ 50問解く</button>${wr ? `<button class="btn sec" onclick="startTQ('wrong')">×・△だけ（${wr}問）</button>` : ""}</div></div>`; })() : ""}
+      <div class="btns mt"><button class="btn" onclick="startTQ()">▶ まだ解いていない記述を全部</button>${wr ? `<button class="btn sec" onclick="startTQ('wrong')">×・△だけ（${wr}問）</button>` : ""}</div></div>`; })() : ""}
   ${MarksCard()}
   ${TACNUM.length ? `<div class="card"><h2>🔢 試験によく出る重要数字</h2><div class="small">本の76項目を穴埋めにしたもの。数字を言えたら「覚えた」で外していきます。</div>
     <div class="row mt small"><span class="grow">覚えた</span><b class="num">${tn}/${TACNUM.length}</b></div>
@@ -2206,7 +2207,7 @@ function startTQ(mode) {
   const un = TQ.filter(q => !card(q.id)), wr = TQ.filter(q => card(q.id)?.lastOk === false || card(q.id)?.lastTri);
   const ids = mode === "wrong" ? shuffle(wr.map(q => q.id)) : (un.length ? shuffle(un.map(q => q.id)) : shuffle(wr.map(q => q.id)));
   if (!ids.length) { alertBox("該当する問題がありません。"); return; }
-  startSession(ids.slice(0, 50), mode === "wrong" ? "TAC記述 ×・△だけ" : "TAC記述を○×で");
+  startSession(ids, mode === "wrong" ? "TAC記述 ×・△だけ" : "TAC記述を○×で");
 }
 
 function TacCard() {
