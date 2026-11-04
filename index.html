@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.48";
+const APP_VERSION = "2026-11-04-v6.49";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -2128,7 +2128,7 @@ function TacCard() {
       return `<div class="row" style="border-top:1px solid var(--line);padding:9px 0;gap:8px"><span class="grow"><b>第${r}回</b>${R ? `<span class="small">（${R.level}・合格推定${R.pass}点）</span>` : `<span class="small">（準備中）</span>`}
         ${best != null ? `<br><span class="small">最高 <b style="color:${best >= R.pass ? "var(--ok)" : "var(--ng)"}">${best}点</b>・${hist.length}回</span>` : ""}</span>
         ${R ? `<div style="flex:none;text-align:center"><button class="btn" style="width:auto;padding:8px 14px" onclick="startTac('${r}')">▶ ${hist.length ? "もう一度" : "解く"}</button>
-          ${(() => { const f = tacFirstUnmarked(r); return f > 1 && f <= 50 && !(S.cur && S.cur.tac === r) ? `<br><button class="linkbtn" onclick="tacFrom('${r}',${f})">問${f}〜50の続きだけ解く</button>` : ""; })()}</div>` : ""}</div>`; }).join("")}</div>`;
+          ${(() => { const f = tacFirstUnmarked(r); return f > 1 && f <= 50 && !(S.cur && !S.cur.done && S.cur.tac === r) ? `<br><button class="linkbtn" onclick="tacFrom('${r}',${f})">問${f}〜50の続きだけ解く</button>` : ""; })()}</div>` : ""}</div>`; }).join("")}</div>`;
 }
 
 // ---------- 模試（○×の文を4つ組み合わせて本番形式の4択を作る） ----------
