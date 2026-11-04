@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.65";
+const APP_VERSION = "2026-11-04-v6.66";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1176,9 +1176,9 @@ function voiceHandle(t) {
   if (/もう一回|もう一度|もういっかい|繰り返|くりかえ/.test(t)) { sayQ(); return; }
   if (!answered) {
     if (/さんかく|サンカク|三角|△|迷|自信な|微妙/.test(t)) { sess.tri = true; render(); TTS.speak("三角。まるか、ばつで答えてください"); return; }
-    if (/ばつ|バツ|罰|抜|×|✕|ペケ|誤|あやまり|アヤマリ|違|ちが|チガ|間違|まちが|マチガ|不正解|ふせいかい|だめ|ダメ|駄目|うそ|ウソ|嘘|ブー|ぶー|ノー|^no$|いいえ/i.test(t)) { answer(false); return; }
+    if (/ばつ|バツ|罰|抜|×|✕|ペケ|誤|あやまり|アヤマリ|違|ちが|チガ|間違|まちが|マチガ|不正解|ふせいかい|だめ|ダメ|駄目|うそ|ウソ|嘘|ブー|ぶー|ノー|^no$|いいえ|あってな|合ってな|アッテナ/i.test(t)) { answer(false); return; }
     // v6.62 「まる」は短すぎて「0」「ゼロ」「Maru」「まあ」などに化けやすい → それも○として受ける
-    if (/まる|マル|丸|円|○|〇|◯|^[0０]$|ゼロ|maru|mar|まー|まぁ|まあ|正しい|ただしい|正解|せいかい|オーケー|オッケー|OK|ok|はい|イエス|そう/i.test(t)) { answer(true); return; }
+    if (/まる|マル|丸|円|○|〇|◯|^[0０]$|ゼロ|maru|mar|まー|まぁ|まあ|正しい|ただしい|あって|合って|アッテ|あつて|当たり|あたり|正解|せいかい|オーケー|オッケー|OK|ok|はい|イエス|そう/i.test(t)) { answer(true); return; }
   } else {
     if (/まぐれ/.test(t) && sess.ans === QM[sess.ids[sess.i]].a) { luck(); return; }
     if (/次|つぎ|ツギ|ネクスト|オッケー|OK|ok|はい|進/.test(t)) { nextQ(); return; }
@@ -1984,7 +1984,7 @@ function Study() {
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;gap:6px;margin-bottom:4px"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説を読む" : "読む"}</button><button class="spk" onclick="voiceToggle()" style="${VOICE.on ? "background:var(--ng);color:#fff" : ""}">🎤 ${VOICE.on ? "聞いてる" : "声で答える"}</button><button class="spk" onclick="S.skipOk=!S.skipOk;save();render()" style="${S.skipOk ? "background:var(--brand);color:#fff" : ""}">⚡ 速く ${S.skipOk ? "ON" : "OFF"}</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">自動読み上げ ${S.tts.auto ? "ON" : "OFF"}</button></div>` : ""}
-    ${VOICE.on ? `<div class="small" style="text-align:right;margin-bottom:4px;color:var(--ng)">🎤 「まる・正しい・オッケー」「ばつ・間違い・違う」「さんかく」→ 答え／「読んで」「解説」「つぎ」「もう一回」「まぐれ」「ストップ」<br><span id="vSt">${esc(VOICE.st || "準備中")}${VOICE.err ? `（エラー：${esc(VOICE.err)}）` : ""}</span>　<button class="linkbtn" onclick="voiceOnce()">🎙 押して話す</button><br><b id="vHeard">${VOICE.last ? `聞こえた：${esc(VOICE.last)}` : "（まだ何も聞こえていません）"}</b></div>` : ""}
+    ${VOICE.on ? `<div class="small" style="text-align:right;margin-bottom:4px;color:var(--ng)">🎤 「まる・正しい・合ってる・オッケー」「ばつ・間違い・違う」「さんかく」→ 答え／「読んで」「解説」「つぎ」「もう一回」「まぐれ」「ストップ」<br><span id="vSt">${esc(VOICE.st || "準備中")}${VOICE.err ? `（エラー：${esc(VOICE.err)}）` : ""}</span>　<button class="linkbtn" onclick="voiceOnce()">🎙 押して話す</button><br><b id="vHeard">${VOICE.last ? `聞こえた：${esc(VOICE.last)}` : "（まだ何も聞こえていません）"}</b></div>` : ""}
     <div class="small" style="text-align:right;margin-bottom:4px">${S.skipOk && S.autoNext ? "⚡ 自信ありで正解→すぐ次へ。△をつけて正解・不正解のときは解説を読む" : S.autoNext && S.tts.auto && TTS.ok ? "正解なら解説を読み終えて自動で次へ" : "「次へ」を押して進みます"}</div>
     ${q.pq ? `<div style="margin-bottom:8px;padding:8px 10px;border-radius:8px;background:var(--track);font-size:14px;line-height:1.7"><span class="small">📝 ${esc(q.from)}</span><br>元の問い：${esc(q.ctx)}<br><b>→ ここでは、下の記述が正しい（あてはまる）かを○×で</b></div>` : ""}
     <div class="qtext">${gl(q.q)}</div>
