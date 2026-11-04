@@ -255,7 +255,7 @@ let ZQ = [], Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUM
 const LEC_FILES = ["lec_1a", "lec_1b", "lec_2", "lec_3", "lec_4", "lec_5"];
 // 2026-10-05 下田さん「会話形式で・図やイラストでイメージしやすく」→ 講義をラジオ風の2人の会話＋図に（data/talk_*.json）。無いSectionは今までの講義のまま
 const TALK_FILES = ["talk_1a", "talk_1b", "talk_2", "talk_3", "talk_4", "talk_5"];
-const DATA_FILES = ["A", "B", "C", "D", "E", "X1", "X2", "X3", "X4", ...Array.from({ length: 11 }, (_, i) => "Y" + String(i + 1).padStart(2, "0"))];
+const DATA_FILES = ["A", "B", "C", "D", "E", "X1", "X2", "X3", "X4", "X5", ...Array.from({ length: 11 }, (_, i) => "Y" + String(i + 1).padStart(2, "0"))];
 async function loadQuestions() {
   const get = f => fetch(f, { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   const [chaps, past, nums, ...parts] = await Promise.all([get("sections.json"), get("data/past.json"), get("data/numbers.json"), ...DATA_FILES.map(f => get(`data/${f}.json`))]);
