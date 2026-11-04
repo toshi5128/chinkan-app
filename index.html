@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.47";
+const APP_VERSION = "2026-11-04-v6.48";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -2071,7 +2071,7 @@ function tacReview(it, k, m) {
   const q = tacQ(it); if (!q) return "";
   const ok = m.pick[k] === it.ans, lab = o => q.items ? `${o + 1}（${q.opts[o]}）` : String(o + 1);
   const ex = q.ex, lines = q.items || q.opts;
-  return `<details class="st"><summary><span class="tag ${ok ? "ok" : "ng"}">${ok ? "正解" : "×"}</span> 問${k + 1} ${esc(q.t)} <span class="chip">${q.lv}</span><span class="small">（あなた：${m.pick[k] === null ? "未解答" : lab(m.pick[k])}／正解：${lab(it.ans)}）</span></summary>
+  return `<details class="st"><summary><span class="tag ${ok ? "ok" : "ng"}">${ok ? "正解" : "×"}</span> 問${q.n} ${esc(q.t)} <span class="chip">${q.lv}</span><span class="small">（あなた：${m.pick[k] === null ? "未解答" : lab(m.pick[k])}／正解：${lab(it.ans)}）</span></summary>
     <div style="margin-top:8px;font-size:14px;font-weight:700;line-height:1.7">${esc(q.stem)}</div>
     ${ex.note ? `<div class="small mt">${esc(ex.note)}</div>` : ""}
     ${ex.body ? `<div style="margin:8px 0;font-size:14px;line-height:1.8">${br(ex.body)}</div>` : ""}
@@ -2108,6 +2108,16 @@ function tacResume() {
   save(); go("mock");
 }
 
+// 途中の答えが消えた（結果を閉じた・古い版で時間切れ）ときの救済：○×△の印がついていない最初の問題から、残りだけを解く
+function tacFrom(r, from) {
+  const R = TAC?.rounds?.[r]; if (!R) return;
+  if (S.cur && !S.cur.done && !confirm("解いている途中の模試があります。やめて始めますか？")) return;
+  const items = R.qs.map((q, i) => ({ area: q.a, tac: [String(r), i], ans: q.ans, opts: q.items ? q.opts : null })).slice(from - 1);
+  S.cur = { items, pick: items.map(() => null), flag: items.map(() => false), i: 0, start: Date.now(), done: false, limit: Math.round(items.length * 144), tac: String(r), from };
+  save(); go("mock");
+}
+const tacFirstUnmarked = r => { for (let n = 1; n <= 50; n++) if (!S.marks[`T${r}-${n}`]) return n; return 51; };
+
 function TacCard() {
   if (!S.dojoKey) return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2><div class="small">「過去問」タブの過去問道場を合言葉で開くと、TACの予想模試も解けるようになります。</div></div>`;
   if (!TAC) { tacLoad().then(ok => { if (ok && view === "tac") render(); }); return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2><div class="small">読み込み中…</div></div>`; }
@@ -2117,7 +2127,8 @@ function TacCard() {
     ${rs.map(r => { const R = TAC.rounds[r], hist = S.mocks.filter(h => h.tac === r), best = hist.length ? Math.max(...hist.map(h => h.score)) : null;
       return `<div class="row" style="border-top:1px solid var(--line);padding:9px 0;gap:8px"><span class="grow"><b>第${r}回</b>${R ? `<span class="small">（${R.level}・合格推定${R.pass}点）</span>` : `<span class="small">（準備中）</span>`}
         ${best != null ? `<br><span class="small">最高 <b style="color:${best >= R.pass ? "var(--ok)" : "var(--ng)"}">${best}点</b>・${hist.length}回</span>` : ""}</span>
-        ${R ? `<button class="btn" style="width:auto;padding:8px 14px" onclick="startTac('${r}')">▶ 解く</button>` : ""}</div>`; }).join("")}</div>`;
+        ${R ? `<div style="flex:none;text-align:center"><button class="btn" style="width:auto;padding:8px 14px" onclick="startTac('${r}')">▶ ${hist.length ? "もう一度" : "解く"}</button>
+          ${(() => { const f = tacFirstUnmarked(r); return f > 1 && f <= 50 && !(S.cur && S.cur.tac === r) ? `<br><button class="linkbtn" onclick="tacFrom('${r}',${f})">問${f}〜50の続きだけ解く</button>` : ""; })()}</div>` : ""}</div>`; }).join("")}</div>`;
 }
 
 // ---------- 模試（○×の文を4つ組み合わせて本番形式の4択を作る） ----------
@@ -2199,10 +2210,10 @@ function Mock() {
        <div class="opts">${it.opts.map((o, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${o}</span></button>`).join("")}</div>`
     : `<div class="opts">${stmts.map((q, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${esc(q.q)}</span></button>`).join("")}</div>`;
   return `
-  <div class="qhead"><span>${m.tac ? `TAC第${m.tac}回 ` : ""}問${m.i + 1} / ${m.items.length}　<span class="chip" style="color:${AREAS[it.area].color}">${AREAS[it.area].short}</span></span><span class="timer num" id="timer" data-start="${m.start}" data-limit="${m.limit || 7200}" data-kind="mock"></span></div>
+  <div class="qhead"><span>${m.tac ? `TAC第${m.tac}回 ` : ""}問${m.i + (m.from || 1)} / ${m.from ? 50 : m.items.length}　<span class="chip" style="color:${AREAS[it.area].color}">${AREAS[it.area].short}</span></span><span class="timer num" id="timer" data-start="${m.start}" data-limit="${m.limit || 7200}" data-kind="mock"></span></div>
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;margin-bottom:4px"><button class="spk" id="stepBtn" onclick="sayMock()">🔊 問題文</button></div>` : ""}
-    <div class="qtext" style="font-weight:700">【問${m.i + 1}】${it.tac ? esc(tacQ(it)?.stem || "") : STEM[it.type]}</div>
+    <div class="qtext" style="font-weight:700">【問${m.i + (m.from || 1)}】${it.tac ? esc(tacQ(it)?.stem || "") : STEM[it.type]}</div>
     ${body}
     <div class="row mt" style="gap:8px">
       <button class="btn ghost" style="padding:10px" onclick="moveMock(-1)" ${m.i ? "" : "disabled"}>◀ 前へ</button>
@@ -2211,7 +2222,7 @@ function Mock() {
     </div>
   </div>
   <div class="card"><div class="row small"><span class="grow">解答 ${answeredN}/${m.items.length}</span><span>🚩＝見直し</span></div>
-    <div class="grid mt">${m.items.map((_, k) => `<button class="${k === m.i ? "cur" : m.pick[k] !== null ? "ans" : ""} ${m.flag[k] ? "flag" : ""}" onclick="mockGo(${k})">${k + 1}</button>`).join("")}</div>
+    <div class="grid mt">${m.items.map((_, k) => `<button class="${k === m.i ? "cur" : m.pick[k] !== null ? "ans" : ""} ${m.flag[k] ? "flag" : ""}" onclick="mockGo(${k})">${k + (m.from || 1)}</button>`).join("")}</div>
     ${(() => { const n = m.pick.filter(x => x !== null).length, c = m.items.filter((it, k) => m.pick[k] === it.ans).length, line = m.tac && TAC?.rounds?.[m.tac]?.pass;
       // v6.46 下田さん「途中で今時点の点数を知りたい」→ 終わらせずに、答えた問題だけの正解数を出す（どれが×かは出さない）
       return `<div class="mt" style="border-top:1px solid var(--line);padding-top:8px">${m.peek ? `<div class="row"><span class="grow">いまの点数（答えた${n}問のうち）</span><b class="num" style="font-size:22px;color:var(--brand)">${c}点</b></div>
