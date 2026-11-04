@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.37";
+const APP_VERSION = "2026-11-04-v6.38";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -197,6 +197,7 @@ function load() {
   if (!s.pd200) { s.pd200 = 1; s._toPd200 = s.newPerDay !== 200; s.newPerDay = 200; }
   s.tts = Object.assign({ auto: true, rate: 1.2, think: 4, lecQuiz: true, lecMix: true }, s.tts || {});
   s.heard = s.heard || {};
+  s.tacnum = s.tacnum || {}; // TAC重要数字76で「覚えた」にした番号 → 1
   s.anki = s.anki || {}; // 暗記まとめで「覚えた」にした項目：テーマ|問い → 1
   s.autoNext = s.autoNext ?? true;
   if (!s.an65) { s.an65 = 1; s.autoNext = true; } // 2026-10-06 下田さんの端末でOFFになっていた → 一度だけONに戻す // 正解なら自動で次へ   // 講義を最後まで聞いた回数：Section → {n, last}
@@ -251,7 +252,7 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000));
 
 // ---------- 問題 ----------
-let ZQ = [], Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], ANKI = [], CONF = [], LEC = {}, AUD = {}, TALK = {};
+let ZQ = [], Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], TACNUM = [], ANKI = [], CONF = [], LEC = {}, AUD = {}, TALK = {};
 const LEC_FILES = ["lec_1a", "lec_1b", "lec_2", "lec_3", "lec_4", "lec_5"];
 // 2026-10-05 下田さん「会話形式で・図やイラストでイメージしやすく」→ 講義をラジオ風の2人の会話＋図に（data/talk_*.json）。無いSectionは今までの講義のまま
 const TALK_FILES = ["talk_1a", "talk_1b", "talk_2", "talk_3", "talk_4", "talk_5"];
@@ -266,6 +267,7 @@ async function loadQuestions() {
   TALK = Object.assign({}, ...talks);
   NUMS = Array.isArray(nums) ? nums : [];
   const KEYS = await fetch("data/keys.json", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
+  TACNUM = await fetch("data/tacnum.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   ANKI = await fetch("data/anki.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   CONF = await fetch("data/confuse.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   AUD = await fetch("audio/index.json", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
@@ -378,7 +380,7 @@ const TABS = [
   ["stats", "記録", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
   ["settings", "設定", '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'],
 ];
-const PARENT = { past: "kako", dojo: "kako", mock: "kako", numbers: "book", anki: "book", listen: "study", lecture: "book" };
+const PARENT = { past: "kako", dojo: "kako", mock: "kako", numbers: "book", tacnum: "book", anki: "book", listen: "study", lecture: "book" };
 function renderTabs() {
   document.getElementById("tabs").innerHTML = TABS.map(([k, l, d]) =>
     `<button class="${(PARENT[view] || view) === k ? "on" : ""}" onclick="go('${k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${l}</button>`).join("");
@@ -405,7 +407,7 @@ function render() {
   renderTabs();
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "kako" ? Kako() : view === "settings" ? Settings() : Stats());
+  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "tacnum" ? TacNum() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "kako" ? Kako() : view === "settings" ? Settings() : Stats());
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -1676,7 +1678,8 @@ function Book() {
     <div class="small mt">左の□は自動です。🎧の講義を最後まで聞くと「1」、2回目を最後まで聞くと「2」…と増えます。「解く」でそのSectionの問題だけを出します。</div>
     ${ANKI.length ? `<div class="mt"><button class="btn" onclick="ankiMode='anki';ankiOpen=null;go('anki')">🧠 暗記まとめ（罰則・期間・数字・「〜つ」もの）</button></div>` : ""}
     ${CONF.length ? `<div class="mt"><button class="btn" onclick="ankiMode='conf';ankiOpen=null;go('anki')">🔀 まぎらわしい比較（左右に並べて違いを見る）</button></div>` : ""}
-    ${NUMS.length ? `<div class="mt"><button class="btn sec" onclick="go('numbers')">🔢 数字まとめ（${NUMS.length}項目）</button></div>` : ""}</div>
+    ${NUMS.length ? `<div class="mt"><button class="btn sec" onclick="go('numbers')">🔢 数字まとめ（${NUMS.length}項目）</button></div>` : ""}
+    ${TACNUM.length ? `<div class="mt"><button class="btn sec" onclick="go('tacnum')">🎯 TAC重要数字 穴埋め（${TACNUM.length}問・覚えた${Object.keys(S.tacnum).length}）</button></div>` : ""}</div>
   ${BundleCard()}
   ${CHAPS.map(c => { const secs = SECS.filter(x => x.ch === c.ch), r = secs.filter(x => S.read[x.id]).length, open = cur === c.ch;
     return `<div class="card"><button onclick="openCh=${open ? -1 : c.ch};render()" style="border:0;background:none;padding:0;width:100%;text-align:left">
@@ -2486,6 +2489,7 @@ function Numbers() {
   return `<div class="card"><h2>🔢 数字まとめ</h2><div class="small">本番は数字のひっかけが多い試験です。「答えを隠す」にすると、タップするまで数字が見えないので暗記テストになります。</div>
     <div class="row mt" style="gap:6px;flex-wrap:wrap">${CHAPS.map(c => `<button class="chip" style="border:0;padding:6px 12px;font-size:13px;${numCh === c.ch ? "background:var(--brand);color:#fff" : ""}" onclick="numCh=${c.ch};numOpen={};render()">CH${c.ch}</button>`).join("")}
       <span class="grow"></span><button class="linkbtn" onclick="numHide=!numHide;numOpen={};render()">${numHide ? "答えを表示" : "答えを隠す"}</button></div>
+    ${TACNUM.length ? `<div class="mt"><button class="btn sec" onclick="go('tacnum')">🎯 TAC「試験によく出る重要数字」76問を穴埋めで</button></div>` : ""}
     ${TTS.ok ? `<div class="mt"><button class="btn sec" onclick="sayNums()">🎧 CH${numCh}の数字を通しで聞く</button></div>` : ""}</div>
   <div class="card">${list.map((x, i) => { const shown = !numHide || numOpen[i];
     return `<div style="border-top:${i ? "1px solid var(--line)" : "0"};padding:9px 0" ${numHide ? `onclick="numOpen[${i}]=!numOpen[${i}];render()"` : ""}>
@@ -2493,6 +2497,31 @@ function Numbers() {
       <div style="font-weight:700;font-size:14.5px;margin-top:2px">${esc(x.item)}</div>
       <div style="font-size:15px;margin-top:2px;color:${shown ? "var(--brand)" : "var(--sub)"}">${shown ? esc(x.num) : "（タップで表示）"}</div>
       ${shown && x.tip ? `<div class="small">💡 ${esc(x.tip)}</div>` : ""}</div>`; }).join("") || `<div class="small">この章の数字はまだありません。</div>`}</div>
+  <div class="center"><button class="linkbtn" onclick="go('book')">◀ 教科書に戻る</button></div>`;
+}
+
+// ---------- 🎯 TAC重要数字 穴埋め（2026-11-04 下田さん「試験によく出る重要数字を暗記ポイントとしてやっておきたい」） ----------
+// TAC『あてる』の重要数字76項目と同じ論点・同じ数字を、文はこちらで書き直して穴埋めに。空欄をタップで答え、言えたら「覚えた」で外す
+let tnOpen = {}, tnLeft = false, tnCat = "";
+function tnFill(t, open) { return esc(t).replace(/\[\[(.+?)\]\]/g, (_, a) => open ? `<b style="color:var(--brand);border-bottom:2px solid var(--brand);padding:0 2px">${a}</b>` : `<span style="display:inline-block;min-width:2.6em;border-bottom:2px solid var(--sub);color:transparent">${a}</span>`); }
+function tnMark(n) { if (S.tacnum[n]) delete S.tacnum[n]; else S.tacnum[n] = 1; save(); render(); }
+function TacNum() {
+  if (!TACNUM.length) return `<div class="card">準備中です。</div>`;
+  const cats = [...new Set(TACNUM.map(x => x.cat))], done = TACNUM.filter(x => S.tacnum[x.n]).length;
+  const list = TACNUM.filter(x => (!tnCat || x.cat === tnCat) && (!tnLeft || !S.tacnum[x.n]));
+  return `<div class="card"><h2>🎯 TAC重要数字 穴埋め</h2>
+    <div class="small">『あてる』の「試験によく出る重要数字」76項目です。文を読んで空欄の数字を言い、タップで答え合わせ。言えたら「覚えた」で外します。</div>
+    <div class="row mt small"><span class="grow">覚えた</span><b class="num">${done}/${TACNUM.length}</b></div>
+    <div class="bar mt"><i style="width:${done / TACNUM.length * 100}%;background:var(--ok)"></i></div>
+    <div class="row mt" style="gap:6px;flex-wrap:wrap">${["", ...cats].map(c => `<button class="chip" style="border:0;padding:6px 10px;font-size:12.5px;${tnCat === c ? "background:var(--brand);color:#fff" : ""}" onclick="tnCat='${c}';tnOpen={};render()">${c || "全部"}</button>`).join("")}</div>
+    <div class="row mt"><label class="small"><input type="checkbox" ${tnLeft ? "checked" : ""} onchange="tnLeft=this.checked;render()"> まだ覚えていないものだけ</label><span class="grow"></span>
+      <button class="linkbtn" onclick="tnOpen={};render()">全部隠す</button></div></div>
+  <div class="card">${list.map((x, i) => { const o = !!tnOpen[x.n], ok = !!S.tacnum[x.n];
+    return `<div style="border-top:${i ? "1px solid var(--line)" : "0"};padding:10px 0">
+      <div class="small"><b class="num">No.${x.n}</b>　${esc(x.cat)}</div>
+      <div style="font-size:15px;line-height:1.9;margin-top:2px" onclick="tnOpen[${x.n}]=!tnOpen[${x.n}];render()">${tnFill(x.t, o)}</div>
+      <div class="row" style="gap:8px;margin-top:4px"><button class="linkbtn" onclick="tnOpen[${x.n}]=!tnOpen[${x.n}];render()">${o ? "隠す" : "答えを見る"}</button><span class="grow"></span>
+        <button class="chip" style="border:0;padding:5px 12px;${ok ? "background:var(--ok);color:#fff" : ""}" onclick="tnMark(${x.n})">${ok ? "✓ 覚えた" : "覚えた"}</button></div></div>`; }).join("") || `<div class="small">全部覚えました。</div>`}</div>
   <div class="center"><button class="linkbtn" onclick="go('book')">◀ 教科書に戻る</button></div>`;
 }
 
