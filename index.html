@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.66";
+const APP_VERSION = "2026-11-04-v6.67";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1151,9 +1151,13 @@ function voiceStop() { VOICE.on = false; try { VOICE.rec?.abort(); } catch (e) {
 function voiceListen() {
   if (!VOICE.on) return;
   const R = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-  R.lang = "ja-JP"; R.continuous = false; R.interimResults = false; R.maxAlternatives = 5;
-  R.onresult = e => { const r = e.results[e.results.length - 1]; if (!r.isFinal) return;
+  R.lang = "ja-JP"; R.continuous = false; R.interimResults = true; R.maxAlternatives = 5; let done = false;
+  // v6.67 下田さん「聞き取りが鈍い」→ 言い終わり（確定）を待たず、途中の聞き取りで言葉が分かった時点ですぐ反応する
+  R.onresult = e => { if (done) return; const r = e.results[e.results.length - 1];
     const alts = [...r].map(a => a.transcript); VOICE.last = alts[0];
+    const short = alts[0].replace(/\s/g, "");
+    if (!r.isFinal) { if (window.speechSynthesis?.speaking && short.length > 4) return; if (!voiceMatch(alts.join(" "))) return; }
+    done = true; setTimeout(() => { try { R.abort(); } catch (x) {} }, 50);
     // v6.61 読み上げ中でも「まる」などの短い答えは受け付ける（読み上げは止める）。長い文は読み上げの音を拾ったものとして無視
     if (window.speechSynthesis?.speaking && alts[0].replace(/\s/g, "").length > 8) return;
     if (window.speechSynthesis?.speaking) TTS.stop();
@@ -1162,9 +1166,12 @@ function voiceListen() {
   R.onaudiostart = () => vSt("🟢 マイクON・話してください");
   R.onspeechstart = () => vSt("🔵 声を検知中…");
   R.onerror = e => { if (e.error !== "no-speech" && e.error !== "aborted") { VOICE.err = e.error; vSt("⚠"); } if (e.error === "not-allowed" || e.error === "service-not-allowed") { VOICE.on = false; alertBox("マイクが許可されていません。ブラウザの設定でこのサイトのマイクを許可してください。"); render(); } };
-  R.onend = () => { vSt("⏸ 再接続中"); if (VOICE.on) setTimeout(voiceListen, 250); };
+  R.onend = () => { vSt("⏸ 再接続中"); if (VOICE.on) setTimeout(voiceListen, 60); };
   VOICE.rec = R; try { R.start(); } catch (e) { setTimeout(voiceListen, 800); }
 }
+// 途中の聞き取りでも反応してよい言葉か（答え・次へ・読んで等が入っているか）
+function voiceMatch(t) { t = t.replace(/\s/g, ""); const a = sess && sess.ans !== null;
+  return /ストップ|止め|もう一回|もう一度|読んで|よんで|解説/.test(t) || (!a && /さんかく|サンカク|三角|迷|ばつ|バツ|間違|まちが|違|ちが|誤|不正解|ダメ|だめ|いいえ|まる|マル|丸|正しい|ただしい|合って|あって|オッケー|オーケー|OK|はい/i.test(t)) || (a && /次|つぎ|ツギ|オッケー|OK|はい|まぐれ/i.test(t)); }
 function voiceHandle(t) {
   t = t.replace(/\s/g, "");
   if (/ストップ|止め|やめ/.test(t)) { voiceStop(); TTS.speak("音声入力を止めます"); render(); return; }
