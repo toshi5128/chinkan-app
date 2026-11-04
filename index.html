@@ -162,7 +162,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.68";
+const APP_VERSION = "2026-11-05-v6.69";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1002,7 +1002,7 @@ function Dojo() {
     return `<button onclick="dojoPick(${k})" ${done ? "disabled" : ""} style="flex:1;border:${c ? "2.5px" : "1.5px"} solid ${c ? `var(--${c})` : "var(--line)"};background:${c ? `var(--${c}bg)` : "var(--card)"};color:var(--ink);border-radius:9px;padding:8px 0;font-weight:700;font-size:16px">${k}${ansTag(done && right, done && mine)}</button>`; }).join("")}</div>`;
   return `
   <div class="pbar"><div class="row" style="gap:8px"><span class="grow" style="font-weight:700">🥋 ${esc(dsess.label)}　${dsess.i + 1}/${dsess.ids.length}問目</span>${dsess.year ? `<span class="small">合格点 <b>${pastYear(dsess.year)?.pass}点</b></span>` : ""}</div>
-    <div class="small">${dsess.done ? `${dsess.done}問中 <b style="color:var(--ok);font-size:15px">${dsess.ok}問正解</b>（${Math.round(dsess.ok / dsess.done * 100)}%）` : "まだ答えていません"}</div></div>
+    <div class="small">${dsess.done ? `${dsess.rs ? "リセット後 " : ""}${dsess.done}問中 <b style="color:var(--ok);font-size:15px">${dsess.ok}問正解</b>（${Math.round(dsess.ok / dsess.done * 100)}%） <button class="spk" style="padding:2px 8px;font-size:12px" onclick="accReset(1)">🔄 リセット</button>` : dsess.rs ? "リセットしました。ここから数えます" : "まだ答えていません"}</div></div>
   <div class="card">
     <div class="row" style="gap:6px;margin-bottom:4px"><span class="chip">${esc(pastYear(q.year)?.label || q.year)} 問${q.no}</span>${sec ? `<span class="small grow">${esc(q.sec)} ${esc(sec.title)}</span>` : `<span class="grow"></span>`}${TTS.ok ? `<button class="spk" id="stepBtn" onclick="sayDojo()">${dsess.pick != null ? "🔊 解説" : "🔊 問題文"}</button>` : ""}</div>
     ${h && !done ? `<div class="small" style="margin-bottom:4px">前回：${h.lastOk ? "○ 正解" : "× 不正解"}（${mdj(h.last)}）</div>` : ""}
@@ -1987,7 +1987,7 @@ function Study() {
   ${range.length ? `<div class="small" style="margin:6px 2px 0">📅 今日の範囲：<b>${range.join("・")}</b>（ここから新しい問題を出しています。ほかは復習の問題）</div>` : ""}
   ${q.sec ? `<div class="small" style="margin:4px 2px 6px">📖 この問題は <b>Section ${esc(q.sec || "")} ${esc(sx?.title || "")}</b>${sx ? `（教科書 p.${sx.page}）` : ""}${range.length && !range.includes(q.sec) ? ` <span class="chip">復習</span>` : ""}</div>` : ""}
   ${StudyRefBar(q, answered && !ok)}
-  ${sess.done ? `<div class="row" style="margin:0 2px 6px;gap:8px;font-size:14px"><span class="grow">✅ このセットの正解率 <b class="num" style="font-size:18px;color:${pctColor(sess.ok / sess.done)}">${Math.round(sess.ok / sess.done * 100)}%</b>（${sess.ok}/${sess.done}問）</span>${(() => { const r = redoStats(); return r.done ? `<span class="small">解き直し全体 ${Math.round(r.acc * 100)}%</span>` : ""; })()}</div>` : ""}
+  ${sess.done ? `<div class="row" style="margin:0 2px 6px;gap:8px;font-size:14px"><span class="grow">✅ ${sess.rs ? "リセット後" : "このセット"}の正解率 <b class="num" style="font-size:18px;color:${pctColor(sess.ok / sess.done)}">${Math.round(sess.ok / sess.done * 100)}%</b>（${sess.ok}/${sess.done}問）</span>${(() => { const r = redoStats(); return r.done ? `<span class="small">解き直し全体 ${Math.round(r.acc * 100)}%</span>` : ""; })()}<button class="spk" style="padding:3px 9px;font-size:12px" onclick="accReset()">🔄 リセット</button></div>` : ""}
   <div class="qhead"><span>${esc(sess.label)} ${sess.i + 1}/${sess.ids.length}${(() => { if (today() >= NORMA_FROM) return `<span style="margin-left:8px;color:var(--brand);font-weight:700;white-space:nowrap">今日 ${normaDone()}/${S.normaQ || 500}</span>`; const tp = todayPlan(); return tp.newTotal ? `<span style="margin-left:8px;color:var(--brand);font-weight:700;white-space:nowrap">今日 ${tp.newDone}/${tp.newTotal}</span>` : ""; })()}</span>
     <span><span class="chip" style="color:${A.color}">${A.short}</span> <span class="chip">${esc(q.sub || "")}</span>${c ? "" : ' <span class="chip">NEW</span>'}</span></div>
   <div class="card">
@@ -2076,6 +2076,9 @@ function playRef(sec, bi) {
 }
 let autoTimer = null, autoHard = null;
 function cancelAuto() { clearTimeout(autoTimer); clearTimeout(autoHard); autoTimer = null; TTS.stop(); render(); }
+// v6.69 下田さん「正解率をリセットできるボタンを。押すまでは今の正解率を出しておいて」
+function accReset(dojo) { const x = dojo ? dsess : sess; if (!x || !x.done) return; if (!confirm(`今の正解率（${x.done}問中${x.ok}問・${Math.round(x.ok / x.done * 100)}%）をリセットして、ここから数え直しますか？\n（問題の記録や進み具合は消えません）`)) return;
+  x.ok = 0; x.done = 0; x.rs = 1; if (dojo) save(); else saveSess(); render(); }
 function answer(v) {
   const q = QM[sess.ids[sess.i]]; const ok = v === q.a;
   sess.ans = v; sess.done++; if (ok) sess.ok++;
