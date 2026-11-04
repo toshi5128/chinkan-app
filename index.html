@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.38";
+const APP_VERSION = "2026-11-04-v6.39";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -659,7 +659,8 @@ function naviPlan() {
     if (un || z.wrong) add(false, `🎯 苦手特訓 ${z.seen}/${z.n}問${z.seen ? `（正解 ${Math.round(z.ok / z.seen * 100)}%）` : ""}`, un ? "過去問で落とした所（保証・賃料・契約の終了・使用貸借・建築基準法・管理業法の例外・数字）の新しい問題。迷ったら○にしない" : `全問解きました。今も間違えたままの${z.wrong}問をもう一度`, "startNigate()", un ? "解く" : "間違いを解く"); }
   if (PQ.length) { const pq = pqStat(), un = pq.ids.length - pq.seen;
     if (un || pq.still) add(false, `🧩 間違えた過去問を○×で ${pq.seen}/${pq.ids.length}問`, un ? `間違えた${pq.qn}問を記述ごとの○×に分けたもの。今日20問ずつ・本番までに全部` : `まだ✕の文が${pq.still}問。0になるまで`, un ? "startPQ()" : "startPQ('still')", "解く"); }
-  if (MOCK_PLAN.includes(t)) add(!!dd.mock, "🏁 本番リハーサル（4択50問・120分）", "本番と同じ13:00から通しで。40点以上を2回が合格圏の目安", "startMock(50)", "始める");
+  if (MOCK_PLAN.includes(t)) { const tr = TAC?.rounds?.[String(MOCK_PLAN.indexOf(t) + 1)];
+    add(!!dd.mock, tr ? `🏁 本番リハーサル：TAC予想模試 第${MOCK_PLAN.indexOf(t) + 1}回（50問・120分）` : "🏁 本番リハーサル（4択50問・120分）", tr ? `本番と同じ13:00から通しで。合格推定${tr.pass}点以上が目安` : "本番と同じ13:00から通しで。40点以上を2回が合格圏の目安", tr ? `startTac('${MOCK_PLAN.indexOf(t) + 1}')` : "startMock(50)", "始める"); }
   if (dl <= LAST_WEEK) {
     add(!!dd.nums, "🔢 数字まとめ（答えを隠して）", "数字のひっかけ対策。言えなかった数字だけ見直す", "go('numbers')", "開く");
     add(!!dd.count, "🔢 個数問題ドリル10問", "4つの文を全部判断する練習", "startCountDrill()", "解く");
@@ -716,7 +717,7 @@ async function dojoLoad(key) {
     const r = await fetch(CLOUD, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "load", key }) }).then(x => x.json());
     if (!r.data?.qs?.length) return false;
     const fresh = !DOJO || DOJO.v !== r.data.v;
-    DOJO = r.data; S.dojoKey = key; save(); dojoBackfill(); pqBuild();
+    DOJO = r.data; S.dojoKey = key; save(); dojoBackfill(); pqBuild(); tacLoad().then(ok => { if (ok && view === "kako") render(); });
     if (fresh) { try { localStorage.setItem(DOJO_LS, JSON.stringify(DOJO)); } catch (e) {} }
     return true;
   } catch (e) { return false; }
@@ -1968,6 +1969,68 @@ function StudyMenu() {
     <div class="mt"><button class="btn ghost" onclick="TTS.speak('この速さで読み上げます。管理戸数が二百戸以上の賃貸住宅管理業者は、登録が必要です。')">🔊 試しに聞く</button></div></div>` : ""}`;
 }
 
+// ---------- 🎯 TAC予想模試（2026-11-04 下田さん「買ってきたTACの本の模擬試験を携帯でやりたい」「解説はテキストどおりに」） ----------
+// 本の問題・解説は出版社の著作物。公開の置き場（GitHub）には暗号化した data/tac.bin だけを置き、過去問道場の合言葉を知っている端末だけが開ける
+let TAC = null, tacBusy = false;
+async function tacLoad() {
+  if (TAC || tacBusy || !S.dojoKey || !crypto?.subtle) return !!TAC;
+  tacBusy = true;
+  try {
+    const buf = new Uint8Array(await fetch("data/tac.bin", { cache: "no-store" }).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); }));
+    const kb = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("chinkan-tac:" + S.dojoKey));
+    const k = await crypto.subtle.importKey("raw", kb, "AES-GCM", false, ["decrypt"]);
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, k, buf.slice(12));
+    TAC = JSON.parse(await new Response(new Blob([pt]).stream().pipeThrough(new DecompressionStream("gzip"))).text());
+  } catch (e) { TAC = null; }
+  tacBusy = false; return !!TAC;
+}
+const tacQ = it => TAC?.rounds?.[it.tac[0]]?.qs?.[it.tac[1]];
+const TAC_LV = { A: "A＝必ず取る", B: "B＝合否を分ける", C: "C＝捨ててよい" };
+function startTac(r) {
+  const R = TAC?.rounds?.[r]; if (!R) { alertBox("この回はまだ入っていません。"); return; }
+  if (S.cur && !S.cur.done && !confirm("解いている途中の模試があります。やめて、TAC第" + r + "回を始めますか？")) return;
+  if (AP.el && !AP.el.paused) AP.el.pause();
+  const items = R.qs.map((q, i) => ({ area: q.a, tac: [String(r), i], ans: q.ans, opts: q.items ? q.opts : null }));
+  S.cur = { items, pick: items.map(() => null), flag: items.map(() => false), i: 0, start: Date.now(), done: false, limit: 7200, tac: String(r) };
+  save(); go("mock");
+}
+function tacBody(it, m) {
+  const q = tacQ(it); if (!q) return `<div class="small">問題データを読み込めませんでした。電波の良いところで開き直してください。</div>`;
+  return q.items
+    ? `<div class="stmts">${q.items.map((t, k) => `<div><b>${KANA[k]}</b><span>${esc(t)}</span></div>`).join("")}</div>
+       <div class="opts">${q.opts.map((o, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${esc(o)}</span></button>`).join("")}</div>`
+    : `<div class="opts">${q.opts.map((o, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${esc(o)}</span></button>`).join("")}</div>`;
+}
+function tacSay(it, n) {
+  const q = tacQ(it); if (!q) return;
+  TTS.speak(`問${n}。${q.stem}` + (q.items ? q.items.map((t, k) => `${KANA[k]}。${t}`).join("") + q.opts.map((o, k) => `選択肢${k + 1}、${o}。`).join("") : q.opts.map((o, k) => `${k + 1}番。${o}`).join("")));
+}
+const br = t => esc(t || "").replace(/\n/g, "<br>");
+function tacReview(it, k, m) {
+  const q = tacQ(it); if (!q) return "";
+  const ok = m.pick[k] === it.ans, lab = o => q.items ? `${o + 1}（${q.opts[o]}）` : String(o + 1);
+  const ex = q.ex, lines = q.items || q.opts;
+  return `<details class="st"><summary><span class="tag ${ok ? "ok" : "ng"}">${ok ? "正解" : "×"}</span> 問${k + 1} ${esc(q.t)} <span class="chip">${q.lv}</span><span class="small">（あなた：${m.pick[k] === null ? "未解答" : lab(m.pick[k])}／正解：${lab(it.ans)}）</span></summary>
+    <div style="margin-top:8px;font-size:14px;font-weight:700;line-height:1.7">${esc(q.stem)}</div>
+    ${ex.note ? `<div class="small mt">${esc(ex.note)}</div>` : ""}
+    ${ex.body ? `<div style="margin:8px 0;font-size:14px;line-height:1.8">${br(ex.body)}</div>` : ""}
+    ${ex.items.map((e, j) => `<div style="margin:10px 0 0;font-size:14px;line-height:1.75;border-top:1px dashed var(--line);padding-top:8px">
+      <b>${esc(e.k)}</b> ${esc(lines[j] || "")}<br><span class="tag ${e.ok ? "ok" : "ng"}">${e.ok ? "○" : "×"}</span> <span>${br(e.t)}</span></div>`).join("")}
+    ${ex.sum ? `<div class="mt" style="font-size:14px;font-weight:700">${esc(ex.sum)}</div>` : ""}
+    <div class="small mt">難易度 ${TAC_LV[q.lv] || q.lv}</div></details>`;
+}
+function TacCard() {
+  if (!S.dojoKey) return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2><div class="small">下の過去問道場を合言葉で開くと、TACの予想模試も解けるようになります。</div></div>`;
+  if (!TAC) { tacLoad().then(ok => { if (ok && view === "kako") render(); }); return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2><div class="small">読み込み中…</div></div>`; }
+  const rs = ["1", "2", "3"];
+  return `<div class="card"><h2>🎯 TAC予想模試（あてる）</h2>
+    <div class="small">本と同じ問題・同じ解説です。50問・120分。採点後に1問ずつ、記述ごとの○×と本の解説が出ます。</div>
+    ${rs.map(r => { const R = TAC.rounds[r], hist = S.mocks.filter(h => h.tac === r), best = hist.length ? Math.max(...hist.map(h => h.score)) : null;
+      return `<div class="row" style="border-top:1px solid var(--line);padding:9px 0;gap:8px"><span class="grow"><b>第${r}回</b>${R ? `<span class="small">（${R.level}・合格推定${R.pass}点）</span>` : `<span class="small">（準備中）</span>`}
+        ${best != null ? `<br><span class="small">最高 <b style="color:${best >= R.pass ? "var(--ok)" : "var(--ng)"}">${best}点</b>・${hist.length}回</span>` : ""}</span>
+        ${R ? `<button class="btn" style="width:auto;padding:8px 14px" onclick="startTac('${r}')">▶ 解く</button>` : ""}</div>`; }).join("")}</div>`;
+}
+
 // ---------- 模試（○×の文を4つ組み合わせて本番形式の4択を作る） ----------
 const KANA = ["ア", "イ", "ウ", "エ"];
 function pickStmts(pool, nTrue, nFalse) {
@@ -2040,17 +2103,17 @@ function Mock() {
   if (!m) return Kako();
   if (m.done) return MockResult(m);
   startTimer();
-  const it = m.items[m.i], stmts = it.ids.map(id => QM[id]);
+  const it = m.items[m.i], stmts = it.tac ? [] : it.ids.map(id => QM[id]);
   const answeredN = m.pick.filter(x => x !== null).length;
-  const body = it.opts
+  const body = it.tac ? tacBody(it, m) : it.opts
     ? `<div class="stmts">${stmts.map((q, k) => `<div><b>${KANA[k]}</b><span>${gl(q.q)}</span></div>`).join("")}</div>
        <div class="opts">${it.opts.map((o, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${o}</span></button>`).join("")}</div>`
     : `<div class="opts">${stmts.map((q, k) => `<button class="${m.pick[m.i] === k ? "pick" : ""}" onclick="pickOpt(${k})"><span class="n">${k + 1}</span><span>${esc(q.q)}</span></button>`).join("")}</div>`;
   return `
-  <div class="qhead"><span>問${m.i + 1} / ${m.items.length}　<span class="chip" style="color:${AREAS[it.area].color}">${AREAS[it.area].short}</span></span><span class="timer num" id="timer" data-start="${m.start}" data-limit="${m.limit || 7200}" data-kind="mock"></span></div>
+  <div class="qhead"><span>${m.tac ? `TAC第${m.tac}回 ` : ""}問${m.i + 1} / ${m.items.length}　<span class="chip" style="color:${AREAS[it.area].color}">${AREAS[it.area].short}</span></span><span class="timer num" id="timer" data-start="${m.start}" data-limit="${m.limit || 7200}" data-kind="mock"></span></div>
   <div class="card">
     ${TTS.ok ? `<div class="row" style="justify-content:flex-end;margin-bottom:4px"><button class="spk" onclick="sayMock()">🔊 読む</button></div>` : ""}
-    <div class="qtext" style="font-weight:700">【問${m.i + 1}】${STEM[it.type]}</div>
+    <div class="qtext" style="font-weight:700">【問${m.i + 1}】${it.tac ? esc(tacQ(it)?.stem || "") : STEM[it.type]}</div>
     ${body}
     <div class="row mt" style="gap:8px">
       <button class="btn ghost" style="padding:10px" onclick="moveMock(-1)" ${m.i ? "" : "disabled"}>◀ 前へ</button>
@@ -2064,7 +2127,8 @@ function Mock() {
     <button class="linkbtn" onclick="quitMock()">この模試をやめる（記録しない）</button></div></div>`;
 }
 function sayMock() {
-  const m = S.cur, it = m.items[m.i], st = it.ids.map(id => QM[id]);
+  const m = S.cur, it = m.items[m.i]; if (it.tac) return tacSay(it, m.i + 1);
+  const st = it.ids.map(id => QM[id]);
   const body = it.opts ? st.map((q, k) => `${KANA[k]}。${q.q}`).join("") + it.opts.map((o, k) => `選択肢${k + 1}、${o}。`).join("")
     : st.map((q, k) => `${k + 1}番。${q.q}`).join("");
   TTS.speak(`問${m.i + 1}。${STEM[it.type]}${body}`);
@@ -2086,14 +2150,14 @@ function finishMock(timeUp) {
   let score = 0;
   m.items.forEach((it, k) => { const ok = m.pick[k] === it.ans; if (ok) score++; const b = byArea[it.area] || (byArea[it.area] = { n: 0, c: 0 }); b.n++; if (ok) b.c++;
     // 間違えた問題の4つの文は、明日の復習に回す（未挑戦なら今日の新規扱いにはしない）
-    if (!ok) it.ids.forEach(id => { const c = S.cards[id] || { box: 0, c: 0, w: 0 }; c.box = Math.min(c.box || 1, 1); c.due = addDays(today(), 1); c.w = c.w || 0; S.cards[id] = c; });
+    if (!ok) (it.ids || []).forEach(id => { const c = S.cards[id] || { box: 0, c: 0, w: 0 }; c.box = Math.min(c.box || 1, 1); c.due = addDays(today(), 1); c.w = c.w || 0; S.cards[id] = c; });
   });
   m.score = score;
-  S.mocks.push({ date: today(), score, n: m.items.length, byArea, min: Math.round((m.end - m.start) / 60000) });
+  S.mocks.push({ date: today(), score, n: m.items.length, byArea, min: Math.round((m.end - m.start) / 60000), ...(m.tac ? { tac: m.tac } : {}) });
   save(); render(); window.scrollTo(0, 0);
 }
 // v6.29 下田さん「タブに過去問も追加したら？」「模擬試験じゃなくて過去問にしといて」→ 模試タブを「過去問」タブに。道場・答案用紙を上に、個数ドリル・模試はその下
-function Kako() { return `${PQCard()}${DojoCard()}${PastMenu()}${MockMenu()}`; }
+function Kako() { return `${TacCard()}${PQCard()}${DojoCard()}${PastMenu()}${MockMenu()}`; }
 function MockMenu() {
   const hist = S.mocks.slice(-8).reverse();
   return `
@@ -2104,23 +2168,24 @@ function MockMenu() {
     <button class="btn sec" onclick="startMock(10)">⚡ ミニ模試（10問・20分）スキマ時間に</button></div></div>
   ${hist.length ? `<div class="card"><h2>模試の結果</h2>${hist.map(h => { const full = h.n >= 40, ok = full ? h.score >= PASS_LINE : h.score / h.n >= PASS_LINE / 50;
       return `<div class="row" style="border-top:1px solid var(--line);padding:8px 0">
-      <span class="grow">${h.date.replace(/-/g, "/")}<span class="small">（${full ? "模試" : "ミニ"}・${h.min}分）</span></span>
+      <span class="grow">${h.date.replace(/-/g, "/")}<span class="small">（${h.tac ? `TAC第${h.tac}回` : full ? "模試" : "ミニ"}・${h.min}分）</span></span>
       <b class="num" style="color:${ok ? "var(--ok)" : "var(--ng)"}">${h.score}点</b><span class="small">/${h.n}</span></div>`; }).join("")}
     <div class="small">目標は50問中${PASS_LINE}点（令和7年度の合格点）。ミニ模試は10問中8問が目安。</div></div>` : ""}`;
 }
 function MockResult(m) {
-  const full = m.items.length >= 40, pass = full ? m.score >= PASS_LINE : m.score / m.items.length >= PASS_LINE / 50;
+  const TR = m.tac && TAC?.rounds?.[m.tac], line = TR ? TR.pass : PASS_LINE;
+  const full = m.items.length >= 40, pass = full ? m.score >= line : m.score / m.items.length >= PASS_LINE / 50;
   const by = {}; m.items.forEach((it, k) => { const b = by[it.area] || (by[it.area] = { n: 0, c: 0 }); b.n++; if (m.pick[k] === it.ans) b.c++; });
   return `
-  <div class="card center"><div class="small">模試の結果</div>
+  <div class="card center"><div class="small">${TR ? `TAC予想模試 第${m.tac}回（${TR.level}・合格推定${TR.pass}点）` : "模試の結果"}</div>
     <div class="hero" style="justify-content:center"><b class="num" style="color:${pass ? "var(--ok)" : "var(--ng)"}">${m.score}</b><span>/ ${m.items.length}点</span></div>
-    <div class="mt"><span class="tag ${pass ? "ok" : "ng"}">${full ? (pass ? "目標ライン到達" : `目標まであと${PASS_LINE - m.score}点`) : `正答率 ${Math.round(m.score / m.items.length * 100)}%（目標76%）`}</span></div>
+    <div class="mt"><span class="tag ${pass ? "ok" : "ng"}">${full ? (pass ? (TR ? "合格推定ライン到達" : "目標ライン到達") : `${TR ? "合格推定ライン" : "目標"}まであと${line - m.score}点`) : `正答率 ${Math.round(m.score / m.items.length * 100)}%（目標76%）`}</span></div>
     <div class="small mt">かかった時間 ${Math.round((m.end - m.start) / 60000)}分</div></div>
   <div class="card"><h2>分野別</h2>${Object.entries(by).map(([a, b]) => `<div class="area"><div><span class="dot" style="background:${AREAS[a].color}"></span>${AREAS[a].name}</div><div class="num small">${b.c}/${b.n}</div>
     <div class="bar" style="grid-column:1/-1"><i style="width:${b.c / b.n * 100}%;background:${AREAS[a].color}"></i></div></div>`).join("")}</div>
   ${m.spent ? MockTime(m) : ""}
-  <div class="card"><h2>1問ずつ見直す</h2><div class="small">タップすると、4つの文それぞれの○×と解説が出ます。</div>
-    ${m.items.map((it, k) => { const ok = m.pick[k] === it.ans;
+  <div class="card"><h2>1問ずつ見直す</h2><div class="small">タップすると、4つの文それぞれの○×と解説が出ます。${TR ? "解説は本の文章どおりです。" : ""}</div>
+    ${m.items.map((it, k) => { if (it.tac) return tacReview(it, k, m); const ok = m.pick[k] === it.ans;
       const label = o => it.opts ? it.opts[o] : String(o + 1);
       return `<details class="st"><summary><span class="tag ${ok ? "ok" : "ng"}">${ok ? "正解" : "×"}</span> 問${k + 1} ${STEM[it.type]}<span class="small">（あなた：${m.pick[k] === null ? "未解答" : label(m.pick[k])}／正解：${label(it.ans)}）</span></summary>
         ${it.ids.map((id, j) => { const q = QM[id]; return `<div style="margin:8px 0 0;font-size:14px;line-height:1.7"><b>${it.opts ? KANA[j] : j + 1}</b> ${gl(q.q)}<br>
@@ -2609,6 +2674,7 @@ function AnkiTheme(ti) {
   render();
   coachLoad();
   if (S.dojoKey) dojoLoad().then(ok => { if (ok && (view === "kako" || view === "home")) render(); });
+  if (S.dojoKey) tacLoad().then(ok => { if (ok && ["kako", "mock", "home"].includes(view)) render(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
 </script>
