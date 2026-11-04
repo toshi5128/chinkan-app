@@ -160,7 +160,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-04-v6.45";
+const APP_VERSION = "2026-11-04-v6.46";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -2199,6 +2199,11 @@ function Mock() {
   </div>
   <div class="card"><div class="row small"><span class="grow">解答 ${answeredN}/${m.items.length}</span><span>🚩＝見直し</span></div>
     <div class="grid mt">${m.items.map((_, k) => `<button class="${k === m.i ? "cur" : m.pick[k] !== null ? "ans" : ""} ${m.flag[k] ? "flag" : ""}" onclick="mockGo(${k})">${k + 1}</button>`).join("")}</div>
+    ${(() => { const n = m.pick.filter(x => x !== null).length, c = m.items.filter((it, k) => m.pick[k] === it.ans).length, line = m.tac && TAC?.rounds?.[m.tac]?.pass;
+      // v6.46 下田さん「途中で今時点の点数を知りたい」→ 終わらせずに、答えた問題だけの正解数を出す（どれが×かは出さない）
+      return `<div class="mt" style="border-top:1px solid var(--line);padding-top:8px">${m.peek ? `<div class="row"><span class="grow">いまの点数（答えた${n}問のうち）</span><b class="num" style="font-size:22px;color:var(--brand)">${c}点</b></div>
+        <div class="small">正答率 ${n ? Math.round(c / n * 100) : 0}%${n ? `・このペースなら50問で約${Math.round(c / n * 50)}点` : ""}${line ? `（合格推定${line}点）` : ""}。どの問題が×かは採点まで出ません。</div>
+        <button class="linkbtn" onclick="S.cur.peek=false;save();render()">隠す</button>` : `<button class="btn sec" onclick="S.cur.peek=true;save();render()">📊 いまの点数を見る（途中経過）</button>`}</div>`; })()}
     <div class="btns mt"><button class="btn" onclick="finishMock()">採点する</button>
     <button class="linkbtn" onclick="quitMock()">この模試をやめる（記録しない）</button></div></div>`;
 }
