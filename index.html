@@ -177,7 +177,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.82";
+const APP_VERSION = "2026-11-05-v6.83";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1160,8 +1160,11 @@ const TTS = {
     clearInterval(this.fi); if (!pt || !pt[1]) return;
     const [, sel, a, len, total] = pt, t0 = Date.now(), cps = 7.5 * (S.tts.rate || 1); let ci = -1;
     u.onboundary = e => { if (typeof e.charIndex === "number") ci = e.charIndex + (e.charLength || 1); };
-    const tick = () => { const loc = ci >= 0 ? Math.min(len, ci) : Math.min(len, (Date.now() - t0) / 1000 * cps); this.hl(sel, (a + loc) / total); };
-    tick(); this.fi = setInterval(tick, 100);
+    // v6.83 1文字ずつ伸ばす：目標の位置（声の位置）へ、1回に1文字ずつ近づける。遅れが大きい時だけ2文字
+    let loc = 0;
+    const tick = () => { const tgt = ci >= 0 ? Math.min(len, ci) : Math.min(len, (Date.now() - t0) / 1000 * cps);
+      if (loc < tgt) loc = Math.min(len, loc + (tgt - loc > 6 ? 2 : 1)); this.hl(sel, (a + loc) / total); };
+    tick(); this.fi = setInterval(tick, Math.max(40, Math.round(1000 / cps)));
     const done = () => { clearInterval(this.fi); this.hl(sel, (a + len) / total); };
     u.addEventListener ? u.addEventListener("end", done) : 0;
   },
@@ -1191,7 +1194,7 @@ const ctxSay = s => String(s || "").replace(/（[^（）]*という。?）/g, ""
 const qSpeech = q => `${sess && sess.i > 0 ? "次の問題です。" : "問題です。"}${q.pq && !PQ_FORM[q.pid] && q.ctx ? `元の問題。${ctxSay(q.ctx)}記述。` : ""}${q.q}`;
 // v6.81 下田さん「読んでいるところが分かるように・読んでいる所にスクロール」→ 読む文ごとに画面の場所（sel）を持たせる
 const qSegs = q => { const head = sess && sess.i > 0 ? "次の問題です。" : "問題です。", ctx = q.pq && !PQ_FORM[q.pid] && q.ctx;
-  return ctx ? [{ sel: "#app .pqctx", t: `${head}元の問題。${ctxSay(q.ctx)}記述。` }, { sel: "#app .qtext", t: q.q }] : [{ sel: "#app .qtext", t: head + q.q }]; };
+  return [{ sel: null, t: head }, ...(ctx ? [{ sel: null, t: "元の問題。" }, { sel: "#app .pqctx", t: ctxSay(q.ctx) }, { sel: null, t: "記述。" }] : []), { sel: "#app .qtext", t: q.q }]; };
 const aSegs = (q, ok) => { const f = fixOf(q);
   return [{ sel: "#app .res .rhead", t: `${ok == null ? "" : ok ? "正解。" : "不正解。"}答えは、${q.a ? "マル" : "バツ"}。` },
     ...(f ? [{ sel: "#app .fixbox", t: `問題の、${f.w}、の部分が誤りです。正しくは、${f.r}。` }] : []),
