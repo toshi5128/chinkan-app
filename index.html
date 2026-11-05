@@ -155,6 +155,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 .fixbox{margin:2px 0 8px;padding:8px 10px;border-radius:8px;background:var(--card);border:1px solid var(--ng);line-height:1.7;font-size:15px}
 .fixbox b{color:var(--ng)}.fixbox div+div b{color:var(--ok)}
 .wrongpart{text-decoration:line-through;text-decoration-color:var(--ng);text-decoration-thickness:2px;background:var(--ngbg);border-radius:3px}
+.reading{background:var(--warnbg);box-shadow:0 0 0 2px var(--warn);border-radius:4px}
 .tools{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
 .tools .spk{white-space:nowrap;padding:7px 4px;text-align:center}
 .spk.on{background:var(--brand);color:#fff;border-color:var(--brand)}
@@ -175,7 +176,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.80";
+const APP_VERSION = "2026-11-05-v6.81";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -427,6 +428,7 @@ function render() {
   const el = document.getElementById("app");
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
   el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "tacnum" ? TacNum() : view === "tac" ? TacPage() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "marks" ? MarksView() : view === "kako" ? Kako() : view === "settings" ? Settings() : Stats());
+  if (TTS.curSel) TTS.mark(TTS.curSel, true);
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
 
@@ -1103,11 +1105,13 @@ const TTS = {
     this.stop();
     if (!this.voice) this.pickVoice();
     const my = ++this.token;
-    const parts = (this.clean(text).match(/[^。！？!?]+[。！？!?]*/g) || []).map(x => x.trim()).filter(Boolean);
+    const segs = Array.isArray(text) ? text : [{ t: text }];
+    const parts = segs.flatMap(sg => (this.clean(sg.t).match(/[^。！？!?]+[。！？!?]*/g) || []).map(x => [x.trim(), sg.sel]).filter(x => x[0]));
     const next = i => {
       if (my !== this.token) return;
-      if (i >= parts.length) { onend && onend(); return; }
-      const u = new SpeechSynthesisUtterance(parts[i]);
+      if (i >= parts.length) { this.mark(null); onend && onend(); return; }
+      this.mark(parts[i][1]);
+      const u = new SpeechSynthesisUtterance(parts[i][0]);
       u.lang = "ja-JP"; u.rate = S.tts.rate; if (this.voice) u.voice = this.voice;
       // スマホ(Chrome)は、読み上げ中の文をアプリが持っていないと「読み終わり」の合図を落とすことがある → 持っておく。
       // それでも合図が来ない時のために、読み終わる時間を見積もって自動で次へ（2026-10-06 下田さん「解説のあと次の問題を読まない」）
@@ -1146,7 +1150,15 @@ const TTS = {
     const wait = Math.max(0, 300 - (Date.now() - (this.cancelAt || 0))); if (wait) setTimeout(() => next(0), wait); else next(0);
   },
   // 読んでいない時は cancel を出さない。cancel した直後の speak はスマホが捨てることがあるので、その時刻を覚えておく
-  stop() { this.token++; clearTimeout(this.wd); if (this.ok && (speechSynthesis.speaking || speechSynthesis.pending)) { speechSynthesis.cancel(); this.cancelAt = Date.now(); } },
+  // 読んでいる所に印をつけ、画面の外ならそこまで動かす
+  mark(sel, quiet) {
+    if (!quiet) this.curSel = sel || null;
+    document.querySelectorAll("#app .reading").forEach(e => e.classList.remove("reading"));
+    if (!sel) return; const el = document.querySelector(sel); if (!el) return; el.classList.add("reading");
+    if (quiet) return; const r = el.getBoundingClientRect(), vh = window.innerHeight;
+    if (r.top < 50 || r.bottom > vh - 90) window.scrollTo({ top: r.top + window.scrollY - vh * 0.3, behavior: "smooth" });
+  },
+  stop() { this.mark(null); this.token++; clearTimeout(this.wd); if (this.ok && (speechSynthesis.speaking || speechSynthesis.pending)) { speechSynthesis.cancel(); this.cancelAt = Date.now(); } },
 };
 if (TTS.ok) { TTS.pickVoice(); speechSynthesis.onvoiceschanged = () => TTS.pickVoice(); }
 // 問題を読む時は頭に「問題」と付けて、解説との区切りを耳でわかるように（2026-10-06 下田さん）
@@ -1154,6 +1166,13 @@ if (TTS.ok) { TTS.pickVoice(); speechSynthesis.onvoiceschanged = () => TTS.pickV
 const ctxSay = s => String(s || "").replace(/（[^（）]*という。?）/g, "").split(/(?<=。)/).map(x => !/(どれか|あるか)。?$/.test(x) ? x
   : x.replace(/(に関する|についての|に関して|に関し)?、?(次|以下)の記述(のうち)?、?/, "").replace(/(として|のうち)?、?(最も)?(適切|不適切|正しい|誤っている|誤り|正しくない)[^。]*。?$/, "").replace(/(の組合せ|はどれか|はいくつあるか)[^。]*。?$/, "").replace(/、$/, "") + "。").join("").trim();
 const qSpeech = q => `${sess && sess.i > 0 ? "次の問題です。" : "問題です。"}${q.pq && !PQ_FORM[q.pid] && q.ctx ? `元の問題。${ctxSay(q.ctx)}記述。` : ""}${q.q}`;
+// v6.81 下田さん「読んでいるところが分かるように・読んでいる所にスクロール」→ 読む文ごとに画面の場所（sel）を持たせる
+const qSegs = q => { const head = sess && sess.i > 0 ? "次の問題です。" : "問題です。", ctx = q.pq && !PQ_FORM[q.pid] && q.ctx;
+  return ctx ? [{ sel: "#app .pqctx", t: `${head}元の問題。${ctxSay(q.ctx)}記述。` }, { sel: "#app .qtext", t: q.q }] : [{ sel: "#app .qtext", t: head + q.q }]; };
+const aSegs = (q, ok) => { const f = fixOf(q);
+  return [{ sel: "#app .res .rhead", t: `${ok == null ? "" : ok ? "正解。" : "不正解。"}答えは、${q.a ? "マル" : "バツ"}。` },
+    ...(f ? [{ sel: "#app .fixbox", t: `問題の、${f.w}、の部分が誤りです。正しくは、${f.r}。` }] : []),
+    ...expSents(q.exp).map((x, k) => ({ sel: `#app .res .sn[data-k="${k}"]`, t: noCite(x) }))]; };
 const aSpeech = (q, ok) => { const f = fixOf(q); return `${ok == null ? "" : ok ? "正解。" : "不正解。"}答えは、${q.a ? "マル" : "バツ"}。${f ? `問題の、${f.w}、の部分が誤りです。正しくは、${f.r}。` : ""}${noCite(q.exp)}`; };
 // ---------- 🎤 声で答える（v6.60 下田さん「画面で○×や次へを押さずに音声でできないか」） ----------
 // 「まる」「ばつ」「さんかく」「つぎ」「もう一回」「まぐれ」「ストップ」。読み上げ中に拾った声は無視（自分の読み上げを答えと取り違えないため）
@@ -1198,7 +1217,7 @@ function voiceHandle(t) {
   if (view !== "study" || !sess || sess.i >= sess.ids.length) return;
   const answered = sess.ans !== null;
   // v6.64 「読んで」「問題」→ 問題文を読む／「解説」→ 答えたあとの解説を読む
-  if (/解説|かいせつ/.test(t) && answered) { TTS.speak(aSpeech(QM[sess.ids[sess.i]], sess.ans === QM[sess.ids[sess.i]].a)); return; }
+  if (/解説|かいせつ/.test(t) && answered) { TTS.speak(aSegs(QM[sess.ids[sess.i]], sess.ans === QM[sess.ids[sess.i]].a)); return; }
   if (/読んで|よんで|読む|よむ|問題|もんだい/.test(t)) { TTS.speak(qSpeech(QM[sess.ids[sess.i]])); return; }
   if (/もう一回|もう一度|もういっかい|繰り返|くりかえ/.test(t)) { sayQ(); return; }
   if (!answered) {
@@ -1212,7 +1231,7 @@ function voiceHandle(t) {
   }
 }
 
-function sayQ() { const q = QM[sess.ids[sess.i]]; sess.readOn = true; if (sess.ans === null) sess.heard = true; TTS.speak(sess.ans === null ? qSpeech(q) : aSpeech(q, sess.ans === q.a)); }
+function sayQ() { const q = QM[sess.ids[sess.i]]; sess.readOn = true; if (sess.ans === null) sess.heard = true; TTS.speak(sess.ans === null ? qSegs(q) : aSegs(q, sess.ans === q.a)); }
 function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else { clearTimeout(autoTimer); clearTimeout(autoHard); autoTimer = null; TTS.stop(); } render(); }
 function setRate(r) { S.tts.rate = r; save(); if (AP.el) AP.el.playbackRate = r; render(); }
 const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6, 1.8, 2.0].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
@@ -1238,10 +1257,14 @@ const figBox = (f, open = true) => f ? `<details class="fig" ${open ? "open" : "
 function figAuto(q) { const f = figFor(q); if (!f) return false; if (q.area === "C") return true;
   const L = (S.figSeen || (S.figSeen = {}))[f.id] || (S.figSeen[f.id] = []); if (!L.includes(q.id) && L.length < 6) L.push(q.id); return L.includes(q.id); }
 function FigList() { return FIGS.length ? FIGS.map(f => figBox(f, false)).join("") : `<div class="small">図を読み込めていません。</div>`; }
+const expSents = t => String(t || "").match(/[^。！？]+[。！？]*/g) || [];
 function gx(q) {
-  let t = esc(q.exp);
-  (q.key || []).forEach(k => { const e = esc(k); const i = t.indexOf(e); if (e && i >= 0) t = t.slice(0, i) + `<u class="key">${e}</u>` + t.slice(i + e.length); });
-  return fixBox(q) + t;
+  // v6.81 読み上げ中の文に印をつけるため、解説を1文ずつ <span class="sn" data-k=番号> に分ける
+  const ks = (q.key || []).map(k => esc(k)).filter(Boolean), used = new Set();
+  const body = expSents(q.exp).map((x, k) => { let t = esc(x);
+    ks.forEach(e => { if (used.has(e)) return; const i = t.indexOf(e); if (i >= 0) { used.add(e); t = t.slice(0, i) + `<u class="key">${e}</u>` + t.slice(i + e.length); } });
+    return `<span class="sn" data-k="${k}">${t}</span>`; }).join("");
+  return fixBox(q) + body;
 }
 
 // ---------- 聞き流し（画面に触らずに、問題→考える時間→答えと解説→次へ） ----------
@@ -2031,7 +2054,7 @@ function Study() {
     ${TTS.ok ? `<div class="tools"><button class="spk" onclick="sayQ()">🔊 ${answered ? "解説" : "読む"}</button><button class="spk" onclick="voiceToggle()" style="${VOICE.on ? "background:var(--ng);color:#fff;border-color:var(--ng)" : ""}">🎤 ${VOICE.on ? "聞いてる" : "声で"}</button><button class="spk ${S.skipOk ? "on" : ""}" onclick="S.skipOk=!S.skipOk;save();render()">⚡ 速く</button><button class="spk ${S.tts.auto ? "on" : ""}" onclick="toggleAuto()">🔁 自動</button></div>` : ""}
     ${VOICE.on ? `<div class="small" style="margin-bottom:6px;padding:8px 10px;border-radius:8px;background:var(--track);line-height:1.7">🎤 答え：<b>まる／正しい／合ってる</b>・<b>ばつ／間違い</b>・<b>さんかく</b>　ほか：読んで・解説・つぎ・もう一回・まぐれ・ストップ<br><span id="vSt">${esc(VOICE.st || "準備中")}${VOICE.err ? `（エラー：${esc(VOICE.err)}）` : ""}</span>　<button class="linkbtn" onclick="voiceOnce()">🎙 押して話す</button><br><b id="vHeard">${VOICE.last ? `聞こえた：${esc(VOICE.last)}` : "（まだ何も聞こえていません）"}</b></div>` : ""}
     <div class="small" style="text-align:right;margin-bottom:6px">${S.skipOk && S.autoNext ? "⚡速く：自信ありで正解→すぐ次へ" : S.autoNext && S.tts.auto && TTS.ok ? "🔁自動：正解なら解説を読み終えて次へ" : sess.readOn ? `🔊 読み上げ中：「次へ」で次の問題を読みます <button class="linkbtn" style="padding:0;font-size:12px" onclick="sess.readOn=false;TTS.stop();render()">読むのをやめる</button>` : "「次へ」を押して進みます"}</div>
-    ${q.pq ? `<div style="margin-bottom:8px;padding:8px 10px;border-radius:8px;background:var(--track);font-size:14px;line-height:1.7"><span class="small">📝 ${esc(q.from)}</span><br>元の問い：${esc(q.ctx)}<br><b>→ ここでは、下の記述が正しい（あてはまる）かを○×で</b></div>` : ""}
+    ${q.pq ? `<div class="pqctx" style="margin-bottom:8px;padding:8px 10px;border-radius:8px;background:var(--track);font-size:14px;line-height:1.7"><span class="small">📝 ${esc(q.from)}</span><br>元の問い：${esc(q.ctx)}<br><b>→ ここでは、下の記述が正しい（あてはまる）かを○×で</b></div>` : ""}
     <div class="qtext">${typeof answered !== "undefined" && answered ? glw(q) : gl(q.q)}</div>
     <div class="ox">
       <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
@@ -2039,7 +2062,7 @@ function Study() {
     </div>
     ${answered ? (sess.tri ? `<div class="small" style="margin:4px 0;color:var(--warn);font-weight:700">△ 迷った問題として記録しました${ok ? "（正解でも、明日もう一度出します）" : ""}</div>` : "")
       : `<button onclick="sess.tri=!sess.tri;render()" style="width:100%;margin:6px 0 2px;padding:9px;border-radius:10px;font-weight:800;font-size:15px;border:2px solid var(--warn);background:${sess.tri ? "var(--warn)" : "transparent"};color:${sess.tri ? "#fff" : "var(--warn)"}">△ 迷った・自信なし${sess.tri ? "（オン：このあと○か×で答える）" : "（押してから○か×）"}</button>`}
-    ${answered ? `<div class="res ${ok ? "ok" : "ng"}"><b class="t">${ok ? "正解" : "不正解"}</b>　答えは <b>${q.a ? "○（正しい）" : "×（誤り）"}</b><br>${gx(q)}
+    ${answered ? `<div class="res ${ok ? "ok" : "ng"}"><span class="rhead"><b class="t">${ok ? "正解" : "不正解"}</b>　答えは <b>${q.a ? "○（正しい）" : "×（誤り）"}</b></span><br>${gx(q)}
       ${q.ref ? `<div class="ref">根拠：${esc(q.ref)}</div>` : ""}</div>${figBox(figFor(q), figAuto(q))}
       <div class="row mt">
         ${ok ? `<button class="linkbtn" onclick="luck()">まぐれだった</button>` : ""}
@@ -2147,7 +2170,7 @@ function answer(v) {
     if (S.tts.auto && TTS.ok) {
       autoTimer = "reading"; render(); scrollRes();
       const txt = aSpeech(q, ok);
-      TTS.speak(txt, () => { if (autoTimer === "reading") { autoTimer = setTimeout(goNext, 600); } });
+      TTS.speak(aSegs(q, ok), () => { if (autoTimer === "reading") { autoTimer = setTimeout(goNext, 600); } });
       // 保険：スマホが「読み終わり」を一切知らせてこなくても、読み終わるはずの時間（＋余裕）が来たら必ず次へ
       clearTimeout(autoHard); autoHard = setTimeout(() => { if (autoTimer === "reading" && sess && sess.i === at) { autoTimer = null; nextQ(); } }, (txt.length / (5 * (S.tts.rate || 1)) + 4) * 1000);
       return;
@@ -2155,7 +2178,7 @@ function answer(v) {
   }
   render(); scrollRes();
   // v6.78 下田さん「自動を切って、問題を読んでもらってから答えた時は、解説を自動で読んで」
-  if (S.tts.auto || sess.heard) TTS.speak(aSpeech(q, ok)); else TTS.stop();
+  if (S.tts.auto || sess.heard) TTS.speak(aSegs(q, ok)); else TTS.stop();
 }
 function luck() {
   const q = QM[sess.ids[sess.i]], c = S.cards[q.id];
