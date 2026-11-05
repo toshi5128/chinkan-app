@@ -152,6 +152,9 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 .fig>summary{font-weight:700;font-size:14px;color:var(--brand);cursor:pointer}
 .figsvg svg{width:100%;height:auto;display:block;margin-top:8px}
 .figpts{margin:6px 0 2px;padding-left:1.2em;font-size:13.5px;line-height:1.7}
+.fixbox{margin:2px 0 8px;padding:8px 10px;border-radius:8px;background:var(--card);border:1px solid var(--ng);line-height:1.7;font-size:15px}
+.fixbox b{color:var(--ng)}.fixbox div+div b{color:var(--ok)}
+.wrongpart{text-decoration:line-through;text-decoration-color:var(--ng);text-decoration-thickness:2px;background:var(--ngbg);border-radius:3px}
 .tools{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
 .tools .spk{white-space:nowrap;padding:7px 4px;text-align:center}
 .spk.on{background:var(--brand);color:#fff;border-color:var(--brand)}
@@ -172,7 +175,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.75";
+const APP_VERSION = "2026-11-05-v6.76";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -280,6 +283,7 @@ async function loadQuestions() {
   TALK = Object.assign({}, ...talks);
   NUMS = Array.isArray(nums) ? nums : [];
   const KEYS = await fetch("data/keys.json", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
+  WFIX = await fetch("data/wrongfix.json", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
   FIGS = await fetch("data/figs.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   TACNUM = await fetch("data/tacnum.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   ANKI = await fetch("data/anki.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
@@ -1150,7 +1154,7 @@ if (TTS.ok) { TTS.pickVoice(); speechSynthesis.onvoiceschanged = () => TTS.pickV
 const ctxSay = s => String(s || "").replace(/（[^（）]*という。?）/g, "").split(/(?<=。)/).map(x => !/(どれか|あるか)。?$/.test(x) ? x
   : x.replace(/(に関する|についての|に関して|に関し)?、?(次|以下)の記述(のうち)?、?/, "").replace(/(として|のうち)?、?(最も)?(適切|不適切|正しい|誤っている|誤り|正しくない)[^。]*。?$/, "").replace(/(の組合せ|はどれか|はいくつあるか)[^。]*。?$/, "").replace(/、$/, "") + "。").join("").trim();
 const qSpeech = q => `${sess && sess.i > 0 ? "次の問題です。" : "問題です。"}${q.pq && !PQ_FORM[q.pid] && q.ctx ? `元の問題。${ctxSay(q.ctx)}記述。` : ""}${q.q}`;
-const aSpeech = (q, ok) => `${ok == null ? "" : ok ? "正解。" : "不正解。"}答えは、${q.a ? "マル" : "バツ"}。${noCite(q.exp)}`;
+const aSpeech = (q, ok) => { const f = fixOf(q); return `${ok == null ? "" : ok ? "正解。" : "不正解。"}答えは、${q.a ? "マル" : "バツ"}。${f ? `問題の、${f.w}、の部分が誤りです。正しくは、${f.r}。` : ""}${noCite(q.exp)}`; };
 // ---------- 🎤 声で答える（v6.60 下田さん「画面で○×や次へを押さずに音声でできないか」） ----------
 // 「まる」「ばつ」「さんかく」「つぎ」「もう一回」「まぐれ」「ストップ」。読み上げ中に拾った声は無視（自分の読み上げを答えと取り違えないため）
 const VOICE = { on: false, rec: null, last: "", st: "", err: "", ok: !!(window.SpeechRecognition || window.webkitSpeechRecognition) };
@@ -1216,6 +1220,11 @@ const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6, 1.8, 2.0].map(r =
 // ---------- 解説の大事なところに下線（2026-10-22 下田さん「分からない言葉の解説はもういい。解説の大事なところだけに下線を」） ----------
 //   data/keys.json = {問題id: [解説の中の大事な言い回し…]}。v6.15 の言葉の意味（点線→ポップアップ）は廃止
 function gl(text) { return esc(text); }
+// v6.76 下田さん「×の問題は、問題のここの部分が間違っているから正解はこう、という解説にして」→ ×の問題ごとに {w:問題文の誤りの部分, r:正しくは} を持たせ、解説の頭に出す・問題文の該当部分に印
+let WFIX = {};
+const fixOf = q => q && q.a === false ? (q.fix || WFIX[q.id] || null) : null;
+const fixBox = q => { const f = fixOf(q); return f ? `<div class="fixbox"><div>✖ 問題の<b>「${esc(f.w)}」</b>の部分が誤り</div><div>⭕ 正しくは <b>${esc(f.r)}</b></div></div>` : ""; };
+function glw(q) { const f = fixOf(q), t = esc(q.q); if (!f) return t; const e = esc(f.w), i = t.indexOf(e); return i < 0 ? t : t.slice(0, i) + `<span class="wrongpart">${e}</span>` + t.slice(i + e.length); }
 // v6.72 下田さん「建物設備とか、イラストがないとイメージがわかないものはイラストをつけて解説して」→ data/figs.json の図を、言葉が合う問題の解説の下に出す
 let FIGS = [], figCache = {}, figOpen = true;
 function figFor(q) {
@@ -1232,7 +1241,7 @@ function FigList() { return FIGS.length ? FIGS.map(f => figBox(f, false)).join("
 function gx(q) {
   let t = esc(q.exp);
   (q.key || []).forEach(k => { const e = esc(k); const i = t.indexOf(e); if (e && i >= 0) t = t.slice(0, i) + `<u class="key">${e}</u>` + t.slice(i + e.length); });
-  return t;
+  return fixBox(q) + t;
 }
 
 // ---------- 聞き流し（画面に触らずに、問題→考える時間→答えと解説→次へ） ----------
@@ -1281,7 +1290,7 @@ function Listen() {
   ${done ? `<div class="card center"><h2>聞き流し おわり</h2><div class="small">${LS.ids.length}問を聞きました。耳で覚えたら、一問一答で本当に解けるか確かめましょう。</div></div>` : `
   <div class="card">
     <div class="small">${esc(SECM[q.sec]?.id || "")} ${esc(SECM[q.sec]?.title || "")}</div>
-    <div class="qtext">${gl(q.q)}</div>
+    <div class="qtext">${typeof answered !== "undefined" && answered ? glw(q) : gl(q.q)}</div>
     ${LS.phase === "a" ? `<div class="res ${q.a ? "ok" : "ng"}">答えは <b>${q.a ? "○（正しい）" : "×（誤り）"}</b><br>${gx(q)}</div>` : `<button class="btn ghost" onclick="listenReveal()">答えを先に聞く</button>`}
   </div>`}
   <div class="player">
@@ -2023,7 +2032,7 @@ function Study() {
     ${VOICE.on ? `<div class="small" style="margin-bottom:6px;padding:8px 10px;border-radius:8px;background:var(--track);line-height:1.7">🎤 答え：<b>まる／正しい／合ってる</b>・<b>ばつ／間違い</b>・<b>さんかく</b>　ほか：読んで・解説・つぎ・もう一回・まぐれ・ストップ<br><span id="vSt">${esc(VOICE.st || "準備中")}${VOICE.err ? `（エラー：${esc(VOICE.err)}）` : ""}</span>　<button class="linkbtn" onclick="voiceOnce()">🎙 押して話す</button><br><b id="vHeard">${VOICE.last ? `聞こえた：${esc(VOICE.last)}` : "（まだ何も聞こえていません）"}</b></div>` : ""}
     <div class="small" style="text-align:right;margin-bottom:6px">${S.skipOk && S.autoNext ? "⚡速く：自信ありで正解→すぐ次へ" : S.autoNext && S.tts.auto && TTS.ok ? "🔁自動：正解なら解説を読み終えて次へ" : "「次へ」を押して進みます"}</div>
     ${q.pq ? `<div style="margin-bottom:8px;padding:8px 10px;border-radius:8px;background:var(--track);font-size:14px;line-height:1.7"><span class="small">📝 ${esc(q.from)}</span><br>元の問い：${esc(q.ctx)}<br><b>→ ここでは、下の記述が正しい（あてはまる）かを○×で</b></div>` : ""}
-    <div class="qtext">${gl(q.q)}</div>
+    <div class="qtext">${typeof answered !== "undefined" && answered ? glw(q) : gl(q.q)}</div>
     <div class="ox">
       <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
       <button class="x ${answered && sess.ans === false ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(false)" aria-label="誤り">×</button>
@@ -2314,7 +2323,7 @@ function tqBuild() {
     if (!q.ex?.items?.length || q.ex.items.length !== lines.length) continue;
     q.ex.items.forEach((e, j) => { if (typeof e.ok !== "boolean" || !lines[j]) return;
       TQ.push({ id: `T:${r}-${q.n}:${keys[j]}`, z: 1, pq: 1, tq: 1, area: q.a, sec: null, sub: q.t, level: q.lv === "A" ? 1 : q.lv === "B" ? 2 : 3,
-        q: lines[j], a: e.ok, exp: e.t, key: e.key || [], ref: "", ctx: q.stem + (q.ex.note ? `（${q.ex.note}）` : ""), from: `TAC第${r}回 問${q.n}・記述${keys[j]}` }); });
+        q: lines[j], a: e.ok, exp: e.t, key: e.key || [], fix: e.fix || null, ref: "", ctx: q.stem + (q.ex.note ? `（${q.ex.note}）` : ""), from: `TAC第${r}回 問${q.n}・記述${keys[j]}` }); });
   }
   TQ.forEach(q => { QM[q.id] = q; });
 }
