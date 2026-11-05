@@ -155,7 +155,8 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 .fixbox{margin:2px 0 8px;padding:8px 10px;border-radius:8px;background:var(--card);border:1px solid var(--ng);line-height:1.7;font-size:15px}
 .fixbox b{color:var(--ng)}.fixbox div+div b{color:var(--ok)}
 .wrongpart{text-decoration:line-through;text-decoration-color:var(--ng);text-decoration-thickness:2px;background:var(--ngbg);border-radius:3px}
-.reading{background:var(--warnbg);box-shadow:0 0 0 2px var(--warn);border-radius:4px}
+.reading{}
+::highlight(rd){background-color:rgba(240,176,74,.55)}
 .tools{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
 .tools .spk{white-space:nowrap;padding:7px 4px;text-align:center}
 .spk.on{background:var(--brand);color:#fff;border-color:var(--brand)}
@@ -176,7 +177,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.81";
+const APP_VERSION = "2026-11-05-v6.82";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1106,12 +1107,15 @@ const TTS = {
     if (!this.voice) this.pickVoice();
     const my = ++this.token;
     const segs = Array.isArray(text) ? text : [{ t: text }];
-    const parts = segs.flatMap(sg => (this.clean(sg.t).match(/[^。！？!?]+[。！？!?]*/g) || []).map(x => [x.trim(), sg.sel]).filter(x => x[0]));
+    // v6.82 下田さん「読んでいるところを追いかけるように」→ 文ごとに、その場所(sel)の中で何文字目まで読んだか（a〜a+len / total）を持つ
+    const parts = segs.flatMap(sg => { const ps = (this.clean(sg.t).match(/[^。！？!?]+[。！？!?]*/g) || []).map(x => x.trim()).filter(Boolean), total = ps.reduce((n, x) => n + x.length, 0) || 1; let a = 0;
+      return ps.map(x => { const r = [x, sg.sel, a, x.length, total]; a += x.length; return r; }); });
     const next = i => {
       if (my !== this.token) return;
       if (i >= parts.length) { this.mark(null); onend && onend(); return; }
       this.mark(parts[i][1]);
       const u = new SpeechSynthesisUtterance(parts[i][0]);
+      this.follow(parts[i], u);
       u.lang = "ja-JP"; u.rate = S.tts.rate; if (this.voice) u.voice = this.voice;
       // スマホ(Chrome)は、読み上げ中の文をアプリが持っていないと「読み終わり」の合図を落とすことがある → 持っておく。
       // それでも合図が来ない時のために、読み終わる時間を見積もって自動で次へ（2026-10-06 下田さん「解説のあと次の問題を読まない」）
@@ -1151,8 +1155,27 @@ const TTS = {
   },
   // 読んでいない時は cancel を出さない。cancel した直後の speak はスマホが捨てることがあるので、その時刻を覚えておく
   // 読んでいる所に印をつけ、画面の外ならそこまで動かす
+  // 読んでいる文字まで色をつけて追いかける。端末が「どこまで読んだか」を教えてくれれば(onboundary)それを使い、来なければ読む速さから見積もる
+  follow(pt, u) {
+    clearInterval(this.fi); if (!pt || !pt[1]) return;
+    const [, sel, a, len, total] = pt, t0 = Date.now(), cps = 7.5 * (S.tts.rate || 1); let ci = -1;
+    u.onboundary = e => { if (typeof e.charIndex === "number") ci = e.charIndex + (e.charLength || 1); };
+    const tick = () => { const loc = ci >= 0 ? Math.min(len, ci) : Math.min(len, (Date.now() - t0) / 1000 * cps); this.hl(sel, (a + loc) / total); };
+    tick(); this.fi = setInterval(tick, 100);
+    const done = () => { clearInterval(this.fi); this.hl(sel, (a + len) / total); };
+    u.addEventListener ? u.addEventListener("end", done) : 0;
+  },
+  hl(sel, frac) {
+    if (!(window.CSS && CSS.highlights && window.Highlight)) return;
+    const el = sel && document.querySelector(sel); if (!el) { CSS.highlights.delete("rd"); return; }
+    const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), nodes = []; let n, N = 0; while ((n = tw.nextNode())) { nodes.push(n); N += n.length; }
+    let left = Math.round(Math.max(0, Math.min(1, frac)) * N); if (!nodes.length) return;
+    const r = document.createRange(); r.setStart(nodes[0], 0); let end = nodes[nodes.length - 1], off = end.length;
+    for (const x of nodes) { if (left <= x.length) { end = x; off = left; break; } left -= x.length; }
+    r.setEnd(end, off); CSS.highlights.set("rd", new Highlight(r));
+  },
   mark(sel, quiet) {
-    if (!quiet) this.curSel = sel || null;
+    if (!quiet) { this.curSel = sel || null; if (!sel) { clearInterval(this.fi); if (window.CSS && CSS.highlights) CSS.highlights.delete("rd"); } }
     document.querySelectorAll("#app .reading").forEach(e => e.classList.remove("reading"));
     if (!sel) return; const el = document.querySelector(sel); if (!el) return; el.classList.add("reading");
     if (quiet) return; const r = el.getBoundingClientRect(), vh = window.innerHeight;
