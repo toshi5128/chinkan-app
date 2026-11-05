@@ -175,7 +175,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.77";
+const APP_VERSION = "2026-11-05-v6.78";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1212,7 +1212,7 @@ function voiceHandle(t) {
   }
 }
 
-function sayQ() { const q = QM[sess.ids[sess.i]]; TTS.speak(sess.ans === null ? qSpeech(q) : aSpeech(q, sess.ans === q.a)); }
+function sayQ() { const q = QM[sess.ids[sess.i]]; if (sess.ans === null) sess.heard = true; TTS.speak(sess.ans === null ? qSpeech(q) : aSpeech(q, sess.ans === q.a)); }
 function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else { clearTimeout(autoTimer); clearTimeout(autoHard); autoTimer = null; TTS.stop(); } render(); }
 function setRate(r) { S.tts.rate = r; save(); if (AP.el) AP.el.playbackRate = r; render(); }
 const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6, 1.8, 2.0].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
@@ -2152,7 +2152,8 @@ function answer(v) {
     }
   }
   render();
-  if (S.tts.auto) TTS.speak(aSpeech(q, ok)); else TTS.stop();
+  // v6.78 下田さん「自動を切って、問題を読んでもらってから答えた時は、解説を自動で読んで」
+  if (S.tts.auto || sess.heard) TTS.speak(aSpeech(q, ok)); else TTS.stop();
 }
 function luck() {
   const q = QM[sess.ids[sess.i]], c = S.cards[q.id];
@@ -2163,7 +2164,7 @@ function luck() {
   nextQ();
 }
 function toggleStar(id) { const c = S.cards[id]; if (!c) return; c.star = !c.star; save(); render(); }
-function nextQ() { sess.tri = false; clipStop(); clearTimeout(autoHard); if (autoTimer !== "reading") clearTimeout(autoTimer); autoTimer = null; sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
+function nextQ() { sess.tri = false; sess.heard = false; clipStop(); clearTimeout(autoHard); if (autoTimer !== "reading") clearTimeout(autoTimer); autoTimer = null; sess.i++; sess.ans = null; saveSess(); render(); window.scrollTo(0, 0); if (S.tts.auto && sess.i < sess.ids.length) sayQ(); else TTS.stop(); }
 // v6.70 下田さん「一問一答のメニューが縦長でどこに何があるか分からない・選びにくい」→ 上に「何を解く？」のボタンを並べ、細かい選び方はたたむ
 let foldOpen = {};
 const allPool = () => [...Q, ...TQ, ...ZQ, ...PQ];
