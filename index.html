@@ -175,7 +175,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.79";
+const APP_VERSION = "2026-11-05-v6.80";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -2116,6 +2116,8 @@ function cancelAuto() { clearTimeout(autoTimer); clearTimeout(autoHard); autoTim
 // v6.69 下田さん「正解率をリセットできるボタンを。押すまでは今の正解率を出しておいて」
 function accReset(dojo) { const x = dojo ? dsess : sess; if (!x || !x.done) return; if (!confirm(`今の正解率（${x.done}問中${x.ok}問・${Math.round(x.ok / x.done * 100)}%）をリセットして、ここから数え直しますか？\n（問題の記録や進み具合は消えません）`)) return;
   x.ok = 0; x.done = 0; x.rs = 1; if (dojo) save(); else saveSess(); render(); }
+// v6.80 下田さん「○×を押したら解説のところまでスクロールして」
+function scrollRes() { setTimeout(() => { const el = document.querySelector("#app .res"); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 12, behavior: "smooth" }); }, 30); }
 function answer(v) {
   const q = QM[sess.ids[sess.i]]; const ok = v === q.a;
   sess.ans = v; sess.done++; if (ok) sess.ok++;
@@ -2143,7 +2145,7 @@ function answer(v) {
       return;
     }
     if (S.tts.auto && TTS.ok) {
-      autoTimer = "reading"; render();
+      autoTimer = "reading"; render(); scrollRes();
       const txt = aSpeech(q, ok);
       TTS.speak(txt, () => { if (autoTimer === "reading") { autoTimer = setTimeout(goNext, 600); } });
       // 保険：スマホが「読み終わり」を一切知らせてこなくても、読み終わるはずの時間（＋余裕）が来たら必ず次へ
@@ -2151,7 +2153,7 @@ function answer(v) {
       return;
     }
   }
-  render();
+  render(); scrollRes();
   // v6.78 下田さん「自動を切って、問題を読んでもらってから答えた時は、解説を自動で読んで」
   if (S.tts.auto || sess.heard) TTS.speak(aSpeech(q, ok)); else TTS.stop();
 }
