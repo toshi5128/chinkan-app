@@ -177,7 +177,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.83";
+const APP_VERSION = "2026-11-05-v6.84";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1243,7 +1243,7 @@ function voiceHandle(t) {
   if (view !== "study" || !sess || sess.i >= sess.ids.length) return;
   const answered = sess.ans !== null;
   // v6.64 「読んで」「問題」→ 問題文を読む／「解説」→ 答えたあとの解説を読む
-  if (/解説|かいせつ/.test(t) && answered) { TTS.speak(aSegs(QM[sess.ids[sess.i]], sess.ans === QM[sess.ids[sess.i]].a)); return; }
+  if (/解説|かいせつ/.test(t) && answered) { TTS.speak(aSegs(QM[sess.ids[sess.i]], sess.ans === QM[sess.ids[sess.i]].a), scrollNext); return; }
   if (/読んで|よんで|読む|よむ|問題|もんだい/.test(t)) { TTS.speak(qSpeech(QM[sess.ids[sess.i]])); return; }
   if (/もう一回|もう一度|もういっかい|繰り返|くりかえ/.test(t)) { sayQ(); return; }
   if (!answered) {
@@ -1257,7 +1257,7 @@ function voiceHandle(t) {
   }
 }
 
-function sayQ() { const q = QM[sess.ids[sess.i]]; sess.readOn = true; if (sess.ans === null) sess.heard = true; TTS.speak(sess.ans === null ? qSegs(q) : aSegs(q, sess.ans === q.a)); }
+function sayQ() { const q = QM[sess.ids[sess.i]]; sess.readOn = true; if (sess.ans === null) sess.heard = true; TTS.speak(sess.ans === null ? qSegs(q) : aSegs(q, sess.ans === q.a), sess.ans === null ? undefined : scrollNext); }
 function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else { clearTimeout(autoTimer); clearTimeout(autoHard); autoTimer = null; TTS.stop(); } render(); }
 function setRate(r) { S.tts.rate = r; save(); if (AP.el) AP.el.playbackRate = r; render(); }
 const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6, 1.8, 2.0].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
@@ -2096,7 +2096,7 @@ function Study() {
         <button class="linkbtn" onclick="toggleStar('${q.id}')">${card(q.id)?.star ? "★マーク済み" : "☆ マークする"}</button>
       </div>
       ${autoTimer ? `<div class="row mt"><span class="grow small" style="color:var(--ok)">正解！ ${autoTimer === "reading" ? "解説を読み終えたら次の問題へ進みます" : "まもなく次の問題へ…"}</span><button class="linkbtn" onclick="cancelAuto()">ここで止める</button></div>` : ""}
-      <button class="btn mt" onclick="nextQ()">次へ ▶</button>` : ""}
+      <button class="btn mt" id="nextBtn" onclick="nextQ()">次へ ▶</button>` : ""}
   </div>
   <div class="center"><button class="linkbtn" onclick="sess.ids=sess.ids.slice(0,sess.i);saveSess();render()">ここでやめる</button></div>
   <div class="center small">他の画面に行っても、アプリを閉じても、この問題から続きができます。</div><div></div>`;
@@ -2166,6 +2166,8 @@ function cancelAuto() { clearTimeout(autoTimer); clearTimeout(autoHard); autoTim
 function accReset(dojo) { const x = dojo ? dsess : sess; if (!x || !x.done) return; if (!confirm(`今の正解率（${x.done}問中${x.ok}問・${Math.round(x.ok / x.done * 100)}%）をリセットして、ここから数え直しますか？\n（問題の記録や進み具合は消えません）`)) return;
   x.ok = 0; x.done = 0; x.rs = 1; if (dojo) save(); else saveSess(); render(); }
 // v6.80 下田さん「○×を押したら解説のところまでスクロールして」
+// v6.84 下田さん「解説を読み終わったら次へまでスクロール」
+function scrollNext() { setTimeout(() => { const el = document.getElementById("nextBtn"); if (!el) return; const r = el.getBoundingClientRect(); window.scrollTo({ top: r.bottom + window.scrollY - window.innerHeight + 90, behavior: "smooth" }); }, 60); }
 function scrollRes() { setTimeout(() => { const el = document.querySelector("#app .res"); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 12, behavior: "smooth" }); }, 30); }
 function answer(v) {
   const q = QM[sess.ids[sess.i]]; const ok = v === q.a;
@@ -2204,7 +2206,7 @@ function answer(v) {
   }
   render(); scrollRes();
   // v6.78 下田さん「自動を切って、問題を読んでもらってから答えた時は、解説を自動で読んで」
-  if (S.tts.auto || sess.heard) TTS.speak(aSegs(q, ok)); else TTS.stop();
+  if (S.tts.auto || sess.heard) TTS.speak(aSegs(q, ok), scrollNext); else TTS.stop();
 }
 function luck() {
   const q = QM[sess.ids[sess.i]], c = S.cards[q.id];
