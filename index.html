@@ -177,7 +177,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-07-v6.89";
+const APP_VERSION = "2026-11-07-v6.90";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -1273,7 +1273,8 @@ function voiceHandle(t) {
 function sayQ() { const q = QM[sess.ids[sess.i]]; sess.readOn = true; if (sess.ans === null) sess.heard = true; TTS.speak(sess.ans === null ? qSegs(q) : aSegs(q, sess.ans === q.a), sess.ans === null ? undefined : scrollNext); }
 function toggleAuto() { S.tts.auto = !S.tts.auto; save(); if (S.tts.auto) sayQ(); else { clearTimeout(autoTimer); clearTimeout(autoHard); autoTimer = null; TTS.stop(); } render(); }
 function setRate(r) { S.tts.rate = r; save(); if (AP.el) AP.el.playbackRate = r; render(); }
-const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6, 1.8, 2.0].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
+// v6.90 下田さん「読む速さを5倍速まで」
+const RateSeg = () => `<div class="seg">${[1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0].map(r => `<button class="${Math.abs(S.tts.rate - r) < .01 ? "on" : ""}" onclick="setRate(${r})">${r.toFixed(1)}倍</button>`).join("")}</div>`;
 
 // ---------- 解説の大事なところに下線（2026-10-22 下田さん「分からない言葉の解説はもういい。解説の大事なところだけに下線を」） ----------
 //   data/keys.json = {問題id: [解説の中の大事な言い回し…]}。v6.15 の言葉の意味（点線→ポップアップ）は廃止
