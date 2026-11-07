@@ -177,7 +177,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-07-v6.87";
+const APP_VERSION = "2026-11-07-v6.88";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -674,13 +674,20 @@ function pastNext() { for (const [y, r] of PAST_ORDER) { if (y === "T") { if (TA
     else if (pastYear(y) && !S.pastLog.some(l => l.year === y && l.date >= NORMA_FROM)) return { year: y, label: pastYear(y).label }; }
   const worst = [...S.pastLog].sort((a, b) => a.score / a.pass - b.score / b.pass)[0]; return worst ? { year: worst.year, label: `${pastYear(worst.year)?.label}（いちばん低かった年をもう一度）` } : null; }
 // 苦手から順に：最後に×・△をつけた → 何度も間違えた → 正答率の低い分野・Section → まだ解いていない
+// v6.88 下田さん「本番セットで苦手な問題を集中して解けるように」（11/7 TAC第2回36点＋一問一答の記録から）
+//   苦手：民法の契約ルール（保証3-9・委任請負3-11・更新3-3・定期借家/終身3-6・相続/地位移転3-5・意思表示3-7）／実務のお金（保険5-4・証券化利回り5-2/5-7・税金5-5・統計2-11）
+//         管理業法の監督・罰則（1-12・1-13）／建物の設備・法令（消防4-7・電気ガス4-8・給水4-5・防火/定期調査4-4）
+const FOCUS_SEC = new Set(["3-9", "3-11", "3-3", "3-6", "3-5", "3-7", "5-4", "5-2", "5-7", "5-5", "2-11", "1-12", "1-13", "4-7", "4-8", "4-5", "4-4"]);
+const FOCUS_KW = /保証|委任|請負|更新|定期建物|終身|相続|死亡|保険|証券化|利回り|税|土地の価格|統計|社会的情勢|罰則|監督|申出|指示|業務停止|消防|防火|火災報知|電気|ガス|給水|給湯|内装|避難/;
+const isFocus = q => FOCUS_SEC.has(q.sec) || (!q.sec && FOCUS_KW.test(`${q.sub || ""} ${q.ctx || ""}`));
+const isKosu = q => /いくつあるか|組合せ/.test(q.ctx || "");
 function normaRank() {
   const st = Object.fromEntries(secStats().map(x => [x.id, x.acc])), t = today();
   const areaW = { A: 0, B: 0, C: 25, D: 18, E: 25 };
   return [...Q, ...TQ, ...ZQ, ...PQ].map(q => { const c = card(q.id);
     if (c?.last === t) return null;
     const acc = st[q.sec] ?? 0.5;
-    const sc = (c?.lastOk === false ? 120 : 0) + (c?.lastTri ? 80 : 0) + (c ? c.w * 12 + (c.tri || 0) * 15 - (c.box || 0) * 8 : 30) + (1 - acc) * 60 + (areaW[q.area] || 0) + Math.random() * 10;
+    const sc = (c?.lastOk === false ? 120 : 0) + (c?.lastTri ? 80 : 0) + (c ? c.w * 12 + (c.tri || 0) * 15 - (c.box || 0) * 8 : 30) + (1 - acc) * 60 + (areaW[q.area] || 0) + (isFocus(q) ? 70 : 0) + (q.tq && isKosu(q) ? 25 : 0) + Math.random() * 10;
     return [q.id, sc]; }).filter(Boolean).sort((a, b) => b[1] - a[1]).map(x => x[0]);
 }
 const normaDone = () => S.log[today()]?.n || 0;
@@ -690,6 +697,8 @@ function honbanIds() {
   const pool = [...Q, ...TQ, ...ZQ, ...PQ], set = new Set();
   for (const q of pool) { const c = card(q.id); if (c && (c.w > 0 || c.tri > 0)) set.add(q.id); }
   TQ.forEach(q => set.add(q.id)); ZQ.forEach(q => set.add(q.id));
+  // 苦手の分野は、まだ解いていない問題と、まだ定着していない問題（箱2以下）を全部入れる
+  for (const q of pool) { if (!isFocus(q)) continue; const c = card(q.id); if (!c || (c.box || 0) <= 2) set.add(q.id); }
   const fill = S.hbFill || (S.hbFill = Q.filter(q => (q.area === "C" || q.area === "E") && !card(q.id)).sort(() => Math.random() - .5).slice(0, 100).map(q => q.id));
   fill.forEach(id => QM[id] && set.add(id));
   const lap = S.lap?.n || 1;
