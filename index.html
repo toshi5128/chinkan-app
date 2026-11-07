@@ -177,7 +177,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-05-v6.86";
+const APP_VERSION = "2026-11-07-v6.87";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -2725,12 +2725,15 @@ function Settings() {
 function Stats() {
   const days = []; for (let i = 13; i >= 0; i--) days.push(addDays(today(), -i));
   // v6.30 下田さん「過去問を解いた時も学習量に記録しないとダメじゃない？」→ 一問一答＋過去問（1問＝1問）で数える
-  const pn = d => S.dojoLog?.[d]?.n || 0, an = d => (S.log[d]?.n || 0) + pn(d), ac = d => (S.log[d]?.c || 0) + (S.dojoLog?.[d]?.c || 0);
+  // v6.87 下田さん「TACの模試や過去問1年分を解いたのに、今日の記録に入らない」→ 模試（TAC・アプリの模試）も、解いた日の問題数・正答に足す（過去問1年分は道場・答案用紙の記録に入っている）
+  const mkN = d => S.mocks.filter(h => h.date === d).reduce((x, h) => x + (h.n || 0), 0);
+  const mkC = d => S.mocks.filter(h => h.date === d).reduce((x, h) => x + (h.score || 0), 0);
+  const pn = d => (S.dojoLog?.[d]?.n || 0) + mkN(d), an = d => (S.log[d]?.n || 0) + pn(d), ac = d => (S.log[d]?.c || 0) + (S.dojoLog?.[d]?.c || 0) + mkC(d);
   const max = Math.max(10, ...days.map(an));
   let streak = 0; for (let d = today(); an(d); d = addDays(d, -1)) streak++;
-  const pastTotal = Object.values(S.dojoLog || {}).reduce((s, l) => s + l.n, 0), total = Object.values(S.log).reduce((s, l) => s + l.n, 0) + pastTotal;
+  const pastTotal = Object.values(S.dojoLog || {}).reduce((s, l) => s + l.n, 0) + S.mocks.reduce((x, h) => x + (h.n || 0), 0), total = Object.values(S.log).reduce((s, l) => s + l.n, 0) + pastTotal;
   // 2026-10-10 下田さん「1日の平均問題数も出して」
-  const studied = [...new Set([...Object.keys(S.log), ...Object.keys(S.dojoLog || {})])].filter(d => an(d) > 0).sort();
+  const studied = [...new Set([...Object.keys(S.log), ...Object.keys(S.dojoLog || {}), ...S.mocks.map(h => h.date)])].filter(d => an(d) > 0).sort();
   const first = studied[0];
   const sinceDays = first ? Math.round((new Date(today() + "T00:00:00") - new Date(first + "T00:00:00")) / 86400000) + 1 : 0;
   const last7 = days.slice(-7).reduce((s2, d) => s2 + an(d), 0);
@@ -2742,16 +2745,16 @@ function Stats() {
   const tile = (v, l) => `<div style="flex:1;min-width:0;text-align:center;background:var(--bg);border-radius:10px;padding:8px 4px"><div class="num" style="font-size:22px;font-weight:800">${v}</div><div class="small">${l}</div></div>`;
   return `
   <div class="card"><h2>毎日の学習量（14日）</h2>
-    <div class="row small"><span class="grow">連続 <b class="num">${streak}</b>日</span><span>累計 ${total}問${pastTotal ? `（うち過去問 ${pastTotal}問）` : ""}</span></div>
+    <div class="row small"><span class="grow">連続 <b class="num">${streak}</b>日</span><span>累計 ${total}問${pastTotal ? `（うち過去問・模試 ${pastTotal}問）` : ""}</span></div>
     <div class="row mt" style="gap:6px">${tile(avg7, "直近7日の<br>1日平均")}${tile(avgStudy, "勉強した日の<br>1日平均")}${tile(avgAll, `始めてから<br>1日平均（${sinceDays}日）`)}</div>
     ${need ? `<div class="small mt">まだ解いていない ${unseen}問を本番（あと${dl}日）までに1周するには、1日 <b class="num">${need}</b>問。${avg7 >= need ? "今のペースで間に合います ✓" : `今のペース（${avg7}問）だと足りないので、あと ${need - avg7}問ずつ増やすと間に合います`}</div>` : ""}
     <div class="days">${days.map(d => { const n = an(d), pp = n ? pn(d) / n * 100 : 0; return `<div class="col ${d === today() ? "today" : ""}"><b>${n || ""}</b><i style="height:${n / max * 78}%;background:linear-gradient(to bottom,#e0a03a ${pp}%,var(--brand) ${pp}%)"></i></div>`; }).join("")}</div>
     <div class="dlab">${days.map(d => `<span>${+d.slice(8)}</span>`).join("")}</div>
-    <div class="small" style="margin-top:2px"><span style="color:var(--brand)">■</span> 一問一答　<span style="color:#e0a03a">■</span> 過去問</div>
+    <div class="small" style="margin-top:2px"><span style="color:var(--brand)">■</span> 一問一答　<span style="color:#e0a03a">■</span> 過去問・模試</div>
     <table class="dtbl">${days.slice(-7).reverse().map(d => { const n = an(d), w = "日月火水木金土"[new Date(d + "T00:00:00").getDay()];
       return `<tr class="${d === today() ? "today" : ""}"><td>${+d.slice(5, 7)}/${+d.slice(8)}（${w}）${d === today() ? " 今日" : d === addDays(today(), -1) ? " 昨日" : ""}</td>
-        <td class="r">${n ? `${n}問${pn(d) ? `<div class="small">うち過去問 ${pn(d)}</div>` : ""}` : "—"}</td><td class="r small">${n ? `正答 ${Math.round(ac(d) / n * 100)}%` : ""}</td></tr>`; }).join("")}</table>
-    <div class="small mt">数えているのは一問一答（おかわり・Section別・苦手の解き直しも含む）と過去問（道場・答案用紙で答えた1問ずつ）。日付はスマホの時計で0時に切り替わります。</div></div>
+        <td class="r">${n ? `${n}問${pn(d) ? `<div class="small">うち過去問・模試 ${pn(d)}</div>` : ""}` : "—"}</td><td class="r small">${n ? `正答 ${Math.round(ac(d) / n * 100)}%` : ""}</td></tr>`; }).join("")}</table>
+    <div class="small mt">数えているのは一問一答（おかわり・Section別・苦手の解き直しも含む）と、過去問（道場・答案用紙）、TAC模試・アプリの模試（解いた問題数と点数）。日付はスマホの時計で0時に切り替わります。</div></div>
   <div class="card"><h2>分野別の正答率</h2>
     ${Object.entries(AREAS).map(([a, A]) => { const s = areaStats(a); const pct = s.acc == null ? 0 : Math.round(s.acc * 100);
       return `<div class="area"><div><span class="dot" style="background:${A.color}"></span>${A.name}</div><div class="num small">${s.acc == null ? "—" : pct + "%"}</div>
