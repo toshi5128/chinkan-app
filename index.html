@@ -92,6 +92,7 @@ nav.tabs svg{width:22px;height:22px}
 .qhead{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--sub);margin-bottom:8px;flex-wrap:wrap;gap:4px 8px}
 .pbar{position:sticky;top:0;z-index:4;background:var(--bg);padding:6px 0 8px;margin-bottom:6px;border-bottom:1px solid var(--line)}
 .pbar .bt{flex:none;border:0;border-radius:8px;background:var(--brand);color:#fff;font-weight:700;font-size:13px;padding:7px 10px}
+.hist{margin:0 0 8px;padding:6px 8px;border-radius:8px;background:var(--track)}.hist-m{display:flex;flex-wrap:wrap;align-items:center;gap:3px;margin-top:3px}.hist-m b{font-size:21px;line-height:1;font-weight:900}.hm-o{color:var(--ok)}.hm-x{color:var(--ng)}.hist-old{margin-right:6px}
 .chip{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:99px;background:var(--track);color:var(--sub)}
 .qtext{font-size:17px;line-height:1.75;margin:4px 0 14px;white-space:pre-wrap}
 u.key{text-decoration:underline;text-decoration-color:var(--ng);text-decoration-thickness:2px;text-underline-offset:4px;font-weight:700}
@@ -177,7 +178,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-07-v6.90";
+const APP_VERSION = "2026-11-09-v6.91";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -377,6 +378,7 @@ function record(id, ok) {
   else { c.box = 1; c.w++; }
   c.due = addDays(t, INTERVAL[c.box]);
   c.last = t; c.lastOk = ok;
+  c.h = ((c.h || "") + (ok ? "o" : "x")).slice(-30); // v6.91 解いた順の○×（11/9から記録）
   S.cards[id] = c;
   const L = S.log[t] || { n: 0, c: 0 }; L.n++; if (ok) L.c++; S.log[t] = L;
   save();
@@ -515,6 +517,17 @@ function startNigate() {
   const un = shuffle(ZQ.filter(q => !card(q.id)).map(q => q.id));
   startSession(un.length ? un : shuffle(ZQ.filter(q => card(q.id).lastOk === false).map(q => q.id)), un.length ? "苦手特訓" : "苦手特訓の間違い");
 }
+// v6.91 下田さん「今までの回答の履歴を○×で問題の上に」。h＝解いた順（11/9から）。それより前は回数しか残っていないので「以前 ○n×m」とまとめて出す
+function HistLine(c) {
+  if (!c || !(c.c + c.w)) return `<div class="hist"><span class="small">これまでの結果：はじめての問題</span></div>`;
+  const h = c.h || "", ho = [...h].filter(x => x === "o").length, hx = h.length - ho, oo = Math.max(0, c.c - ho), ox = Math.max(0, c.w - hx);
+  const marks = [...h].map(x => `<b class="${x === "o" ? "hm-o" : "hm-x"}">${x === "o" ? "○" : "×"}</b>`).join("");
+  return `<div class="hist"><span class="small">これまで ${c.c + c.w}回（正解${c.c}・間違い${c.w}）</span><div class="hist-m">${oo + ox ? `<span class="small hist-old">以前 ○${oo}×${ox}</span>` : ""}${marks}${h ? `<span class="small" style="margin-left:4px">←新しい</span>` : ""}</div></div>`;
+}
+// v6.91 何度やっても間違える問題集＝2回以上間違えていて、正解が間違い以下 or 最後が×。2回続けて正解したら卒業
+const isHard = c => !!c && c.w >= 2 && (c.w >= c.c || c.lastOk === false) && !(c.h || "").endsWith("oo");
+const hardIds = () => Object.keys(S.cards).filter(id => QM[id] && isHard(S.cards[id]));
+function startHard() { const ids = hardIds(); if (!ids.length) { alertBox("何度も間違える問題はもうありません。"); return; } startSession(shuffle(ids), "何度も間違える問題集"); }
 function startStill() { startSession(Q.filter(q => card(q.id)?.w > 0 && card(q.id).lastOk === false).map(q => q.id).sort(bookOrder), "まだ間違えたまま"); }
 const pctColor = a => a == null ? "var(--sub)" : a >= 0.9 ? "var(--ok)" : a >= 0.8 ? "#d97706" : "var(--ng)";
 function RedoCard() {
@@ -756,6 +769,7 @@ function naviPlan() {
     add(idsDoneToday(ids), `🎯 今日の苦手 ${s} ${esc(x.title || "")}`, `正答率 ${x.acc == null ? "—" : Math.round(x.acc * 100) + "%"}・本番に過去5年で${f[s] || 0}問。講義を聞いて→間違えやすい${ids.length}問を解く`, `startFocus('${s}')`, "解く", LEC[s] ? `startLecture(['${s}'])` : "", "🎧 先に聞く"); });
   if (!norma && N.onceQ) { const left = onceIds().length, td = N.onceBase - left;
     add(td >= N.onceQ || !left, `🔂 2周目　今日 ${Math.min(td, N.onceQ)}/${N.onceQ}問`, left ? `1回しか解いていない問題が残り${left}問。${mdj(PAST_END)}までに全部2回目を。今日の苦手Sectionの問題から出します` : "全部2回以上解きました", "startOnce()", "解く"); }
+  { const hn = hardIds().length; if (hn) add(false, `🔥 何度も間違える問題集（${hn}問）`, "2回以上間違えた問題だけ。2回続けて正解すると卒業", "startHard()", "解く"); }
   if (!norma && r.still && !r.left) add(false, `❌ まだ間違えたままの ${r.still}問`, "最後に間違えた問題だけ。正解すると外れます", "startStill()", "解く");
   const un = SECS.filter(x => LEC[x.id] && !heardN(x.id)), heardT = SECS.filter(x => heardToday(x.id)).length;
   if (!norma && (un.length || N.lec)) { N.lec = 1; add(!un.length || heardT >= 3, `🎧 まだ聞いていない講義（残り${un.length}個）`, un.length ? `移動中に1日3つ。次は ${un.slice(0, 3).map(x => x.id).join("・")}` : "全Section聞き終わりました", un.length ? `startLecture(${JSON.stringify(un.slice(0, 3).map(x => x.id)).replace(/"/g, "'")})` : "", "聞く"); }
@@ -2095,6 +2109,7 @@ function Study() {
     ${VOICE.on ? `<div class="small" style="margin-bottom:6px;padding:8px 10px;border-radius:8px;background:var(--track);line-height:1.7">🎤 答え：<b>まる／正しい／合ってる</b>・<b>ばつ／間違い</b>・<b>さんかく</b>　ほか：読んで・解説・つぎ・もう一回・まぐれ・ストップ<br><span id="vSt">${esc(VOICE.st || "準備中")}${VOICE.err ? `（エラー：${esc(VOICE.err)}）` : ""}</span>　<button class="linkbtn" onclick="voiceOnce()">🎙 押して話す</button><br><b id="vHeard">${VOICE.last ? `聞こえた：${esc(VOICE.last)}` : "（まだ何も聞こえていません）"}</b></div>` : ""}
     <div class="small" style="text-align:right;margin-bottom:6px">${S.skipOk && S.autoNext ? "⚡速く：自信ありで正解→すぐ次へ" : S.autoNext && S.tts.auto && TTS.ok ? "🔁自動：正解なら解説を読み終えて次へ" : sess.readOn ? `🔊 読み上げ中：「次へ」で次の問題を読みます <button class="linkbtn" style="padding:0;font-size:12px" onclick="sess.readOn=false;TTS.stop();render()">読むのをやめる</button>` : "「次へ」を押して進みます"}</div>
     ${q.pq ? `<div class="pqctx" style="margin-bottom:8px;padding:8px 10px;border-radius:8px;background:var(--track);font-size:14px;line-height:1.7"><span class="small">📝 ${esc(q.from)}</span><br>元の問い：${esc(q.ctx)}<br><b>→ ここでは、下の記述が正しい（あてはまる）かを○×で</b></div>` : ""}
+    ${HistLine(c)}
     <div class="qtext">${typeof answered !== "undefined" && answered ? glw(q) : gl(q.q)}</div>
     <div class="ox">
       <button class="o ${answered && sess.ans === true ? "pick" : ""}" ${answered ? "disabled" : ""} onclick="answer(true)" aria-label="正しい">○</button>
@@ -2236,7 +2251,7 @@ function answer(v) {
 }
 function luck() {
   const q = QM[sess.ids[sess.i]], c = S.cards[q.id];
-  c.box = 1; c.due = addDays(today(), 1); c.c--; c.w++; c.lastOk = false;
+  c.box = 1; c.due = addDays(today(), 1); c.c--; c.w++; c.lastOk = false; if (c.h) c.h = c.h.slice(0, -1) + "x";
   const L = S.log[today()]; if (L) L.c--; sess.ok--;
   save();
   if (!sess.requeued[q.id]) { sess.requeued[q.id] = 1; sess.ids.splice(Math.min(sess.ids.length, sess.i + 6), 0, q.id); }
@@ -2273,6 +2288,7 @@ function StudyMenu() {
     <button class="btn" onclick="${inNorma ? "backToSess()" : "startNorma()"}" style="text-align:left;padding:12px 14px;display:block">
       <b style="font-size:17px">▶ 本番セット${inNorma ? "（続きから）" : ""}</b><br><span style="font-size:13px;font-weight:400">今日 ${n}/${S.normaQ || 500}問${L ? `・${L.n}周目 ${L.done}/${L.total}問` : ""}　いつもはこれ</span></button>
     <div class="tiles mt">
+      ${tile("🔥", "何度も間違える", hardIds().length + "問", "2回以上×・2連続○で卒業", "startHard()", !hardIds().length)}
       ${tile("❌", "間違えたまま", cnt("wrong") + "問", "最後に×だった問題", "startKind('wrong')", !cnt("wrong"))}
       ${tile("△", "迷った", cnt("tri") + "問", "△をつけた問題", "startKind('tri')", !cnt("tri"))}
       ${tile("📝", "TAC模試の記述", cnt("tq") + "問", "未挑戦と×の記述", "startKind('tq')", !cnt("tq"))}
