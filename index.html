@@ -178,7 +178,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-09-v6.91";
+const APP_VERSION = "2026-11-11-v6.92";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -2533,8 +2533,11 @@ function Mock() {
     <div class="row mt" style="gap:8px">
       <button class="btn ghost" style="padding:10px" onclick="moveMock(-1)" ${m.i ? "" : "disabled"}>◀ 前へ</button>
       <button class="btn ghost" style="padding:10px;white-space:nowrap;${m.flag[m.i] ? "color:var(--warn)" : ""}" onclick="S.cur.flag[S.cur.i]=!S.cur.flag[S.cur.i];save();render()">${m.flag[m.i] ? "🚩 見直し中" : "🏳 見直す"}</button>
-      <button class="btn" style="padding:10px" onclick="moveMock(1)" ${m.i < m.items.length - 1 ? "" : "disabled"}>次へ ▶</button>
+      ${(() => { const chk = mockInstant(m) && m.pick[m.i] !== null && !m.shown?.[m.i];
+        return `<button class="btn" style="padding:10px;white-space:nowrap" onclick="moveMock(1)" ${chk || m.i < m.items.length - 1 ? "" : "disabled"}>${chk ? "答え合わせ ▶" : "次へ ▶"}</button>`; })()}
     </div>
+    <div class="row mt" style="gap:8px"><span class="small grow">答え合わせ：${mockInstant(m) ? "答えを選んで「次へ」でその場で正解・解説を出す" : "最後の採点でまとめて"}</span><button class="spk ${mockInstant(m) ? "on" : ""}" onclick="S.cur.instant=!mockInstant(S.cur);save();render()">${mockInstant(m) ? "その場で" : "最後に"}</button></div>
+    ${m.shown?.[m.i] ? `<div id="mockReveal" class="mt">${m.pick[m.i] === it.ans ? `<div class="res ok"><b class="t">正解</b></div>` : `<div class="res ng"><b class="t">不正解</b>　正解は <b>${it.ans + 1}</b></div>`}${mockReview(it, m.i, m).replace('<details class="st">', '<details class="st" open>')}</div>` : ""}
   </div>
   <div class="card"><div class="row small"><span class="grow">解答 ${answeredN}/${m.items.length}</span><span>🚩＝見直し</span></div>
     <div class="grid mt">${m.items.map((_, k) => `<button class="${k === m.i ? "cur" : m.pick[k] !== null ? "ans" : ""} ${m.flag[k] ? "flag" : ""}" onclick="mockGo(${k})">${k + (m.from || 1)}</button>`).join("")}</div>
@@ -2553,11 +2556,22 @@ function sayMock() {
     : st.map((q, k) => `${k + 1}番。${q.q}`).join("");
   TTS.speak(`問${m.i + 1}。${STEM[it.type]}${body}`);
 }
-function pickOpt(k) { S.cur.pick[S.cur.i] = S.cur.pick[S.cur.i] === k ? null : k; save(); render(); }
+function pickOpt(k) { if (S.cur.shown?.[S.cur.i]) return; S.cur.pick[S.cur.i] = S.cur.pick[S.cur.i] === k ? null : k; save(); render(); } // 答え合わせ後は答えを変えられない
 // 問題を移るたびに、それまで見ていた問題の時間を足す（本番リハーサルで「時間を使いすぎた所」を出すため）
 function mockClock(m) { const now = Date.now(); m.spent = m.spent || m.items.map(() => 0); m.spent[m.i] += now - (m.qt || m.start); m.qt = now; }
 function mockGo(k) { TTS.stop(); mockClock(S.cur); S.cur.i = Math.max(0, Math.min(S.cur.items.length - 1, k)); save(); render(); window.scrollTo(0, 0); }
-function moveMock(d) { mockGo(S.cur.i + d); }
+// v6.92 下田さん「TACの問題をやってる時、次を押したらその問題が合ってるか・解説を出して」→ 答えを選んだ問題は「次へ」1回目で正解・解説を出し、2回目で次の問題へ
+const mockInstant = m => m.instant !== false;
+function moveMock(d) {
+  const m = S.cur;
+  if (d > 0 && mockInstant(m) && m.pick[m.i] !== null && !m.shown?.[m.i]) {
+    TTS.stop(); m.shown = m.shown || m.items.map(() => false); m.shown[m.i] = true; save(); render();
+    setTimeout(() => document.getElementById("mockReveal")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    return;
+  }
+  if (d > 0 && m.i >= m.items.length - 1) return;
+  mockGo(m.i + d);
+}
 function quitMock() { if (!confirm("この模試をやめますか？（結果は残りません）")) return; const t = S.cur?.tac; S.cur = null; save(); if (t) go("tac"); else render(); }
 function finishMock(timeUp) {
   const m = S.cur;
@@ -2609,14 +2623,17 @@ function MockResult(m) {
     <div class="bar" style="grid-column:1/-1"><i style="width:${b.c / b.n * 100}%;background:${AREAS[a].color}"></i></div></div>`).join("")}</div>
   ${m.spent ? MockTime(m) : ""}
   <div class="card"><h2>1問ずつ見直す</h2><div class="small">タップすると、4つの文それぞれの○×と解説が出ます。${TR ? "解説は本の文章どおりです。" : ""}</div>
-    ${m.items.map((it, k) => { if (it.tac) return tacReview(it, k, m); const ok = m.pick[k] === it.ans;
-      const label = o => it.opts ? it.opts[o] : String(o + 1);
-      return `<details class="st"><summary><span class="tag ${ok ? "ok" : "ng"}">${ok ? "正解" : "×"}</span> 問${k + 1} ${STEM[it.type]}<span class="small">（あなた：${m.pick[k] === null ? "未解答" : label(m.pick[k])}／正解：${label(it.ans)}）</span></summary>
-        ${it.ids.map((id, j) => { const q = QM[id]; return `<div style="margin:8px 0 0;font-size:14px;line-height:1.7"><b>${it.opts ? KANA[j] : j + 1}</b> ${gl(q.q)}<br>
-          <span class="tag ${q.a ? "ok" : "ng"}">${q.a ? "○ 正しい" : "× 誤り"}</span> <span class="small">${gx(q)}</span></div>`; }).join("")}</details>`; }).join("")}
+    ${m.items.map((it, k) => mockReview(it, k, m)).join("")}
     <div class="btns mt"><button class="btn" onclick="const t=S.cur?.tac;S.cur=null;save();go(t ? 'tac' : 'home')">閉じる</button></div></div>`;
 }
 
+function mockReview(it, k, m) {
+  if (it.tac) return tacReview(it, k, m);
+  const ok = m.pick[k] === it.ans, label = o => it.opts ? it.opts[o] : String(o + 1);
+  return `<details class="st"><summary><span class="tag ${ok ? "ok" : "ng"}">${ok ? "正解" : "×"}</span> 問${k + 1} ${STEM[it.type]}<span class="small">（あなた：${m.pick[k] === null ? "未解答" : label(m.pick[k])}／正解：${label(it.ans)}）</span></summary>
+        ${it.ids.map((id, j) => { const q = QM[id]; return `<div style="margin:8px 0 0;font-size:14px;line-height:1.7"><b>${it.opts ? KANA[j] : j + 1}</b> ${gl(q.q)}<br>
+          <span class="tag ${q.a ? "ok" : "ng"}">${q.a ? "○ 正しい" : "× 誤り"}</span> <span class="small">${gx(q)}</span></div>`; }).join("")}</details>`;
+}
 function MockTime(m) {
   const min = x => x / 60000, per = m.items.length >= 40 ? 120 / 50 : (m.limit || 1200) / 60 / m.items.length;
   const by = {}; m.items.forEach((it, k) => { const b = by[it.area] || (by[it.area] = { n: 0, t: 0 }); b.n++; b.t += m.spent[k] || 0; });
