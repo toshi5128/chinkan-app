@@ -178,7 +178,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-11-v6.92";
+const APP_VERSION = "2026-11-11-v6.93";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -244,7 +244,7 @@ async function cloudPush() {
     if (r.ok) { S.cloudAt = new Date().toISOString(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
   } catch (e) {}
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") { clearTimeout(cloudTimer); cloudPush(); } });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") { if (typeof mockPause === "function") mockPause(); clearTimeout(cloudTimer); cloudPush(); } else if (view === "mock" && S.cur?.pausedAt) render(); });
 async function cloudRestore() {
   const k = (document.getElementById("syncIn")?.value || "").trim().toLowerCase();
   if (!/^[0-9a-f-]{20,64}$/.test(k)) { alertBox("引き継ぎコードが正しくありません。"); return; }
@@ -429,6 +429,7 @@ function cycleTheme(to) {
 function render() {
   renderTabs();
   const el = document.getElementById("app");
+  if (view !== "mock") mockPause(); // v6.93 模試の画面を離れたら時計を止める（戻ったら続きから）
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
   el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "tacnum" ? TacNum() : view === "tac" ? TacPage() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "marks" ? MarksView() : view === "kako" ? Kako() : view === "settings" ? Settings() : Stats());
   if (TTS.curSel) TTS.mark(TTS.curSel, true);
@@ -446,6 +447,7 @@ function Home() {
   const lastPast = S.pastLog.slice(-1)[0];
   const dl = daysLeft();
   return `
+  ${MockResumeCard(true)}
   <div class="card" style="padding:14px 16px"><div class="row" style="align-items:baseline;gap:8px">
     <span class="small grow">本番 11/15（日）13:00 まで</span><b class="num" style="font-size:34px;color:var(--brand)">${dl}</b><span>日</span></div></div>
   ${NaviCard()}
@@ -2372,7 +2374,7 @@ function tacReview(it, k, m) {
 function TacPage() {
   const hist = S.mocks.filter(h => h.tac).slice(-6).reverse(), tn = TACNUM.length ? TACNUM.filter(x => S.tacnum[x.n]).length : 0;
   const mid = S.cur && !S.cur.done && S.cur.tac, fin = S.cur && S.cur.done && S.cur.tac && S.cur.pick.some(x => x === null);
-  return `${mid ? `<div class="card"><div class="row" style="gap:8px"><span class="grow">TAC第${S.cur.tac}回を解いている途中です（${S.cur.pick.filter(x => x !== null).length}/50問）</span><button class="btn" style="width:auto;padding:8px 14px" onclick="go('mock')">▶ 続きへ</button></div></div>` : ""}
+  return `${mid ? `<div class="card"><div class="row" style="gap:8px"><span class="grow">TAC第${S.cur.tac}回を解いている途中です（${S.cur.pick.filter(x => x !== null).length}/50問${S.cur.pausedAt ? `・⏸ 中断中 残り約${mockLeft(S.cur)}分` : ""}）</span><button class="btn" style="width:auto;padding:8px 14px" onclick="go('mock')">▶ 続きへ</button></div></div>` : ""}
   ${fin ? `<div class="card"><div class="row" style="gap:8px"><span class="grow">TAC第${S.cur.tac}回は時間切れで採点されました。未解答 ${S.cur.pick.filter(x => x === null).length}問</span><button class="btn" style="width:auto;padding:8px 14px" onclick="tacResume()">▶ 続きから</button></div>
     <button class="linkbtn" onclick="go('mock')">結果と解説を見る</button></div>` : ""}
   ${TacCard()}
@@ -2517,6 +2519,7 @@ function Mock() {
   const m = S.cur;
   if (!m) return Kako();
   if (m.done) return MockResult(m);
+  mockUnpause(m);
   startTimer();
   const it = m.items[m.i], stmts = it.tac ? [] : it.ids.map(id => QM[id]);
   const answeredN = m.pick.filter(x => x !== null).length;
@@ -2547,6 +2550,7 @@ function Mock() {
         <div class="small">正答率 ${n ? Math.round(c / n * 100) : 0}%${n ? `・このペースなら50問で約${Math.round(c / n * 50)}点` : ""}${line ? `（合格推定${line}点）` : ""}。どの問題が×かは採点まで出ません。</div>
         <button class="linkbtn" onclick="S.cur.peek=false;save();render()">隠す</button>` : `<button class="btn sec" onclick="S.cur.peek=true;save();render()">📊 いまの点数を見る（途中経過）</button>`}</div>`; })()}
     <div class="btns mt"><button class="btn" onclick="finishMock()">採点する</button>
+    <button class="btn sec" onclick="mockBreak()">⏸ 中断する（時計を止めて、あとで続きから）</button>
     <button class="linkbtn" onclick="quitMock()">この模試をやめる（記録しない）</button></div></div>`;
 }
 function sayMock() {
@@ -2572,6 +2576,16 @@ function moveMock(d) {
   if (d > 0 && m.i >= m.items.length - 1) return;
   mockGo(m.i + d);
 }
+// v6.93 下田さん「問題途中でやめる時、また再開できるように」→ 模試の画面を離れる・アプリを閉じる・「中断」で時計を止め、戻ったら止めた所から（時間切れで勝手に採点されない）
+function mockPause() { const m = S.cur; if (!m || m.done || m.pausedAt) return; mockClock(m); m.pausedAt = Date.now(); save(); }
+function mockUnpause(m) { if (!m?.pausedAt) return; const d = Date.now() - m.pausedAt; m.start += d; if (m.qt) m.qt += d; m.pausedAt = null; save(); }
+function mockBreak() { const t = S.cur?.tac; TTS.stop(); mockPause(); go(t ? "tac" : "kako"); }
+const mockLeft = m => Math.max(0, Math.floor(((m.limit || 7200) * 1000 - ((m.pausedAt || Date.now()) - m.start)) / 60000));
+function MockResumeCard(any) {
+  const m = S.cur; if (!m || m.done || (m.tac && !any)) return "";
+  return `<div class="card" style="border:2px solid var(--brand)"><div class="row" style="gap:8px"><span class="grow"><b>解いている途中の${m.tac ? `TAC第${m.tac}回` : "模試"}があります</b><div class="small">${m.items.length}問中 ${m.pick.filter(x => x !== null).length}問 解答・問${m.i + 1}から・残り時間 約${mockLeft(m)}分</div></span>
+    <button class="btn" style="width:auto;padding:9px 14px" onclick="go('mock')">▶ 続きから</button></div></div>`;
+}
 function quitMock() { if (!confirm("この模試をやめますか？（結果は残りません）")) return; const t = S.cur?.tac; S.cur = null; save(); if (t) go("tac"); else render(); }
 function finishMock(timeUp) {
   const m = S.cur;
@@ -2593,7 +2607,7 @@ function finishMock(timeUp) {
 // v6.29 下田さん「タブに過去問も追加したら？」「模擬試験じゃなくて過去問にしといて」→ 模試タブを「過去問」タブに。道場・答案用紙を上に、個数ドリル・模試はその下
 function MarksCard() { const R = Object.keys(S.marks).length ? markRows() : [], T = R.filter(r => r.m === "t").length, B = R.filter(r => r.bad).length;
   return R.length ? `<div class="card"><div class="row" style="gap:8px"><span class="grow"><b>📝 ○×△の振り返り</b><div class="small">△ 迷った ${T}・⚠ 判断ちがい ${B}</div></span><button class="btn sec" style="width:auto;padding:8px 14px" onclick="go('marks')">見る</button></div></div>` : ""; }
-function Kako() { return `${MarksCard()}${PQCard()}${DojoCard()}${PastMenu()}${MockMenu()}`; }
+function Kako() { return `${MockResumeCard()}${MarksCard()}${PQCard()}${DojoCard()}${PastMenu()}${MockMenu()}`; }
 function MockMenu() {
   const hist = S.mocks.slice(-8).reverse();
   return `
