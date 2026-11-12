@@ -93,6 +93,12 @@ nav.tabs svg{width:22px;height:22px}
 .pbar{position:sticky;top:0;z-index:4;background:var(--bg);padding:6px 0 8px;margin-bottom:6px;border-bottom:1px solid var(--line)}
 .pbar .bt{flex:none;border:0;border-radius:8px;background:var(--brand);color:#fff;font-weight:700;font-size:13px;padding:7px 10px}
 .hist{margin:0 0 8px;padding:6px 8px;border-radius:8px;background:var(--track)}.hist-m{display:flex;flex-wrap:wrap;align-items:center;gap:3px;margin-top:3px}.hist-m b{font-size:21px;line-height:1;font-weight:900}.hm-o{color:var(--ok)}.hm-x{color:var(--ng)}.hist-old{margin-right:6px}
+.vstage{margin:8px 0 6px;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:4px}.vstage svg{width:100%;height:auto;display:block}
+.vcap{min-height:4.6em;font-size:16px;line-height:1.7;padding:8px 10px;border-radius:10px;background:var(--track)}.vwho{display:inline-block;font-size:11px;font-weight:700;color:#fff;border-radius:99px;padding:1px 8px;margin-right:6px;vertical-align:2px}.vwho.A{background:#2a78d6}.vwho.B{background:#c2417a}
+.vbar{height:10px;border-radius:99px;background:var(--track);margin-top:8px;cursor:pointer;overflow:hidden}.vbar i{display:block;height:100%;background:var(--brand)}
+.vid .fl{stroke-dasharray:7 9;animation:vflow .9s linear infinite}.vid .spin{animation:vspin 1s linear infinite}.vid .pop{animation:vpop .6s ease both;transform-box:fill-box;transform-origin:center}.vid .wave{animation:vwave 1.6s ease-in-out infinite alternate}
+.vid.paused .fl,.vid.paused .spin,.vid.paused .wave{animation-play-state:paused}
+@keyframes vflow{to{stroke-dashoffset:-16}}@keyframes vspin{to{transform:rotate(360deg)}}@keyframes vpop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}@keyframes vwave{from{opacity:.4}to{opacity:.7}}
 .chip{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:99px;background:var(--track);color:var(--sub)}
 .qtext{font-size:17px;line-height:1.75;margin:4px 0 14px;white-space:pre-wrap}
 u.key{text-decoration:underline;text-decoration-color:var(--ng);text-decoration-thickness:2px;text-underline-offset:4px;font-weight:700}
@@ -178,7 +184,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-11-v6.93";
+const APP_VERSION = "2026-11-11-v6.94";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -271,7 +277,7 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 const daysLeft = () => Math.max(0, Math.ceil((new Date(ymd(EXAM) + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000));
 
 // ---------- 問題 ----------
-let ZQ = [], Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], TACNUM = [], ANKI = [], CONF = [], LEC = {}, AUD = {}, TALK = {};
+let VIDEOS = [], ZQ = [], Q = [], QM = {}, SECS = [], SECM = {}, CHAPS = [], PAST = null, NUMS = [], TACNUM = [], ANKI = [], CONF = [], LEC = {}, AUD = {}, TALK = {};
 const LEC_FILES = ["lec_1a", "lec_1b", "lec_2", "lec_3", "lec_4", "lec_5"];
 // 2026-10-05 下田さん「会話形式で・図やイラストでイメージしやすく」→ 講義をラジオ風の2人の会話＋図に（data/talk_*.json）。無いSectionは今までの講義のまま
 const TALK_FILES = ["talk_1a", "talk_1b", "talk_2", "talk_3", "talk_4", "talk_5"];
@@ -291,6 +297,7 @@ async function loadQuestions() {
   TACNUM = await fetch("data/tacnum.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   ANKI = await fetch("data/anki.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   CONF = await fetch("data/confuse.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
+  VIDEOS = await fetch("data/videos.json", { cache: "no-store" }).then(r => r.ok ? r.json() : []).catch(() => []);
   AUD = await fetch("audio/index.json", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
   CHAPS = chaps;
   SECS = chaps.flatMap(c => c.secs.map(([id, title, page]) => ({ id, title, page, ch: c.ch })));
@@ -431,7 +438,7 @@ function render() {
   const el = document.getElementById("app");
   if (view !== "mock") mockPause(); // v6.93 模試の画面を離れたら時計を止める（戻ったら続きから）
   if (!Q.length) { el.innerHTML = `<div class="card">問題データが見つかりません。電波の良いところで開き直してください。</div>`; return; }
-  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "tacnum" ? TacNum() : view === "tac" ? TacPage() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "marks" ? MarksView() : view === "kako" ? Kako() : view === "settings" ? Settings() : Stats());
+  el.innerHTML = MiniPlayer() + (view === "home" ? Home() : view === "book" ? Book() : view === "numbers" ? Numbers() : view === "tacnum" ? TacNum() : view === "tac" ? TacPage() : view === "anki" ? Anki() : view === "past" ? Past() : view === "listen" ? Listen() : view === "lecture" ? Lecture() : view === "study" ? Study() : view === "mock" ? Mock() : view === "dojo" ? Dojo() : view === "marks" ? MarksView() : view === "kako" ? Kako() : view === "video" ? VideoView() : view === "settings" ? Settings() : Stats());
   if (TTS.curSel) TTS.mark(TTS.curSel, true);
 }
 function alertBox(msg) { const el = document.getElementById("app"); el.insertAdjacentHTML("afterbegin", `<div class="card" style="background:var(--warnbg)">${esc(msg)}</div>`); }
@@ -1308,10 +1315,67 @@ function figFor(q) {
   const hit = t => FIGS.map(f => [f, f.kw.filter(k => t.includes(k)).length]).filter(x => x[1]).sort((a, b) => b[1] - a[1])[0]?.[0];
   return figCache[q.id] = hit(main) || hit(all) || null;
 }
-const figBox = (f, open = true) => f ? `<details class="fig" ${open ? "open" : ""}><summary>🖼 図で見る：${esc(f.title)}</summary><div class="figsvg">${f.svg}</div>${(f.pts || []).length ? `<ul class="figpts">${f.pts.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</details>` : "";
+const figBox = (f, open = true) => f ? `<details class="fig" ${open ? "open" : ""}><summary>🖼 図で見る：${esc(f.title)}</summary>${VIDEOS.some(v => v.id === f.id) ? `<button class="btn sec mt" onclick="event.stopPropagation();openVideo('${f.id}')">🎬 動画で見る（絵が動く・声つき）</button>` : ""}<div class="figsvg">${f.svg}</div>${(f.pts || []).length ? `<ul class="figpts">${f.pts.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</details>` : "";
 // よく出る図（サブリース・管理受託など）は毎回ひらくと邪魔なので、同じ図は最初の6問だけ開いて出し、あとはたたむ（押せば開く）。建物・設備の問題はいつも開く
 function figAuto(q) { const f = figFor(q); if (!f) return false; if (q.area === "C") return true;
   const L = (S.figSeen || (S.figSeen = {}))[f.id] || (S.figSeen[f.id] = []); if (!L.includes(q.id) && L.length < 6) L.push(q.id); return L.includes(q.id); }
+// v6.94 下田さん「水道増圧ポンプとか水道系の種類が分からないから、イラスト付きの動画を作ってアプリに入れて」
+// 動画＝場面ごとの絵（水が流れる・ポンプが回る）＋2人の声（audio/video/*.mp3）。声の位置に合わせて場面と字幕を切り替える
+let VID = null; // {v, el, sc, ln}
+const vEm = t => esc(t).replace(/《(.+?)》/g, '<b class="em">$1</b>');
+function openVideo(id) {
+  const v = VIDEOS.find(x => x.id === id); if (!v) return;
+  TTS.stop(); clipStop(); if (AP.el && !AP.el.paused) AP.el.pause();
+  if (!VID || VID.v.id !== id) {
+    if (VID?.el) VID.el.pause();
+    const el = new Audio(v.audio); el.preload = "auto"; el.playbackRate = S.vidRate || 1; VID = { v, el, sc: 0, ln: 0 };
+    el.addEventListener("timeupdate", vidTick); el.addEventListener("play", vidUI); el.addEventListener("pause", vidUI);
+    el.addEventListener("ended", () => { vidUI(); });
+  }
+  view = "video"; render(); window.scrollTo(0, 0); VID.el.play().catch(() => vidUI());
+}
+function vidPos(t) {
+  const sc = VID.v.scenes; let i = 0; while (i + 1 < sc.length && sc[i + 1].t <= t + 0.05) i++;
+  const L = sc[i].lines; let k = 0; while (k + 1 < L.length && L[k + 1][2] <= t + 0.05) k++; return [i, k];
+}
+function vidTick() {
+  if (!VID) return; const [i, k] = vidPos(VID.el.currentTime);
+  if (i !== VID.sc) { VID.sc = i; VID.ln = k; if (view === "video") render(); return; }
+  if (k !== VID.ln) { VID.ln = k; vidCap(); }
+  const b = document.getElementById("vidBar"); if (b) b.style.width = (VID.el.currentTime / (VID.el.duration || VID.v.dur || 1) * 100) + "%";
+}
+function vidCap() {
+  const c = document.getElementById("vidCap"); if (!c || !VID) return; const [w, txt] = VID.v.scenes[VID.sc].lines[VID.ln];
+  c.innerHTML = `<span class="vwho ${w}">${w === "A" ? "龍星" : "めたん"}</span>${vEm(txt)}`;
+}
+function vidUI() {
+  if (view !== "video" || !VID) return; const p = document.getElementById("vidPlay"); if (p) p.textContent = VID.el.paused ? "▶ 再生" : "⏸ 一時停止";
+  document.querySelector(".vid")?.classList.toggle("paused", VID.el.paused);
+}
+function vidGo(i) { const sc = VID.v.scenes; i = Math.max(0, Math.min(sc.length - 1, i)); VID.el.currentTime = sc[i].t + 0.01; VID.sc = i; VID.ln = 0; render(); VID.el.play().catch(() => {}); }
+function vidToggle() { if (VID.el.ended) { vidGo(0); return; } VID.el.paused ? VID.el.play().catch(() => {}) : VID.el.pause(); }
+function vidRate(r) { S.vidRate = r; save(); VID.el.playbackRate = r; render(); }
+function vidSeek(ev) { const r = ev.currentTarget.getBoundingClientRect(), d = VID.el.duration || VID.v.dur; VID.el.currentTime = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * d; vidTick(); }
+function vidClose() { if (VID?.el) VID.el.pause(); go("book"); }
+function vidQuiz(sec) { VID.el.pause(); startSession(shuffle(Q.filter(q => q.sec === sec).map(q => q.id)).slice(0, 20), "動画のあと " + sec); go("study"); }
+function VideoView() {
+  if (!VID) return Book();
+  const v = VID.v, sc = v.scenes[VID.sc], paused = VID.el.paused;
+  setTimeout(vidCap, 0);
+  return `<div class="card vid ${paused ? "paused" : ""}">
+    <div class="row" style="gap:8px"><b class="grow" style="font-size:15px">🎬 ${esc(v.title)}</b><button class="spk" onclick="vidClose()">✕ 閉じる</button></div>
+    <div class="small mt">${VID.sc + 1}/${v.scenes.length}　${esc(sc.h)}</div>
+    <div class="vstage">${sc.svg}</div>
+    <div id="vidCap" class="vcap"></div>
+    <div class="vbar" onclick="vidSeek(event)"><i id="vidBar" style="width:${VID.el.currentTime / (VID.el.duration || v.dur || 1) * 100}%"></i></div>
+    <div class="row mt" style="gap:6px"><button class="btn ghost" style="padding:10px" onclick="vidGo(VID.sc-1)" ${VID.sc ? "" : "disabled"}>⏮ 前</button>
+      <button class="btn" id="vidPlay" style="padding:10px" onclick="vidToggle()">${paused ? "▶ 再生" : "⏸ 一時停止"}</button>
+      <button class="btn ghost" style="padding:10px" onclick="vidGo(VID.sc+1)" ${VID.sc < v.scenes.length - 1 ? "" : "disabled"}>次 ⏭</button></div>
+    <div class="seg mt">${[1, 1.25, 1.5].map(r => `<button class="${(S.vidRate || 1) === r ? "on" : ""}" onclick="vidRate(${r})">${r}倍</button>`).join("")}</div>
+    <div class="small mt">場面を選ぶ</div><div class="seg mt">${v.scenes.map((x, i) => `<button class="${i === VID.sc ? "on" : ""}" onclick="vidGo(${i})">${i + 1}. ${esc(x.h)}</button>`).join("")}</div>
+    ${v.sec && SECM[v.sec] ? `<div class="btns mt"><button class="btn sec" onclick="vidQuiz('${v.sec}')">✏️ 見終わったら Section ${v.sec} の問題を20問</button></div>` : ""}
+  </div>`;
+}
 function FigList() { return FIGS.length ? FIGS.map(f => figBox(f, false)).join("") : `<div class="small">図を読み込めていません。</div>`; }
 const expSents = t => String(t || "").match(/[^。！？]+[。！？]*/g) || [];
 function gx(q) {
@@ -1967,6 +2031,7 @@ function Book() {
     <div class="small mt">左の□は自動です。🎧の講義を最後まで聞くと「1」、2回目を最後まで聞くと「2」…と増えます。「解く」でそのSectionの問題だけを出します。</div>
     ${ANKI.length ? `<div class="mt"><button class="btn" onclick="ankiMode='anki';ankiOpen=null;go('anki')">🧠 暗記まとめ（罰則・期間・数字・「〜つ」もの）</button></div>` : ""}
     ${CONF.length ? `<div class="mt"><button class="btn" onclick="ankiMode='conf';ankiOpen=null;go('anki')">🔀 まぎらわしい比較（左右に並べて違いを見る）</button></div>` : ""}
+    ${VIDEOS.map(v => `<div class="mt"><button class="btn" onclick="openVideo('${v.id}')">🎬 動画：${esc(v.title)}（${Math.round((v.dur || 0) / 60)}分）</button></div>`).join("")}
     ${NUMS.length ? `<div class="mt"><button class="btn sec" onclick="go('numbers')">🔢 数字まとめ（${NUMS.length}項目）</button></div>` : ""}
   ${BundleCard()}
   ${CHAPS.map(c => { const secs = SECS.filter(x => x.ch === c.ch), r = secs.filter(x => S.read[x.id]).length, open = cur === c.ch;
