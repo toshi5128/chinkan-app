@@ -184,7 +184,7 @@ b.em{color:var(--brand);background:var(--brandbg);border-radius:4px;padding:0 2p
 
 <script>
 "use strict";
-const APP_VERSION = "2026-11-11-v6.94";
+const APP_VERSION = "2026-11-15-v6.95";
 const EXAM = new Date("2026-11-15T13:00:00+09:00");
 const PASS_LINE = 38; // 令和7年度の合格点。目標ライン
 const AREAS = {
@@ -740,7 +740,33 @@ function startNorma() {
   if (!pick.length) { alertBox("今日解ける本番セットの問題がありません。"); return; }
   startSession(pick, `本番セット ${L.n}周目`);
 }
-function lapMark(id, ok, tri) { const c = S.cards[id]; if (!c) return; const n = S.lap?.n || 1; c.lap = Math.max(c.lap || 0, n); c.okRun = ok && !tri ? (c.okRun || 0) + 1 : 0; }
+function lapMark(id, ok, tri) { const c = S.cards[id]; if (!c) return; const n = S.lap?.n || 1; lapWrongSeed();
+  if (!ok) { const a = (S.lapWrong[n] = S.lapWrong[n] || []); if (!a.includes(id)) a.push(id); }   // v6.95 この周で×になった問題を控える
+  c.lap = Math.max(c.lap || 0, n); c.okRun = ok && !tri ? (c.okRun || 0) + 1 : 0; }
+// v6.95 下田さん「1周目で間違えたとこだけの問題リスト」。2周目からは lapMark で控える。
+//   1周目の分は記録から割り出す：11/9からは解いた順の○×(h)に×があるか、それより前は箱・回数・解き直し記録から（×の直後の再出題で○になっても「間違えた」に数える）
+function lapWrongSeed() {
+  S.lapWrong = S.lapWrong || {};
+  if (S.lapWrong[1]) return;
+  const ids = [];
+  for (const [id, c] of Object.entries(S.cards)) {
+    if ((c.lap || 0) < 1) continue;
+    let w;
+    if (c.h) w = c.h.includes("x");
+    else { const r = S.redo?.[id];
+      if (c.box >= 3) w = false; else if (c.box <= 1) w = true;
+      else if (r && r.d === c.last) w = !r.ok; else if (c.c === 1 && c.w === 0) w = false; else w = true; }
+    if (w) ids.push(id);
+  }
+  S.lapWrong[1] = ids; setTimeout(save, 0);
+}
+function lapWrongIds(n) { lapWrongSeed(); return (S.lapWrong[n] || []).filter(id => QM[id]); }
+function startLapWrong(n) {
+  const rank = new Map(normaRank().map((id, i) => [id, i])), ids = lapWrongIds(n);
+  const left = ids.filter(id => card(id)?.last !== today()), pick = (left.length ? left : ids).sort((a, b) => (rank.get(a) ?? 1e9) - (rank.get(b) ?? 1e9));
+  if (!pick.length) { alertBox(`${n}周目で間違えた問題はありません。`); return; }
+  startSession(pick, `${n}周目で間違えた問題`);
+}
 function startPastNorma() { const x = pastNext(); if (!x) return; if (x.tac) { go("tac"); startTac(x.tac); } else startPast(x.year); }
 
 function naviPlan() {
@@ -2354,6 +2380,8 @@ function StudyMenu() {
   <div class="card"><h2>✏️ 何を解く？</h2>
     <button class="btn" onclick="${inNorma ? "backToSess()" : "startNorma()"}" style="text-align:left;padding:12px 14px;display:block">
       <b style="font-size:17px">▶ 本番セット${inNorma ? "（続きから）" : ""}</b><br><span style="font-size:13px;font-weight:400">今日 ${n}/${S.normaQ || 500}問${L ? `・${L.n}周目 ${L.done}/${L.total}問` : ""}　いつもはこれ</span></button>
+    ${(() => { const cur = S.lap?.n || 1; let h = ""; for (let k = cur - 1; k >= 1; k--) { const ids = lapWrongIds(k); if (!ids.length) continue; const td = ids.filter(id => card(id)?.last === today()).length;
+      h += `<button class="btn" onclick="startLapWrong(${k})" style="text-align:left;padding:10px 14px;display:block;margin-top:8px;background:#b91c1c"><b style="font-size:16px">❌ ${k}周目で間違えた問題だけ</b><br><span style="font-size:13px;font-weight:400">${ids.length}問${td ? `（今日 ${td}問 解いた）` : ""}　まだ解いていない順・苦手な順</span></button>`; } return h; })()}
     <div class="tiles mt">
       ${tile("🔥", "何度も間違える", hardIds().length + "問", "2回以上×・2連続○で卒業", "startHard()", !hardIds().length)}
       ${tile("❌", "間違えたまま", cnt("wrong") + "問", "最後に×だった問題", "startKind('wrong')", !cnt("wrong"))}
